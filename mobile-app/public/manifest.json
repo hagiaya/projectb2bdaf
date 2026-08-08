@@ -3,7 +3,7 @@
   "name": "B2B Retail Dealer App",
   "short_name": "B2B Dealer",
   "description": "B2B Retail Dealer App for managing orders, products, and promotions.",
-  "start_url": "/",
+  "start_url": "/login",
   "scope": "/",
   "display": "fullscreen",
   "display_override": [
