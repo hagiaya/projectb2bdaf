@@ -3,6 +3,6 @@
       "target": {
         "namespace": "android_app",
         "package_name": "app.vercel.b2b_mobile_app.twa",
-        "sha256_cert_fingerprints": ["4A:9F:8A:EF:B6:54:13:D5:99:98:F3:DD:4F:D4:47:45:DD:A1:11:47:35:C9:62:C1:CA:8D:37:FF:B9:98:B0:84"]
+        "sha256_cert_fingerprints": ["D6:BB:91:61:72:CF:2C:01:47:A3:6B:5C:C9:7A:92:F9:43:A9:3E:F2:06:C1:32:BB:75:83:34:CF:66:79:B2:A0"]
       }
     }]
