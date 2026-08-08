@@ -21,7 +21,12 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "name": "B2B Retail Dealer App",
+      "shortName": "B2B Dealer",
+      "themeColor": "#8ec44a",
+      "backgroundColor": "#f6fbf0",
+      "display": "standalone"
     },
     "plugins": [
       "expo-router",
