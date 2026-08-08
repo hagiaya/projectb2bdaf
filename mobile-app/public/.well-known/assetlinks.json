@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.vercel.b2b_mobile_app.twa",
+        "sha256_cert_fingerprints": ["31:CA:EA:40:C2:6D:83:E2:4B:81:EE:7E:EE:0A:F5:D7:58:14:EE:EC:77:FD:22:0E:06:B6:6B:C5:D6:DB:DD:72"]
+      }
+    }]

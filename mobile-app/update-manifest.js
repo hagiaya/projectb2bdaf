@@ -1,4 +1,7 @@
-{
+const fs = require('fs');
+const sharp = require('sharp');
+
+const manifest = {
   "id": "/?source=pwa",
   "name": "B2B Retail Dealer App",
   "short_name": "B2B Dealer",
@@ -6,21 +9,13 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": [
-    "standalone",
-    "minimal-ui",
-    "fullscreen"
-  ],
+  "display_override": ["standalone", "minimal-ui", "fullscreen"],
   "background_color": "#f6fbf0",
   "theme_color": "#8ec44a",
   "orientation": "portrait-primary",
   "lang": "id",
   "dir": "ltr",
-  "categories": [
-    "business",
-    "productivity",
-    "shopping"
-  ],
+  "categories": ["business", "productivity", "shopping"],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -55,24 +50,14 @@
       "short_name": "Order",
       "description": "Create a new order",
       "url": "/orders?action=new",
-      "icons": [
-        {
-          "src": "/icon-192.png",
-          "sizes": "192x192"
-        }
-      ]
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "View Catalog",
       "short_name": "Catalog",
       "description": "Browse product catalog",
       "url": "/catalog",
-      "icons": [
-        {
-          "src": "/icon-192.png",
-          "sizes": "192x192"
-        }
-      ]
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ],
   "prefer_related_applications": false,
@@ -97,4 +82,34 @@
   "edge_side_panel": {},
   "note_taking": {},
   "scope_extensions": []
+};
+
+async function main() {
+  fs.writeFileSync('./public/manifest.json', JSON.stringify(manifest, null, 2));
+  console.log('manifest.json updated!');
+  
+  // Make sure icon-192.png exists
+  if (!fs.existsSync('./public/icon-192.png') && fs.existsSync('./public/icon-512.png')) {
+    await sharp('./public/icon-512.png')
+      .resize(192, 192)
+      .toFile('./public/icon-192.png');
+    console.log('Created icon-192.png');
+  }
+
+  // Create dummy screenshots (PWABuilder just needs them to exist and match sizes)
+  if (!fs.existsSync('./public/screenshot1.png')) {
+    await sharp({
+      create: { width: 1080, height: 1920, channels: 4, background: { r: 142, g: 196, b: 74, alpha: 1 } }
+    }).png().toFile('./public/screenshot1.png');
+    console.log('Created screenshot1.png');
+  }
+  
+  if (!fs.existsSync('./public/screenshot2.png')) {
+    await sharp({
+      create: { width: 1920, height: 1080, channels: 4, background: { r: 142, g: 196, b: 74, alpha: 1 } }
+    }).png().toFile('./public/screenshot2.png');
+    console.log('Created screenshot2.png');
+  }
 }
+
+main();

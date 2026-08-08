@@ -27,8 +27,25 @@ export default function Root({ children }: { children: React.ReactNode }) {
         {headNodes}
 
         <link rel="manifest" href="/manifest.json" />
+        <style dangerouslySetInnerHTML={{ __html: `
+          @font-face {
+            font-family: 'Feather';
+            src: url('https://unpkg.com/react-native-vector-icons@10.3.0/Fonts/Feather.ttf') format('truetype');
+          }
+        `}} />
 
         {/* Add any additional <head> elements that you want globally available on web... */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+              navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                console.log('ServiceWorker registration successful with scope: ', registration.scope);
+              }, function(err) {
+                console.log('ServiceWorker registration failed: ', err);
+              });
+            });
+          }
+        `}} />
       </head>
       <body {...bodyAttributes}>
         {children}

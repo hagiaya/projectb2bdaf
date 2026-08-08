@@ -51,22 +51,33 @@ export default function OrdersScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
-        {orders.map(order => (
-          <View key={order.id} style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.orderId}>{order.order_number}</Text>
-              <Text style={styles.status}>{order.status}</Text>
-            </View>
-            <Text style={styles.date}>{new Date(order.created_at).toLocaleDateString('id-ID')}</Text>
-            <View style={styles.footer}>
-              <Text style={styles.totalLabel}>Total Tagihan:</Text>
-              <Text style={styles.totalValue}>Rp {Number(order.final_amount).toLocaleString('id-ID')}</Text>
-            </View>
-            <TouchableOpacity style={styles.detailBtn} onPress={() => setSelectedOrder(order)}>
-              <Text style={styles.detailText}>Lihat Detail</Text>
+        {!loading && orders.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Feather name="shopping-bag" size={48} color="#dcf0c3" />
+            <Text style={styles.emptyTitle}>Belum Ada Pesanan</Text>
+            <Text style={styles.emptySub}>Anda belum melakukan pemesanan apa pun. Silakan lihat katalog kami.</Text>
+            <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push('/(dealer)/catalog')}>
+              <Text style={styles.emptyBtnText}>Lihat Katalog</Text>
             </TouchableOpacity>
           </View>
-        ))}
+        ) : (
+          orders.map(order => (
+            <View key={order.id} style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.orderId}>{order.order_number}</Text>
+                <Text style={styles.status}>{order.status}</Text>
+              </View>
+              <Text style={styles.date}>{new Date(order.created_at).toLocaleDateString('id-ID')}</Text>
+              <View style={styles.footer}>
+                <Text style={styles.totalLabel}>Total Tagihan:</Text>
+                <Text style={styles.totalValue}>Rp {Number(order.final_amount).toLocaleString('id-ID')}</Text>
+              </View>
+              <TouchableOpacity style={styles.detailBtn} onPress={() => setSelectedOrder(order)}>
+                <Text style={styles.detailText}>Lihat Detail</Text>
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
       </ScrollView>
 
       {/* MODAL DETAIL PESANAN BERFUNGSI */}
@@ -145,6 +156,13 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 16, fontWeight: 'bold', color: '#8ec44a' },
   detailBtn: { backgroundColor: '#f6fbf0', padding: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#dcf0c3' },
   detailText: { color: '#8ec44a', fontWeight: 'bold', fontSize: 12 },
+
+  // Empty State
+  emptyState: { alignItems: 'center', padding: 40, marginTop: 60 },
+  emptyTitle: { fontSize: 16, fontWeight: 'bold', color: '#4a6b22', marginTop: 16 },
+  emptySub: { fontSize: 13, color: '#64748b', textAlign: 'center', marginTop: 8, paddingHorizontal: 20, lineHeight: 20 },
+  emptyBtn: { backgroundColor: '#8ec44a', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10, marginTop: 24 },
+  emptyBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
 
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },

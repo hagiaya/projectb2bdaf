@@ -27,7 +27,7 @@ export default function Sidebar() {
     <div className="w-64 bg-[#064e3b] text-white min-h-screen flex flex-col shadow-xl z-10 relative">
       <div className="p-6">
         <h1 className="text-2xl font-black tracking-wider text-emerald-300 drop-shadow-sm flex items-center gap-2">
-          <div className="w-8 h-8 bg-emerald-400 rounded-lg flex items-center justify-center text-[#064e3b] font-bold text-lg">B</div>
+          <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain rounded-lg" />
           2B RETAIL
         </h1>
         <p className="text-xs text-emerald-200/70 mt-1.5 font-medium tracking-wide">ADMIN DASHBOARD</p>

@@ -217,23 +217,29 @@ export default function DealerHome() {
           <TouchableOpacity onPress={() => router.push('/(dealer)/catalog')}><Text style={styles.seeAll}>Lihat Semua</Text></TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {bestSellerProducts.map((item) => (
-            <View 
-              key={item.id} 
-              style={[styles.productCard, item.stock === 0 && { opacity: 0.5 }]}
-              pointerEvents={item.stock === 0 ? 'none' : 'auto'}
-            >
-              <View style={styles.productImage}>
-                <Feather name="box" size={32} color="#8ec44a" />
-              </View>
-              <Text style={styles.productName}>{item.name}</Text>
-              <Text style={styles.productSold}>100+ terjual</Text>
-              <Text style={styles.productPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
-              <TouchableOpacity style={styles.buyButton} onPress={() => Alert.alert('Sukses', `${item.name} ditambahkan ke Keranjang!`)} disabled={item.stock === 0}>
-                <Text style={styles.buyText}>+ Keranjang</Text>
-              </TouchableOpacity>
+          {!loading && bestSellerProducts.length === 0 ? (
+            <View style={styles.emptyProductBox}>
+              <Text style={styles.emptyProductText}>Belum ada produk terlaris saat ini.</Text>
             </View>
-          ))}
+          ) : (
+            bestSellerProducts.map((item) => (
+              <View 
+                key={item.id} 
+                style={[styles.productCard, item.stock === 0 && { opacity: 0.5 }]}
+                pointerEvents={item.stock === 0 ? 'none' : 'auto'}
+              >
+                <View style={styles.productImage}>
+                  <Feather name="box" size={32} color="#8ec44a" />
+                </View>
+                <Text style={styles.productName}>{item.name}</Text>
+                <Text style={styles.productSold}>100+ terjual</Text>
+                <Text style={styles.productPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
+                <TouchableOpacity style={styles.buyButton} onPress={() => Alert.alert('Sukses', `${item.name} ditambahkan ke Keranjang!`)} disabled={item.stock === 0}>
+                  <Text style={styles.buyText}>+ Keranjang</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
         </ScrollView>
       </View>
 
@@ -256,30 +262,36 @@ export default function DealerHome() {
           <TouchableOpacity onPress={() => router.push('/(dealer)/catalog')}><Text style={styles.seeAll}>Lihat Semua</Text></TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {flashSaleProducts.map((item) => (
-            <View 
-              key={item.id} 
-              style={[styles.flashCard, item.stock === 0 && { opacity: 0.5 }]}
-              pointerEvents={item.stock === 0 ? 'none' : 'auto'}
-            >
-              <View style={styles.discountBadge}>
-                <Text style={styles.discountText}>15%</Text>
-              </View>
-              <View style={styles.flashImage}>
-                <Feather name="zap" size={28} color="#ca8a04" />
-              </View>
-              <Text style={styles.flashName}>{item.name}</Text>
-              <Text style={styles.flashOriginalPrice}>Rp {(Number(item.price) * 1.15).toLocaleString('id-ID')}</Text>
-              <Text style={styles.flashPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
-              <View style={styles.stockBar}>
-                <View style={[styles.stockFill, { width: `${Math.min((item.stock / 20) * 100, 100)}%` as any }]} />
-              </View>
-              <Text style={styles.stockText}>Sisa {item.stock}</Text>
-              <TouchableOpacity style={styles.flashBuyBtn} onPress={() => Alert.alert('Beli Sekarang', `Membeli ${item.name} seharga Rp ${Number(item.price).toLocaleString('id-ID')}`)} disabled={item.stock === 0}>
-                <Text style={styles.buyText}>Beli</Text>
-              </TouchableOpacity>
+          {!loading && flashSaleProducts.length === 0 ? (
+            <View style={styles.emptyProductBox}>
+              <Text style={styles.emptyProductText}>Belum ada penawaran Flash Sale saat ini.</Text>
             </View>
-          ))}
+          ) : (
+            flashSaleProducts.map((item) => (
+              <View 
+                key={item.id} 
+                style={[styles.flashCard, item.stock === 0 && { opacity: 0.5 }]}
+                pointerEvents={item.stock === 0 ? 'none' : 'auto'}
+              >
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountText}>15%</Text>
+                </View>
+                <View style={styles.flashImage}>
+                  <Feather name="zap" size={28} color="#ca8a04" />
+                </View>
+                <Text style={styles.flashName}>{item.name}</Text>
+                <Text style={styles.flashOriginalPrice}>Rp {(Number(item.price) * 1.15).toLocaleString('id-ID')}</Text>
+                <Text style={styles.flashPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
+                <View style={styles.stockBar}>
+                  <View style={[styles.stockFill, { width: `${Math.min((item.stock / 20) * 100, 100)}%` as any }]} />
+                </View>
+                <Text style={styles.stockText}>Sisa {item.stock}</Text>
+                <TouchableOpacity style={styles.flashBuyBtn} onPress={() => Alert.alert('Beli Sekarang', `Membeli ${item.name} seharga Rp ${Number(item.price).toLocaleString('id-ID')}`)} disabled={item.stock === 0}>
+                  <Text style={styles.buyText}>Beli</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
         </ScrollView>
       </View>
 
@@ -290,19 +302,25 @@ export default function DealerHome() {
           <TouchableOpacity onPress={() => router.push('/(dealer)/catalog')}><Text style={styles.seeAll}>Lihat Semua</Text></TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {recentlyViewed.map((item) => (
-            <View 
-              key={item.id} 
-              style={[styles.recentCard, item.stock === 0 && { opacity: 0.5 }]}
-              pointerEvents={item.stock === 0 ? 'none' : 'auto'}
-            >
-              <View style={styles.recentImage}>
-                <Feather name="package" size={24} color="#8ec44a" />
-              </View>
-              <Text style={styles.productName}>{item.name}</Text>
-              <Text style={styles.productPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
+          {!loading && recentlyViewed.length === 0 ? (
+            <View style={styles.emptyProductBox}>
+              <Text style={styles.emptyProductText}>Belum ada produk yang dilihat.</Text>
             </View>
-          ))}
+          ) : (
+            recentlyViewed.map((item) => (
+              <View 
+                key={item.id} 
+                style={[styles.recentCard, item.stock === 0 && { opacity: 0.5 }]}
+                pointerEvents={item.stock === 0 ? 'none' : 'auto'}
+              >
+                <View style={styles.recentImage}>
+                  <Feather name="package" size={24} color="#8ec44a" />
+                </View>
+                <Text style={styles.productName}>{item.name}</Text>
+                <Text style={styles.productPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
+              </View>
+            ))
+          )}
         </ScrollView>
       </View>
 
@@ -537,5 +555,8 @@ const styles = StyleSheet.create({
   stepDotActive: { backgroundColor: '#eab308' },
   stepTextDone: { fontSize: 12, color: '#475569' },
   stepTextActive: { fontSize: 12, color: '#ca8a04', fontWeight: 'bold' },
-  fullOrdersBtn: { backgroundColor: '#8ec44a', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 12 }
+  fullOrdersBtn: { backgroundColor: '#8ec44a', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 12 },
+
+  emptyProductBox: { paddingVertical: 20, paddingHorizontal: 16, backgroundColor: 'white', borderRadius: 12, width: width - 32, alignItems: 'center', justifyContent: 'center' },
+  emptyProductText: { color: '#94a3b8', fontSize: 13, fontStyle: 'italic' }
 });
