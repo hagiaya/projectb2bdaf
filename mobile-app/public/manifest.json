@@ -1,0 +1,16 @@
+{
+  "name": "B2B Retail Dealer App",
+  "short_name": "B2B Dealer",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6fbf0",
+  "theme_color": "#8ec44a",
+  "icons": [
+    {
+      "src": "/assets/images/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
