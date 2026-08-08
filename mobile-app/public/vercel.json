@@ -1,12 +1,5 @@
 {
   "cleanUrls": true,
-  "redirects": [
-    {
-      "source": "/",
-      "destination": "/login",
-      "permanent": true
-    }
-  ],
   "rewrites": [
     {
       "source": "/(.*)",
