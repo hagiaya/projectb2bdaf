@@ -112,6 +112,10 @@ export default function DealerHome() {
   // States
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Real Profile States
+  const [profile, setProfile] = useState<any>(null);
+  const [dealer, setDealer] = useState<any>(null);
 
   // Modal States
   const [isNotifVisible, setIsNotifVisible] = useState(false);
@@ -120,6 +124,7 @@ export default function DealerHome() {
 
   useEffect(() => {
     fetchProducts();
+    fetchProfile();
   }, []);
 
   const fetchProducts = async () => {
@@ -129,6 +134,23 @@ export default function DealerHome() {
       setProducts(data);
     }
     setLoading(false);
+  };
+
+  const fetchProfile = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      const { data: dealerData } = await supabase.from('dealers').select('*').eq('profile_id', user.id).single();
+      
+      if (profileData) setProfile(profileData);
+      if (dealerData) setDealer(dealerData);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsProfileVisible(false);
+    router.replace('/login');
   };
 
   // derived lists
@@ -142,12 +164,15 @@ export default function DealerHome() {
     { id: '3', title: 'Selamat Datang!', desc: 'Akun Toko Makmur Jaya telah terverifikasi sebagai Dealer Resmi.', time: '1 hari lalu' },
   ];
 
+  const storeName = dealer?.store_name || 'Toko Anda';
+  const initial = storeName.substring(0, 2).toUpperCase();
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* HEADER */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Halo, Toko Makmur Jaya 👋</Text>
+          <Text style={styles.greeting}>Halo, {storeName} 👋</Text>
           <Text style={styles.subtitle}>Selamat datang kembali!</Text>
         </View>
         <View style={styles.headerRight}>
@@ -159,7 +184,7 @@ export default function DealerHome() {
 
           {/* 2. LOGO PROFILE USER BERFUNGSI */}
           <TouchableOpacity style={styles.avatar} onPress={() => setIsProfileVisible(true)}>
-            <Text style={styles.avatarText}>TMJ</Text>
+            <Text style={styles.avatarText}>{initial}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -331,32 +356,29 @@ export default function DealerHome() {
 
             <View style={styles.profileBody}>
               <View style={styles.profileAvatarLarge}>
-                <Text style={styles.profileAvatarText}>TMJ</Text>
+                <Text style={styles.profileAvatarText}>{initial}</Text>
               </View>
-              <Text style={styles.profileStoreName}>Toko Makmur Jaya</Text>
+              <Text style={styles.profileStoreName}>{storeName}</Text>
               <Text style={styles.profileStatus}>Verified Dealer B2B</Text>
 
               <View style={styles.profileInfoList}>
                 <View style={styles.profileInfoItem}>
                   <Feather name="user" size={16} color="#8ec44a" />
-                  <Text style={styles.profileInfoText}>Pemilik: Budi Santoso</Text>
+                  <Text style={styles.profileInfoText}>Pemilik: {profile?.full_name || 'Tidak ada info'}</Text>
                 </View>
                 <View style={styles.profileInfoItem}>
                   <Feather name="phone" size={16} color="#8ec44a" />
-                  <Text style={styles.profileInfoText}>0812-3456-7890</Text>
+                  <Text style={styles.profileInfoText}>{profile?.phone_number || 'Tidak ada info'}</Text>
                 </View>
                 <View style={styles.profileInfoItem}>
                   <Feather name="map-pin" size={16} color="#8ec44a" />
-                  <Text style={styles.profileInfoText}>Jl. Raya Industri No. 45, Surabaya</Text>
+                  <Text style={styles.profileInfoText}>{dealer?.address || 'Tidak ada info'}</Text>
                 </View>
               </View>
 
               <TouchableOpacity 
                 style={styles.logoutBtn} 
-                onPress={() => {
-                  setIsProfileVisible(false);
-                  router.replace('/login');
-                }}
+                onPress={handleLogout}
               >
                 <Feather name="log-out" size={18} color="white" />
                 <Text style={styles.logoutBtnText}>Keluar dari Akun</Text>

@@ -1,22 +1,37 @@
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    if (email === 'dealer@b2b.com' && password === '123456') {
-      router.replace('/(dealer)/home');
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Silakan masukkan email dan password.');
+      return;
+    }
+    
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      Alert.alert('Login Gagal', error.message);
+      setLoading(false);
     } else {
-      Alert.alert('Login Gagal', 'Silakan gunakan Akun Demo atau hubungi Admin.');
+      setLoading(false);
+      router.replace('/(dealer)/home');
     }
   };
 
   const autofillDemo = () => {
     setEmail('dealer@b2b.com');
-    setPassword('123456');
+    setPassword('dealer123'); // Updated to the real password created via script
   };
 
   return (
@@ -27,7 +42,7 @@ export default function LoginScreen() {
       <View style={styles.formContainer}>
         <TextInput 
           style={styles.input}
-          placeholder="Email / No. Handphone"
+          placeholder="Email Address"
           placeholderTextColor="#94a3b8"
           value={email}
           onChangeText={setEmail}
@@ -42,8 +57,12 @@ export default function LoginScreen() {
           onChangeText={setPassword}
         />
         
-        <TouchableOpacity style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Masuk</Text>
+        <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.buttonText}>Masuk</Text>
+          )}
         </TouchableOpacity>
         
         <View style={styles.registerContainer}>
