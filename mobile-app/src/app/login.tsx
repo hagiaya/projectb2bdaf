@@ -15,7 +15,7 @@ export default function LoginScreen() {
     }
     
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -23,10 +23,32 @@ export default function LoginScreen() {
     if (error) {
       Alert.alert('Login Gagal', error.message);
       setLoading(false);
-    } else {
-      setLoading(false);
-      router.replace('/(dealer)/home');
+      return;
     }
+    
+    if (data?.user) {
+      // Check approval status
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('approval_status')
+        .eq('id', data.user.id)
+        .single();
+        
+      if (profile?.approval_status === 'PENDING') {
+        await supabase.auth.signOut();
+        Alert.alert('Pendaftaran Tertunda', 'Akun Anda masih menunggu persetujuan dari Admin. Silakan cek kembali nanti.');
+        setLoading(false);
+        return;
+      } else if (profile?.approval_status === 'REJECTED') {
+        await supabase.auth.signOut();
+        Alert.alert('Pendaftaran Ditolak', 'Mohon maaf, pendaftaran akun Anda ditolak oleh Admin.');
+        setLoading(false);
+        return;
+      }
+    }
+
+    setLoading(false);
+    router.replace('/(dealer)/home');
   };
 
   const autofillDemo = () => {

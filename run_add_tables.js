@@ -9,9 +9,9 @@ async function runSchema() {
     await client.connect();
     console.log("Connected to database");
     
-    const sql = fs.readFileSync('add_tables.sql', 'utf8');
+    const sql = fs.readFileSync('setup_registration.sql', 'utf8');
     await client.query(sql);
-    console.log("add_tables.sql executed successfully.");
+    console.log("setup_registration.sql executed successfully.");
   } catch (err) {
     console.error("Error executing SQL:", err);
   } finally {

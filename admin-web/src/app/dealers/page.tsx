@@ -6,12 +6,13 @@ import { supabase } from '@/lib/supabase';
 
 interface Dealer {
   id: string;
+  profile_id: string;
   store_name: string;
   address: string;
   credit_limit: number;
   status: string;
   created_at: string;
-  profiles?: { full_name: string };
+  profiles?: { full_name: string, approval_status?: string };
   regions?: { name: string };
 }
 
@@ -65,7 +66,7 @@ export default function DealersPage() {
     // Fetch dealers
     const { data: dlrData, error } = await supabase
       .from('dealers')
-      .select('*, profiles(full_name), regions(name)')
+      .select('*, profiles(full_name, approval_status), regions(name)')
       .order('created_at', { ascending: false });
       
     if (!error && dlrData) {
@@ -109,6 +110,14 @@ export default function DealersPage() {
       } else {
         alert("Gagal menghapus dealer.");
       }
+    }
+  };
+
+  const handleApproveDealer = async (profileId: string) => {
+    if (confirm("Setujui pendaftaran dealer ini?")) {
+      await supabase.from('profiles').update({ approval_status: 'APPROVED' }).eq('id', profileId);
+      // Optional: also update dealer status if needed
+      fetchData();
     }
   };
 
@@ -211,7 +220,11 @@ export default function DealersPage() {
                   {new Date(dealer.created_at).toLocaleDateString('id-ID')}
                 </td>
                 <td className="p-5">
-                  {dealer.status === 'ACTIVE' ? (
+                  {dealer.profiles?.approval_status === 'PENDING' ? (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-100/50 text-amber-700 border border-amber-200/50">
+                      <CheckCircle2 size={14} className="text-amber-500" /> Pending Approval
+                    </div>
+                  ) : dealer.status === 'ACTIVE' ? (
                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100/50 text-emerald-700 border border-emerald-200/50">
                       <CheckCircle2 size={14} className="text-emerald-500" /> Aktif
                     </div>
@@ -223,6 +236,11 @@ export default function DealersPage() {
                 </td>
                 <td className="p-5 text-right">
                   <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {dealer.profiles?.approval_status === 'PENDING' && (
+                      <button onClick={() => handleApproveDealer(dealer.profile_id)} className="px-3 py-1 bg-emerald-100 text-emerald-700 font-bold rounded-lg text-xs hover:bg-emerald-200">
+                        Setujui
+                      </button>
+                    )}
                     <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                       <Edit2 size={16} strokeWidth={2.5} />
                     </button>
