@@ -55,6 +55,7 @@ CREATE TABLE public.products (
     price DECIMAL(15, 2) NOT NULL,
     stock INTEGER DEFAULT 0,
     image_url TEXT,
+    image_urls JSONB DEFAULT '[]'::jsonb,
     description TEXT,
     status VARCHAR(50) DEFAULT 'ACTIVE',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL

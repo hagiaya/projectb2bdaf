@@ -1,7 +1,8 @@
 import sys
+import shutil
 from PIL import Image
 
-def pad_to_square(image_path, output_path, size, bg_color=(0, 0, 0, 255)):
+def pad_to_square(image_path, output_path, size, bg_color):
     try:
         img = Image.open(image_path)
         img = img.convert("RGBA")
@@ -31,9 +32,20 @@ def pad_to_square(image_path, output_path, size, bg_color=(0, 0, 0, 255)):
         print(f"Error processing {image_path}: {e}")
 
 if __name__ == "__main__":
-    source_img = "/Users/rezalatandrang/.gemini/antigravity-ide/brain/33dfd2f3-0034-4937-8568-51136f307755/media__1786161488864.png"
+    source_img = "/Users/rezalatandrang/.gemini/antigravity-ide/brain/2424786f-9153-4066-9928-e20b5c7f7a24/media__1787619697229.png"
     assets_dir = "/Users/rezalatandrang/Documents/Kantor/Pribadi/project/projectb2b/mobile-app/assets"
     
-    pad_to_square(source_img, f"{assets_dir}/icon.png", 1024)
-    pad_to_square(source_img, f"{assets_dir}/adaptive-icon.png", 1024)
-    pad_to_square(source_img, f"{assets_dir}/splash.png", 2048)
+    # Get the background color from the top left pixel
+    img = Image.open(source_img).convert('RGB')
+    bg_color_rgb = img.getpixel((0,0))
+    bg_color = (bg_color_rgb[0], bg_color_rgb[1], bg_color_rgb[2], 255)
+    print(f"Using background color: {bg_color}")
+    
+    pad_to_square(source_img, f"{assets_dir}/icon.png", 1024, bg_color)
+    pad_to_square(source_img, f"{assets_dir}/adaptive-icon.png", 1024, bg_color)
+    pad_to_square(source_img, f"{assets_dir}/splash.png", 2048, bg_color)
+    
+    # Copy source image to admin-web public folder as well
+    admin_logo = "/Users/rezalatandrang/Documents/Kantor/Pribadi/project/projectb2b/admin-web/public/logo.png"
+    shutil.copy(source_img, admin_logo)
+    print(f"Successfully copied source to {admin_logo}")

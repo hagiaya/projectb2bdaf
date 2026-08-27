@@ -3,6 +3,7 @@ import { Home, Package, Users, Map, ShoppingCart, Archive, DollarSign, Activity,
 
 const menuItems = [
   { name: 'Dashboard', href: '/', icon: Home },
+  { name: 'Master Kategori', href: '/categories', icon: Package },
   { name: 'Master Produk', href: '/products', icon: Package },
   { name: 'Master Dealer', href: '/dealers', icon: Users },
   { name: 'Master Wilayah', href: '/regions', icon: Map },

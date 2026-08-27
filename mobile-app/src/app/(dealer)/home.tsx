@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  FlatList, Dimensions, Modal, Alert,
+  FlatList, Dimensions, Modal, Alert, Image
 } from 'react-native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
+import FallbackImage from '../../components/FallbackImage';
+import { useCart } from '../../context/CartContext';
 
 const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 32;
@@ -16,7 +18,6 @@ const BANNER_WIDTH = width - 32;
 
 const bannerAds = [
   { id: '1', title: 'Promo Akhir Tahun', subtitle: 'Diskon hingga 30% untuk semua produk', color: '#8ec44a', accent: '#4a6b22' },
-  { id: '2', title: 'Flash Sale Hari Ini', subtitle: 'Hemat lebih banyak, stok terbatas!', color: '#ca8a04', accent: '#713f12' },
   { id: '3', title: 'Gratis Ongkir', subtitle: 'Untuk pembelian minimal Rp 500.000', color: '#7eb33a', accent: '#166534' },
 ];
 
@@ -108,6 +109,7 @@ function BannerCarousel() {
 // =========================================================
 export default function DealerHome() {
   const countdown = useCountdown(23);
+  const { cartCount, addToCart } = useCart();
 
   // States
   const [products, setProducts] = useState<any[]>([]);
@@ -129,9 +131,12 @@ export default function DealerHome() {
 
   const fetchProducts = async () => {
     setLoading(true);
-    const { data } = await supabase.from('products').select('*').limit(10);
+    // Ambil 15 produk secara acak (karena belum ada tabel khusus flash sale)
+    const { data } = await supabase.from('products').select('*').limit(20);
     if (data) {
-      setProducts(data);
+      // Acak urutan agar terlihat berbeda setiap kali dibuka
+      const shuffled = data.sort(() => 0.5 - Math.random());
+      setProducts(shuffled);
     }
     setLoading(false);
   };
@@ -153,10 +158,10 @@ export default function DealerHome() {
     router.replace('/login');
   };
 
-  // derived lists
-  const bestSellerProducts = products.slice(0, 3);
-  const flashSaleProducts = products.slice(0, 4);
-  const recentlyViewed = products.slice(0, 3);
+  // derived lists (Membagi produk yang diacak ke berbagai section agar tidak sama)
+  const bestSellerProducts = products.slice(0, 4);
+  const flashSaleProducts = products.slice(4, 9);
+  const recentlyViewed = products.slice(9, 14);
 
   const notifications = [
     { id: '1', title: 'Pesanan INV-20231024-001 Diproses', desc: 'Semen Gresik 40kg (50 sak) sedang disiapkan oleh gudang.', time: '10 menit lalu' },
@@ -172,7 +177,11 @@ export default function DealerHome() {
       {/* HEADER */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Halo, {storeName} 👋</Text>
+          <Image 
+            source={require('../../../assets/images/logo.png')} 
+            style={{ width: 120, height: 40, resizeMode: 'contain', marginBottom: 12, marginLeft: -8 }} 
+          />
+          <Text style={styles.greeting}>Halo, {profile?.full_name || storeName} 👋</Text>
           <Text style={styles.subtitle}>Selamat datang kembali!</Text>
         </View>
         <View style={styles.headerRight}>
@@ -182,12 +191,37 @@ export default function DealerHome() {
             <View style={styles.notifBadge} />
           </TouchableOpacity>
 
+          {/* KERANJANG */}
+          <TouchableOpacity style={[styles.iconBtn, { backgroundColor: 'transparent' }]} onPress={() => router.push('/(dealer)/cart' as any)}>
+            <Feather name="shopping-cart" size={20} color="white" />
+            {cartCount > 0 && (
+              <View style={[styles.notifBadge, { width: 14, height: 14, borderRadius: 7, justifyContent: 'center', alignItems: 'center', right: 4, top: 4 }]}>
+                <Text style={{ fontSize: 8, color: 'white', fontWeight: 'bold' }}>{cartCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
           {/* 2. LOGO PROFILE USER BERFUNGSI */}
           <TouchableOpacity style={styles.avatar} onPress={() => setIsProfileVisible(true)}>
             <Text style={styles.avatarText}>{initial}</Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* BANNER VERIFIKASI PENDING */}
+      {profile?.approval_status === 'PENDING' && (
+        <View style={styles.pendingBanner}>
+          <View style={styles.pendingIconWrap}>
+            <Feather name="clock" size={22} color="#92400e" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pendingTitle}>Akun Sedang Diverifikasi ⏳</Text>
+            <Text style={styles.pendingDesc}>
+              Akun Anda sedang dalam proses verifikasi oleh Admin (1×24 jam). Anda bisa menjelajahi katalog, namun belum bisa melakukan pemesanan.
+            </Text>
+          </View>
+        </View>
+      )}
 
       {/* SEARCH BAR */}
       <TouchableOpacity style={styles.searchBar} onPress={() => router.push('/(dealer)/catalog')}>
@@ -223,21 +257,28 @@ export default function DealerHome() {
             </View>
           ) : (
             bestSellerProducts.map((item) => (
-              <View 
+              <TouchableOpacity 
                 key={item.id} 
                 style={[styles.productCard, item.stock === 0 && { opacity: 0.5 }]}
-                pointerEvents={item.stock === 0 ? 'none' : 'auto'}
+                disabled={item.stock === 0}
+                onPress={() => router.push(`/product/${item.id}`)}
               >
                 <View style={styles.productImage}>
-                  <Feather name="box" size={32} color="#8ec44a" />
+                  {item.image_urls && item.image_urls.length > 0 ? (
+                    <FallbackImage uri={item.image_urls[0]} style={{ width: '100%', height: '100%', borderRadius: 8 }} resizeMode="cover" />
+                  ) : item.image_url ? (
+                    <FallbackImage uri={item.image_url} style={{ width: '100%', height: '100%', borderRadius: 8 }} resizeMode="cover" />
+                  ) : (
+                    <Feather name="box" size={32} color="#8ec44a" />
+                  )}
                 </View>
                 <Text style={styles.productName}>{item.name}</Text>
                 <Text style={styles.productSold}>100+ terjual</Text>
                 <Text style={styles.productPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
-                <TouchableOpacity style={styles.buyButton} onPress={() => Alert.alert('Sukses', `${item.name} ditambahkan ke Keranjang!`)} disabled={item.stock === 0}>
+                <TouchableOpacity style={styles.buyButton} onPress={() => addToCart(item)} disabled={item.stock === 0}>
                   <Text style={styles.buyText}>+ Keranjang</Text>
                 </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             ))
           )}
         </ScrollView>
@@ -246,54 +287,12 @@ export default function DealerHome() {
       {/* BANNER ADS */}
       <BannerCarousel />
 
-      {/* FLASH SALE */}
+      {/* FLASH SALE - Dinonaktifkan sementara sampai diatur oleh admin */}
+      {/* 
       <View style={styles.section}>
-        <View style={styles.flashHeader}>
-          <View style={styles.flashTitleRow}>
-            <Text style={styles.flashTitle}>⚡ Flash Sale</Text>
-            <View style={styles.countdown}>
-              <View style={styles.countBox}><Text style={styles.countText}>{countdown.h}</Text></View>
-              <Text style={styles.colon}>:</Text>
-              <View style={styles.countBox}><Text style={styles.countText}>{countdown.m}</Text></View>
-              <Text style={styles.colon}>:</Text>
-              <View style={styles.countBox}><Text style={styles.countText}>{countdown.s}</Text></View>
-            </View>
-          </View>
-          <TouchableOpacity onPress={() => router.push('/(dealer)/catalog')}><Text style={styles.seeAll}>Lihat Semua</Text></TouchableOpacity>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {!loading && flashSaleProducts.length === 0 ? (
-            <View style={styles.emptyProductBox}>
-              <Text style={styles.emptyProductText}>Belum ada penawaran Flash Sale saat ini.</Text>
-            </View>
-          ) : (
-            flashSaleProducts.map((item) => (
-              <View 
-                key={item.id} 
-                style={[styles.flashCard, item.stock === 0 && { opacity: 0.5 }]}
-                pointerEvents={item.stock === 0 ? 'none' : 'auto'}
-              >
-                <View style={styles.discountBadge}>
-                  <Text style={styles.discountText}>15%</Text>
-                </View>
-                <View style={styles.flashImage}>
-                  <Feather name="zap" size={28} color="#ca8a04" />
-                </View>
-                <Text style={styles.flashName}>{item.name}</Text>
-                <Text style={styles.flashOriginalPrice}>Rp {(Number(item.price) * 1.15).toLocaleString('id-ID')}</Text>
-                <Text style={styles.flashPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
-                <View style={styles.stockBar}>
-                  <View style={[styles.stockFill, { width: `${Math.min((item.stock / 20) * 100, 100)}%` as any }]} />
-                </View>
-                <Text style={styles.stockText}>Sisa {item.stock}</Text>
-                <TouchableOpacity style={styles.flashBuyBtn} onPress={() => Alert.alert('Beli Sekarang', `Membeli ${item.name} seharga Rp ${Number(item.price).toLocaleString('id-ID')}`)} disabled={item.stock === 0}>
-                  <Text style={styles.buyText}>Beli</Text>
-                </TouchableOpacity>
-              </View>
-            ))
-          )}
-        </ScrollView>
-      </View>
+         ... (Flash Sale Section Hidden) ...
+      </View> 
+      */}
 
       {/* BARU DILIHAT */}
       <View style={styles.section}>
@@ -377,7 +376,15 @@ export default function DealerHome() {
                 <Text style={styles.profileAvatarText}>{initial}</Text>
               </View>
               <Text style={styles.profileStoreName}>{storeName}</Text>
-              <Text style={styles.profileStatus}>Verified Dealer B2B</Text>
+              <Text style={[
+                styles.profileStatus,
+                profile?.approval_status === 'PENDING' && { color: '#d97706' },
+                profile?.approval_status === 'REJECTED' && { color: '#ef4444' },
+              ]}>
+                {profile?.approval_status === 'PENDING' ? '⏳ Menunggu Verifikasi Admin' :
+                 profile?.approval_status === 'REJECTED' ? '❌ Pendaftaran Ditolak' :
+                 '✅ Dealer Terverifikasi'}
+              </Text>
 
               <View style={styles.profileInfoList}>
                 <View style={styles.profileInfoItem}>
@@ -459,7 +466,7 @@ export default function DealerHome() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f6fbf0' },
 
-  header: { padding: 20, paddingBottom: 24, backgroundColor: '#8ec44a', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  header: { padding: 20, paddingTop: 40, paddingBottom: 24, backgroundColor: '#8dc54a', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   greeting: { color: 'white', fontSize: 17, fontWeight: 'bold' },
   subtitle: { color: '#dcf0c3', fontSize: 13, marginTop: 2 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -558,5 +565,42 @@ const styles = StyleSheet.create({
   fullOrdersBtn: { backgroundColor: '#8ec44a', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 12 },
 
   emptyProductBox: { paddingVertical: 20, paddingHorizontal: 16, backgroundColor: 'white', borderRadius: 12, width: width - 32, alignItems: 'center', justifyContent: 'center' },
-  emptyProductText: { color: '#94a3b8', fontSize: 13, fontStyle: 'italic' }
+  emptyProductText: { color: '#94a3b8', fontSize: 13, fontStyle: 'italic' },
+
+  // Pending Verification Banner
+  pendingBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#fffbeb',
+    borderLeftWidth: 4,
+    borderLeftColor: '#f59e0b',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 12,
+    padding: 14,
+    gap: 12,
+    shadowColor: '#f59e0b',
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  pendingIconWrap: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#fde68a',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pendingTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#92400e',
+    marginBottom: 4,
+  },
+  pendingDesc: {
+    fontSize: 12,
+    color: '#78350f',
+    lineHeight: 18,
+  }
 });

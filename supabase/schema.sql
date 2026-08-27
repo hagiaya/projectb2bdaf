@@ -11,6 +11,9 @@ CREATE TABLE profiles (
   phone_number TEXT UNIQUE,
   company_name TEXT,
   address TEXT,
+  lat DOUBLE PRECISION,
+  lng DOUBLE PRECISION,
+  approval_status TEXT DEFAULT 'PENDING',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now())
 );
 
@@ -85,3 +88,13 @@ ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public Read Access for Categories" ON categories FOR SELECT USING (true);
 CREATE POLICY "Public Read Access for Brands" ON brands FOR SELECT USING (true);
 CREATE POLICY "Public Read Access for Products" ON products FOR SELECT USING (true);
+
+-- 8. Auth OTPs
+CREATE TABLE auth_otps (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  phone_number TEXT NOT NULL,
+  otp_code TEXT NOT NULL,
+  is_used BOOLEAN DEFAULT false,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc', now())
+);

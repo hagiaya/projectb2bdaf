@@ -65,9 +65,12 @@ export default function Dashboard() {
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/50">
       <header className="bg-white border-b border-emerald-100/50 px-8 py-5 flex items-center justify-between sticky top-0 z-10">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Dashboard Overview</h2>
-          <p className="text-sm text-slate-500 font-medium mt-1">Pantau performa bisnis dan penjualan Anda hari ini.</p>
+        <div className="flex items-center gap-4">
+          <img src="/logo.png" alt="Logo DAP" className="h-12 w-auto object-contain" />
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Dashboard Overview</h2>
+            <p className="text-sm text-slate-500 font-medium mt-1">Pantau performa bisnis dan penjualan Anda hari ini.</p>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="relative">

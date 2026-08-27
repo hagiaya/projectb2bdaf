@@ -9,12 +9,12 @@
     "scheme": "mobileapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/icon.png"
     },
     "android": {
       "package": "com.alpsstudiowebid.mobileapp",
       "adaptiveIcon": {
-        "backgroundColor": "#000000",
+        "backgroundColor": "#8dc54a",
         "foregroundImage": "./assets/adaptive-icon.png"
       },
       "predictiveBackGestureEnabled": false
@@ -26,18 +26,19 @@
       "shortName": "B2B Dealer",
       "themeColor": "#8ec44a",
       "backgroundColor": "#f6fbf0",
-      "display": "standalone"
+      "display": "fullscreen"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#000000",
+          "backgroundColor": "#8dc54a",
           "image": "./assets/splash.png",
           "resizeMode": "contain"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,0 +1,7 @@
+foto_produk/
+FOTO PRODUK/
+drive_photos/
+node_modules/
+.DS_Store
+*.xlsx
+*.csv

@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "8d199477-1fe2-47c9-a397-f67f2203bd33"
+      }
+    },
+    "android": {
+      "package": "com.alpsstudiowebid.projectb2b"
+    }
+  }
+}

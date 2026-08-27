@@ -25,17 +25,18 @@ export default function AdminLogin() {
 
       if (authError) throw authError;
 
-      // Cek apakah rolenya ADMIN
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', data.user.id)
-        .single();
+      // Cek apakah emailnya Dito (bypassing role check for MVP)
+      if (email.toLowerCase() !== 'ditoapp@atomicmail.io') {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single();
 
-      if (profileData?.role !== 'ADMIN') {
-        // Jika bukan admin, sign out
-        await supabase.auth.signOut();
-        throw new Error('Akses ditolak. Anda bukan Admin.');
+        if (profileData?.role !== 'ADMIN') {
+          await supabase.auth.signOut();
+          throw new Error('Akses ditolak. Anda bukan Admin.');
+        }
       }
 
       router.push('/');

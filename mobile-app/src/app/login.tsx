@@ -1,104 +1,199 @@
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
-import { Link, router } from 'expo-router';
+import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { Feather } from '@expo/vector-icons';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState(1); // 1 = Phone Input, 2 = OTP Input
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Silakan masukkan email dan password.');
+  const normalizePhone = (p: string) => {
+    let digits = p.replace(/\D/g, '');
+    if (digits.startsWith('62')) digits = '0' + digits.slice(2);
+    if (!digits.startsWith('0')) digits = '0' + digits;
+    return digits;
+  };
+
+  const handleSendOtp = async () => {
+    if (!phone) {
+      Alert.alert('Error', 'Silakan masukkan nomor WhatsApp Anda.');
       return;
     }
     
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      Alert.alert('Login Gagal', error.message);
-      setLoading(false);
-      return;
-    }
-    
-    if (data?.user) {
-      // Check approval status
-      const { data: profile } = await supabase
+    try {
+      const normalizedPhone = normalizePhone(phone);
+      
+      // Pengecekan: Apakah nomor ini sudah terdaftar di tabel profiles?
+      const { data: profileCheck, error: checkError } = await supabase
         .from('profiles')
-        .select('approval_status')
-        .eq('id', data.user.id)
-        .single();
-        
-      if (profile?.approval_status === 'PENDING') {
-        await supabase.auth.signOut();
-        Alert.alert('Pendaftaran Tertunda', 'Akun Anda masih menunggu persetujuan dari Admin. Silakan cek kembali nanti.');
-        setLoading(false);
-        return;
-      } else if (profile?.approval_status === 'REJECTED') {
-        await supabase.auth.signOut();
-        Alert.alert('Pendaftaran Ditolak', 'Mohon maaf, pendaftaran akun Anda ditolak oleh Admin.');
+        .select('id')
+        .eq('phone_number', normalizedPhone)
+        .maybeSingle();
+
+      if (checkError) {
+        throw new Error('Gagal mengecek status akun: ' + checkError.message);
+      }
+
+      if (!profileCheck) {
+        Alert.alert(
+          'Nomor Belum Terdaftar', 
+          'Nomor ini belum memiliki akun. Silakan lakukan pendaftaran terlebih dahulu.',
+          [
+            { text: 'Batal', style: 'cancel' },
+            { text: 'Daftar Sekarang', onPress: () => router.push('/register') }
+          ]
+        );
         setLoading(false);
         return;
       }
-    }
 
-    setLoading(false);
-    router.replace('/(dealer)/home');
+      const { data, error } = await supabase.functions.invoke('send-otp', {
+        body: { phone },
+      });
+
+      if (error || !data?.success) {
+        throw new Error(data?.error || error?.message || 'Gagal mengirim OTP');
+      }
+
+      setStep(2);
+      Alert.alert('OTP Terkirim', `Kode OTP telah dikirim ke nomor WhatsApp ${phone}.`);
+    } catch (err: any) {
+      Alert.alert('Pengiriman Gagal', err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const autofillDemo = () => {
-    setEmail('dealer@b2b.com');
-    setPassword('dealer123'); // Updated to the real password created via script
+  const handleVerifyOtp = async () => {
+    if (!otp || otp.length !== 6) {
+      Alert.alert('Error', 'Silakan masukkan 6 digit kode OTP.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      console.log('[Login] Memverifikasi OTP untuk nomor:', phone);
+
+      const { data, error } = await supabase.functions.invoke('verify-otp', {
+        body: { phone, otp },
+      });
+
+      console.log('[Login] Response verify-otp:', JSON.stringify({ data, error }));
+
+      if (error) {
+        throw new Error(error.message || 'Gagal menghubungi server. Cek koneksi internet Anda.');
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'OTP tidak valid atau kadaluarsa');
+      }
+
+      // Set session dari response edge function
+      if (data.session) {
+        console.log('[Login] Menyimpan session...');
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+        
+        if (sessionError) {
+          console.error('[Login] Session error:', sessionError);
+          throw new Error('Gagal menyimpan sesi login: ' + sessionError.message);
+        }
+        console.log('[Login] Session berhasil disimpan');
+      } else {
+        throw new Error('Server tidak mengembalikan sesi login. Hubungi admin.');
+      }
+
+      // Karena ini murni login, kita asumsikan profil pasti ada (karena sudah dicek di awal)
+      console.log('[Login] Masuk ke home');
+      router.replace('/(dealer)/home');
+    } catch (err: any) {
+      console.error('[Login] Error lengkap:', err);
+      // Pastikan selalu ada pesan yang ditampilkan
+      const message = err?.message || err?.toString() || 'Terjadi kesalahan tak dikenal. Silakan coba lagi.';
+      Alert.alert('Verifikasi Gagal', message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>B2B Retail App</Text>
-      <Text style={styles.subtitle}>Login Dealer</Text>
+      <Image 
+        source={require('../../assets/images/logo.png')} 
+        style={styles.logoImage} 
+        resizeMode="contain" 
+      />
+      <Text style={styles.subtitle}>
+        {step === 1 ? 'Masuk atau Daftar dengan WhatsApp' : 'Verifikasi Kode OTP'}
+      </Text>
 
       <View style={styles.formContainer}>
-        <TextInput 
-          style={styles.input}
-          placeholder="Email Address"
-          placeholderTextColor="#94a3b8"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-        />
-        <TextInput 
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#94a3b8"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
-        
-        <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text style={styles.buttonText}>Masuk</Text>
-          )}
-        </TouchableOpacity>
-        
-        <View style={styles.registerContainer}>
-          <Text style={styles.registerText}>Belum punya akun? </Text>
-          <Link href="/register" asChild>
-            <TouchableOpacity>
-              <Text style={styles.registerLink}>Daftar sekarang</Text>
+        {step === 1 ? (
+          <>
+            <View style={styles.inputWrapper}>
+              <Feather name="phone" size={20} color="#94a3b8" style={styles.icon} />
+              <TextInput 
+                style={styles.inputIcon}
+                placeholder="081234567890"
+                placeholderTextColor="#94a3b8"
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+              />
+            </View>
+            
+            <TouchableOpacity style={styles.button} onPress={handleSendOtp} disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.buttonText}>Kirim OTP via WhatsApp</Text>
+              )}
             </TouchableOpacity>
-          </Link>
-        </View>
 
-        <TouchableOpacity onPress={autofillDemo} style={styles.demoBtn}>
-          <Text style={styles.demoText}>Gunakan Akun Demo</Text>
-        </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.outlineButton} 
+              onPress={() => router.push('/register')} 
+              disabled={loading}
+            >
+              <Text style={styles.outlineButtonText}>Belum punya akun? Daftar</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={styles.infoText}>Kode OTP telah dikirim ke: {phone}</Text>
+            <View style={styles.inputWrapper}>
+              <Feather name="key" size={20} color="#94a3b8" style={styles.icon} />
+              <TextInput 
+                style={styles.inputIcon}
+                placeholder="6 Digit OTP"
+                placeholderTextColor="#94a3b8"
+                value={otp}
+                onChangeText={setOtp}
+                keyboardType="number-pad"
+                maxLength={6}
+              />
+            </View>
+            
+            <TouchableOpacity style={styles.button} onPress={handleVerifyOtp} disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.buttonText}>Verifikasi & Masuk</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)} disabled={loading}>
+              <Text style={styles.backButtonText}>Ubah Nomor WhatsApp</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );
@@ -112,10 +207,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f6fbf0',
     padding: 24,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#4a6b22',
+  logoImage: {
+    width: '70%',
+    height: 100,
     marginBottom: 8,
   },
   subtitle: {
@@ -127,13 +221,29 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 16,
   },
-  input: {
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'white',
-    padding: 16,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#dcf0c3',
+    paddingHorizontal: 16,
+  },
+  icon: {
+    marginRight: 12,
+  },
+  inputIcon: {
+    flex: 1,
+    paddingVertical: 16,
     fontSize: 16,
+    color: '#1e293b'
+  },
+  infoText: {
+    color: '#4a6b22',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginBottom: 8
   },
   button: {
     backgroundColor: '#8ec44a',
@@ -148,33 +258,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  registerContainer: {
-    flexDirection: 'row',
+  backButton: {
+    padding: 16,
+    alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
   },
-  registerText: {
+  backButtonText: {
     color: '#64748b',
-    fontSize: 14,
-  },
-  registerLink: {
-    color: '#8ec44a',
     fontSize: 14,
     fontWeight: 'bold',
   },
-  demoBtn: {
-    marginTop: 20,
+  outlineButton: {
+    backgroundColor: 'transparent',
+    padding: 16,
+    borderRadius: 12,
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: 'white',
+    justifyContent: 'center',
+    marginTop: 8,
     borderWidth: 1,
-    borderColor: '#dcf0c3',
-    borderStyle: 'dashed',
-    borderRadius: 10,
+    borderColor: '#8ec44a',
   },
-  demoText: {
+  outlineButtonText: {
     color: '#8ec44a',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: 'bold',
   }
 });

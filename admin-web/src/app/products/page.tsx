@@ -12,6 +12,7 @@ interface Product {
   price: number;
   stock: number;
   status: string;
+  image_urls?: string[];
   categories?: { name: string }; // joined data
 }
 
@@ -26,8 +27,11 @@ export default function ProductsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Semua Kategori');
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
 
   // Form State for Add Product
   const [newProductName, setNewProductName] = useState('');
@@ -35,6 +39,7 @@ export default function ProductsPage() {
   const [newCategoryId, setNewCategoryId] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [newStock, setNewStock] = useState('');
+  const [newImageUrls, setNewImageUrls] = useState(''); // comma separated for now
 
   useEffect(() => {
     fetchData();
@@ -63,33 +68,60 @@ export default function ProductsPage() {
     setIsLoading(false);
   };
 
-  const handleAddProduct = async (e: React.FormEvent) => {
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingProduct(null);
+    setNewProductName('');
+    setNewSku('');
+    setNewPrice('');
+    setNewStock('');
+    setNewImageUrls('');
+  };
+
+  const handleEditClick = (product: Product) => {
+    setEditingProduct(product);
+    setNewProductName(product.name);
+    setNewSku(product.sku || '');
+    setNewCategoryId(product.category_id || categories[0]?.id || '');
+    setNewPrice(product.price.toString());
+    setNewStock(product.stock.toString());
+    setNewImageUrls(product.image_urls ? product.image_urls.join(', ') : '');
+    setIsModalOpen(true);
+  };
+
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProductName || !newSku || !newPrice || !newStock || !newCategoryId) return;
 
     const stockNum = parseInt(newStock);
-    const newProd = {
+    const prodData = {
       name: newProductName,
       sku: newSku,
       category_id: newCategoryId,
       price: parseFloat(newPrice),
       stock: stockNum,
       status: stockNum > 20 ? 'ACTIVE' : 'LOW_STOCK',
+      image_urls: newImageUrls ? newImageUrls.split(',').map(u => u.trim()).filter(Boolean) : [],
     };
 
-    const { data, error } = await supabase.from('products').insert([newProd]).select('*, categories(name)');
-
-    if (!error && data) {
-      setProducts([data[0] as any, ...products]);
-      setIsModalOpen(false);
-      // Reset form
-      setNewProductName('');
-      setNewSku('');
-      setNewPrice('');
-      setNewStock('');
+    if (editingProduct) {
+      const { data, error } = await supabase.from('products').update(prodData).eq('id', editingProduct.id).select('*, categories(name)');
+      if (!error && data) {
+        setProducts(products.map(p => p.id === editingProduct.id ? data[0] as any : p));
+        closeModal();
+      } else {
+        console.error("Error updating product:", error);
+        alert("Gagal mengupdate produk. Cek console log.");
+      }
     } else {
-      console.error("Error adding product:", error);
-      alert("Gagal menambahkan produk. Cek console log.");
+      const { data, error } = await supabase.from('products').insert([prodData]).select('*, categories(name)');
+      if (!error && data) {
+        setProducts([data[0] as any, ...products]);
+        closeModal();
+      } else {
+        console.error("Error adding product:", error);
+        alert("Gagal menambahkan produk. Cek console log.");
+      }
     }
   };
 
@@ -111,6 +143,9 @@ export default function ProductsPage() {
     return matchesCategory && matchesSearch;
   });
 
+  const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
+  const paginatedProducts = filteredProducts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50 p-8">
       {/* HEADER */}
@@ -125,7 +160,10 @@ export default function ProductsPage() {
           <p className="text-sm text-gray-500 font-medium">Kelola katalog produk, harga, dan ketersediaan stok terhubung ke Supabase.</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            setEditingProduct(null);
+            setIsModalOpen(true);
+          }}
           className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-all shadow-sm flex items-center gap-2 text-sm hover:shadow-md active:scale-95"
         >
           <Plus size={18} strokeWidth={2.5} /> Tambah Produk
@@ -141,7 +179,7 @@ export default function ProductsPage() {
               type="text" 
               placeholder="Cari produk (Nama, SKU)..." 
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm transition-all"
             />
           </div>
@@ -149,7 +187,7 @@ export default function ProductsPage() {
             <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={18} />
             <select 
               value={selectedCategoryFilter}
-              onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+              onChange={(e) => { setSelectedCategoryFilter(e.target.value); setCurrentPage(1); }}
               className="pl-10 pr-8 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm bg-white font-medium text-gray-700 transition-all appearance-none cursor-pointer"
             >
               <option>Semua Kategori</option>
@@ -167,6 +205,7 @@ export default function ProductsPage() {
               <th className="p-5 font-semibold border-b border-gray-100">Nama Produk</th>
               <th className="p-5 font-semibold border-b border-gray-100">SKU</th>
               <th className="p-5 font-semibold border-b border-gray-100">Kategori</th>
+              <th className="p-5 font-semibold border-b border-gray-100">Gambar</th>
               <th className="p-5 font-semibold border-b border-gray-100">Harga Dealer</th>
               <th className="p-5 font-semibold border-b border-gray-100">Stok</th>
               <th className="p-5 font-semibold border-b border-gray-100">Status</th>
@@ -182,7 +221,7 @@ export default function ProductsPage() {
               <tr>
                 <td colSpan={7} className="p-8 text-center text-gray-500 font-medium">Belum ada produk ditemukan.</td>
               </tr>
-            ) : filteredProducts.map((product) => (
+            ) : paginatedProducts.map((product) => (
               <tr key={product.id} className="hover:bg-emerald-50/30 transition-colors group">
                 <td className="p-5 font-semibold text-gray-900">{product.name}</td>
                 <td className="p-5 text-gray-500 font-medium">{product.sku}</td>
@@ -190,6 +229,22 @@ export default function ProductsPage() {
                   <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200/60">
                     {product.categories?.name || '-'}
                   </span>
+                </td>
+                <td className="p-5">
+                  {product.image_urls && product.image_urls.length > 0 ? (
+                    <div className="flex -space-x-2">
+                      {product.image_urls.slice(0, 3).map((url, i) => (
+                        <img key={i} src={url} alt="" className="w-8 h-8 rounded-full border-2 border-white object-cover bg-gray-100" />
+                      ))}
+                      {product.image_urls.length > 3 && (
+                        <div className="w-8 h-8 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-600">
+                          +{product.image_urls.length - 3}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-400">Tidak ada</span>
+                  )}
                 </td>
                 <td className="p-5 text-gray-900 font-bold tracking-tight">Rp {product.price.toLocaleString('id-ID')}</td>
                 <td className="p-5">
@@ -205,7 +260,7 @@ export default function ProductsPage() {
                 </td>
                 <td className="p-5 text-right">
                   <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                    <button onClick={() => handleEditClick(product)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                       <Edit2 size={16} strokeWidth={2.5} />
                     </button>
                     <button onClick={() => handleDeleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
@@ -219,7 +274,31 @@ export default function ProductsPage() {
         </table>
         
         <div className="p-5 border-t border-gray-100 text-sm text-gray-500 flex justify-between items-center bg-white">
-          <span className="font-medium">Menampilkan <strong className="text-gray-900">{filteredProducts.length}</strong> produk</span>
+          <span className="font-medium">
+            Menampilkan {filteredProducts.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredProducts.length)} dari <strong className="text-gray-900">{filteredProducts.length}</strong> produk
+          </span>
+          
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-50 font-medium transition-colors"
+            >
+              Sebelumnya
+            </button>
+            
+            <div className="flex items-center px-2 font-medium text-gray-700">
+              Halaman {currentPage} dari {totalPages || 1}
+            </div>
+
+            <button 
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-50 font-medium transition-colors"
+            >
+              Selanjutnya
+            </button>
+          </div>
         </div>
       </div>
 
@@ -227,13 +306,13 @@ export default function ProductsPage() {
         <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all duration-300">
           <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-gray-100 overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-200">
             <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h2 className="text-xl font-bold text-gray-900">Tambah Produk Baru</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-200/50 rounded-xl transition-colors">
+              <h2 className="text-xl font-bold text-gray-900">{editingProduct ? 'Edit Produk' : 'Tambah Produk Baru'}</h2>
+              <button type="button" onClick={closeModal} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-200/50 rounded-xl transition-colors">
                 <X size={20} strokeWidth={2.5} />
               </button>
             </div>
 
-            <form onSubmit={handleAddProduct} className="p-6 space-y-5">
+            <form onSubmit={handleSaveProduct} className="p-6 space-y-5">
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">NAMA PRODUK <span className="text-red-500">*</span></label>
                 <input 
@@ -308,10 +387,21 @@ export default function ProductsPage() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">URL GAMBAR (Pisahkan dengan koma)</label>
+                <input 
+                  type="text" 
+                  placeholder="https://.../img1.jpg, https://.../img2.jpg"
+                  value={newImageUrls}
+                  onChange={(e) => setNewImageUrls(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium placeholder:font-normal"
+                />
+              </div>
+
               <div className="pt-6 flex justify-end gap-3 mt-4">
                 <button 
                   type="button" 
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={closeModal}
                   className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                 >
                   Batal
@@ -320,7 +410,7 @@ export default function ProductsPage() {
                   type="submit"
                   className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-all shadow-sm hover:shadow active:scale-95 flex items-center gap-2"
                 >
-                  <Plus size={18} strokeWidth={2.5} /> Simpan Produk
+                  <Plus size={18} strokeWidth={2.5} /> {editingProduct ? 'Simpan Perubahan' : 'Simpan Produk'}
                 </button>
               </div>
             </form>

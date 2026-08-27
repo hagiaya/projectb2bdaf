@@ -22,19 +22,26 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         return;
       }
 
-      // Verify role
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
+      // Verify role (bypass for Dito)
+      if (session.user.email?.toLowerCase() !== 'ditoapp@atomicmail.io') {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
 
-      if (profile?.role !== 'ADMIN') {
-        await supabase.auth.signOut();
-        if (pathname !== '/login') {
-          router.push('/login');
+        if (profile?.role !== 'ADMIN') {
+          await supabase.auth.signOut();
+          if (pathname !== '/login') {
+            router.push('/login');
+          }
+        } else {
+          if (pathname === '/login') {
+            router.push('/');
+          }
         }
       } else {
+        // Dito is always admin
         if (pathname === '/login') {
           router.push('/');
         }
@@ -48,15 +55,19 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       if (event === 'SIGNED_OUT') {
         router.push('/login');
       } else if (event === 'SIGNED_IN' && session) {
-        // Double check role
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (profile?.role !== 'ADMIN') {
-          await supabase.auth.signOut();
+        // Double check role (bypass for Dito)
+        if (session.user.email?.toLowerCase() !== 'ditoapp@atomicmail.io') {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+          
+          if (profile?.role !== 'ADMIN') {
+            await supabase.auth.signOut();
+          } else if (pathname === '/login') {
+            router.push('/');
+          }
         } else if (pathname === '/login') {
           router.push('/');
         }

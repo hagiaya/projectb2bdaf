@@ -23,6 +23,23 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchData();
+
+    // Subscribe to realtime orders changes
+    const ordersSubscription = supabase
+      .channel('public:orders')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        (payload) => {
+          console.log('Order change received!', payload);
+          fetchData(); // Refetch to ensure we get joined relations like dealers
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ordersSubscription);
+    };
   }, []);
 
   const fetchData = async () => {

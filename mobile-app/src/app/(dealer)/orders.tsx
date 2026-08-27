@@ -12,7 +12,7 @@ interface Order {
   final_amount: number;
   status: string;
   order_items: { products: { name: string }, quantity: number, unit_price: number }[];
-  address: string;
+  dealers?: { address: string };
 }
 
 export default function OrdersScreen() {
@@ -31,13 +31,35 @@ export default function OrdersScreen() {
     // In a real app, you'd filter by the logged-in dealer_id.
     const { data } = await supabase
       .from('orders')
-      .select('*, order_items(*, products(name))')
+      .select('*, order_items(*, products(name)), dealers(address)')
       .order('created_at', { ascending: false });
 
     if (data) {
       setOrders(data as unknown as Order[]);
     }
     setLoading(false);
+  };
+
+  const handlePayNow = async (orderId: string) => {
+    try {
+      // Create Midtrans Transaction via Edge Function
+      const { data: txData, error: txError } = await supabase.functions.invoke('create-midtrans-transaction', {
+        body: { order_id: orderId }
+      });
+
+      if (txError || !txData?.success) {
+        throw new Error(txData?.error || txError?.message || "Gagal menghubungi peladen pembayaran");
+      }
+
+      if (txData.payment_url) {
+        import('expo-web-browser').then(WebBrowser => {
+          WebBrowser.openBrowserAsync(txData.payment_url);
+        });
+        setSelectedOrder(null); // Close modal
+      }
+    } catch (error: any) {
+      alert(error.message || 'Gagal memproses pembayaran');
+    }
   };
 
   return (
@@ -119,7 +141,7 @@ export default function OrdersScreen() {
                 <Text style={styles.sectionHeading}>Alamat Pengiriman</Text>
                 <View style={styles.addressBox}>
                   <Feather name="map-pin" size={16} color="#8ec44a" style={{ marginTop: 2 }} />
-                  <Text style={styles.addressText}>{selectedOrder.address || 'Alamat tidak tersedia'}</Text>
+                  <Text style={styles.addressText}>{selectedOrder.dealers?.address || 'Alamat tidak tersedia'}</Text>
                 </View>
 
                 {/* TOTAL SUMMARY */}
@@ -130,9 +152,17 @@ export default function OrdersScreen() {
               </ScrollView>
             )}
 
-            <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedOrder(null)}>
-              <Text style={styles.closeBtnText}>Tutup</Text>
-            </TouchableOpacity>
+            <View style={{flexDirection: 'row', gap: 12, marginTop: 8}}>
+              <TouchableOpacity style={[styles.closeBtn, {flex: 1, backgroundColor: '#f1f5f9'}]} onPress={() => setSelectedOrder(null)}>
+                <Text style={[styles.closeBtnText, {color: '#64748b'}]}>Tutup</Text>
+              </TouchableOpacity>
+              
+              {selectedOrder?.status === 'PENDING' && (
+                <TouchableOpacity style={[styles.closeBtn, {flex: 2}]} onPress={() => handlePayNow(selectedOrder.id)}>
+                  <Text style={styles.closeBtnText}>Bayar Sekarang</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       </Modal>

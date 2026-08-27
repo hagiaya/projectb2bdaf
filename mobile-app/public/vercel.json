@@ -4,13 +4,41 @@
     {
       "source": "/",
       "destination": "/login",
-      "permanent": true
+      "permanent": false
     }
   ],
   "rewrites": [
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/_expo/(.*)",
+      "destination": "/_expo/$1"
+    },
+    {
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
+      "source": "/manifest.json",
+      "destination": "/manifest.json"
+    },
+    {
+      "source": "/sw.js",
+      "destination": "/sw.js"
+    },
+    {
+      "source": "/favicon.ico",
+      "destination": "/favicon.ico"
+    },
+    {
+      "source": "/.well-known/(.*)",
+      "destination": "/.well-known/$1"
+    },
+    {
+      "source": "/icon-192.png",
+      "destination": "/icon-192.png"
+    },
+    {
+      "source": "/icon-512.png",
+      "destination": "/icon-512.png"
     }
   ]
 }
