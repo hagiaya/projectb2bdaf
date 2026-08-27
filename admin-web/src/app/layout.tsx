@@ -6,8 +6,8 @@ import AuthProvider from '@/components/AuthProvider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'B2B Retail Admin Dashboard',
-  description: 'Admin dashboard for B2B Retail E-Commerce',
+  title: 'DAP APP Admin Dashboard',
+  description: 'Admin dashboard for DAP APP',
 };
 
 export default function RootLayout({

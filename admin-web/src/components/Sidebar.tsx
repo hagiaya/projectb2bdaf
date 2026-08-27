@@ -29,7 +29,7 @@ export default function Sidebar() {
       <div className="p-6">
         <h1 className="text-2xl font-black tracking-wider text-emerald-300 drop-shadow-sm flex items-center gap-2">
           <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain rounded-lg" />
-          2B RETAIL
+          DAP APP
         </h1>
         <p className="text-xs text-emerald-200/70 mt-1.5 font-medium tracking-wide">ADMIN DASHBOARD</p>
       </div>

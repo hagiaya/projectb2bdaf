@@ -18,7 +18,7 @@ export default function ProFeatureLock({ children, featureName }: { children: Re
           
           <h2 className="text-2xl font-black text-slate-800 mb-2">Fitur Terkunci</h2>
           <p className="text-slate-500 font-medium mb-8 leading-relaxed">
-            Modul <span className="text-slate-900 font-bold">{featureName}</span> adalah fitur khusus untuk paket B2B Retail Pro. Tingkatkan paket Anda untuk membuka fitur ini.
+            Modul <span className="text-slate-900 font-bold">{featureName}</span> adalah fitur khusus untuk paket DAP APP Pro. Tingkatkan paket Anda untuk membuka fitur ini.
           </p>
           
           <button className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl py-3.5 px-6 font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 group">
