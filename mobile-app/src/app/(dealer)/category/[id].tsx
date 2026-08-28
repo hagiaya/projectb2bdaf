@@ -42,7 +42,10 @@ export default function CategoryProductsScreen() {
   };
 
   const filteredProducts = products.filter((product) => {
-    return product.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return (
+      (product.name && product.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (product.sku && product.sku.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
   });
 
   return (
@@ -86,11 +89,15 @@ export default function CategoryProductsScreen() {
           <ActivityIndicator size="large" color="#8ec44a" style={{ marginTop: 40 }} />
         ) : (
           <View style={styles.gridContainer}>
-            {filteredProducts.map((product) => (
+            {filteredProducts.map((product) => {
+              const isHabis = product.stock === 0;
+              const hasNewTag = (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW'));
+              const displaySku = product.sku ? product.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
+              return (
               <TouchableOpacity 
                 key={product.id} 
-                style={[styles.productCard, product.stock === 0 && { opacity: 0.5 }]}
-                disabled={product.stock === 0}
+                style={[styles.productCard, isHabis && { opacity: 0.6 }]}
+                disabled={isHabis}
                 onPress={() => router.push(`/product/${product.id}`)}
               >
                 {/* GAMBAR PRODUK */}
@@ -103,6 +110,11 @@ export default function CategoryProductsScreen() {
                     <Feather name="box" size={36} color="#8ec44a" />
                   )}
                   
+                  {isHabis && (
+                    <View style={styles.habisOverlay}>
+                      <Text style={styles.habisText}>HABIS</Text>
+                    </View>
+                  )}
                   {product.image_urls && product.image_urls.length > 1 && (
                     <View style={{ position: 'absolute', bottom: 6, flexDirection: 'row', gap: 4 }}>
                       {product.image_urls.map((_: any, i: number) => (
@@ -118,7 +130,12 @@ export default function CategoryProductsScreen() {
 
                 {/* DETAILS */}
                 <View style={styles.cardDetails}>
-                  <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
+                  {(!isHabis && hasNewTag) && (
+                    <View style={styles.newBadge}>
+                      <Text style={styles.newBadgeText}>NEW</Text>
+                    </View>
+                  )}
+                  <Text style={styles.productName} numberOfLines={2}>{displaySku}</Text>
                   
                   {/* BINTANG & JUMLAH TERJUAL */}
                   <View style={styles.ratingRow}>
@@ -134,14 +151,20 @@ export default function CategoryProductsScreen() {
 
                   {/* FOOTER & BUTTON */}
                   <View style={styles.cardFooter}>
-                    <Text style={styles.stockText}>Stok: {product.stock}</Text>
-                    <TouchableOpacity style={styles.addCartBtn} onPress={() => addToCart(product)}>
+                    <Text style={[styles.stockText, isHabis && { color: '#ef4444' }]}>
+                      {isHabis ? 'Stok Habis' : `Stok: ${product.stock}`}
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.addCartBtn, isHabis && { backgroundColor: '#cbd5e1' }]} 
+                      onPress={() => addToCart(product)}
+                      disabled={isHabis}
+                    >
                       <Feather name="plus" size={16} color="white" />
                     </TouchableOpacity>
                   </View>
                 </View>
               </TouchableOpacity>
-            ))}
+            )})}
           </View>
         )}
 
@@ -226,6 +249,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     position: 'relative',
   },
+  habisOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  habisText: {
+    color: '#ef4444',
+    fontWeight: 'bold',
+    fontSize: 16,
+    transform: [{ rotate: '-15deg' }],
+    textShadowColor: 'rgba(255,255,255,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+    borderWidth: 2,
+    borderColor: '#ef4444',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  },
   categoryTag: { 
     position: 'absolute', 
     top: 8, 
@@ -236,6 +281,8 @@ const styles = StyleSheet.create({
     borderRadius: 6 
   },
   categoryTagText: { color: 'white', fontSize: 9, fontWeight: 'bold' },
+  newBadge: { alignSelf: 'flex-start', backgroundColor: '#3b82f6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
+  newBadgeText: { color: 'white', fontSize: 9, fontWeight: 'bold' },
 
   cardDetails: { padding: 10 },
   productName: { fontSize: 13, fontWeight: '600', color: '#1e293b', height: 36, lineHeight: 18 },

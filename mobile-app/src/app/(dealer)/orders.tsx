@@ -11,7 +11,7 @@ interface Order {
   total_amount: number;
   final_amount: number;
   status: string;
-  order_items: { products: { name: string }, quantity: number, unit_price: number }[];
+  order_items: { products: { name: string, sku: string }, quantity: number, unit_price: number }[];
   dealers?: { address: string };
 }
 
@@ -31,7 +31,7 @@ export default function OrdersScreen() {
     // In a real app, you'd filter by the logged-in dealer_id.
     const { data } = await supabase
       .from('orders')
-      .select('*, order_items(*, products(name)), dealers(address)')
+      .select('*, order_items(*, products(name, sku)), dealers(address)')
       .order('created_at', { ascending: false });
 
     if (data) {
@@ -129,7 +129,7 @@ export default function OrdersScreen() {
                   {(selectedOrder.order_items || []).map((item, idx) => (
                     <View key={idx} style={styles.itemRow}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.itemName}>{item.products?.name || 'Produk'}</Text>
+                        <Text style={styles.itemName}>{item.products?.sku || 'SKU Tidak Diketahui'}</Text>
                         <Text style={styles.itemSub}>{item.quantity}x @ Rp {Number(item.unit_price).toLocaleString('id-ID')}</Text>
                       </View>
                       <Text style={styles.itemTotal}>Rp {(item.quantity * item.unit_price).toLocaleString('id-ID')}</Text>

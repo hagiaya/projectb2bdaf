@@ -1,22 +1,37 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useWishlist } from '../../context/WishlistContext';
+import { useCart } from '../../context/CartContext';
+import { supabase } from '../../lib/supabase';
 
 export default function WishlistScreen() {
-  const [wishlistItems, setWishlistItems] = useState([
-    { id: 1, name: 'Semen Gresik 40kg', price: 55000, category: 'Material', stock: 1250 },
-    { id: 2, name: 'Cat Tembok Dulux 5kg', price: 145000, category: 'Cat', stock: 85 },
-    { id: 3, name: 'Keramik Roman 40x40', price: 95000, category: 'Keramik', stock: 200 },
-  ]);
+  const { items: wishlistItems, removeFromWishlist } = useWishlist();
+  const { addToCart } = useCart();
+  const [realItems, setRealItems] = React.useState<any[]>([]);
 
-  const removeItem = (id: number) => {
-    setWishlistItems(wishlistItems.filter(item => item.id !== id));
+  React.useEffect(() => {
+    fetchRealData();
+  }, [wishlistItems]);
+
+  const fetchRealData = async () => {
+    if (wishlistItems.length === 0) {
+      setRealItems([]);
+      return;
+    }
+    const ids = wishlistItems.map(i => i.id);
+    const { data } = await supabase.from('products').select('*').in('id', ids);
+    if (data) setRealItems(data);
+  };
+
+  const removeItem = (id: string) => {
+    removeFromWishlist(id);
     Alert.alert('Dihapus', 'Produk telah dihapus dari Wishlist');
   };
 
-  const addToCart = (name: string) => {
-    Alert.alert('Sukses', `${name} berhasil ditambahkan ke Keranjang!`);
+  const handleAddToCart = (item: any) => {
+    addToCart(item, 1);
   };
 
   return (
@@ -30,27 +45,57 @@ export default function WishlistScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
-        {wishlistItems.map((item) => (
-          <View key={item.id} style={styles.card}>
-            <View style={styles.imagePlaceholder}>
-              <Feather name="heart" size={24} color="#ef4444" />
+        {wishlistItems.map((item) => {
+          const realItem = realItems.find(r => r.id === item.id) || item;
+          const isHabis = realItem.stock === 0;
+          const hasNewTag = (realItem.sku && realItem.sku.toUpperCase().includes('NEW')) || (realItem.name && realItem.name.toUpperCase().includes('NEW'));
+          const displaySku = realItem.sku ? realItem.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
+          const displayPrice = realItem.price || 0;
+          
+          return (
+            <View key={item.id} style={[styles.card, isHabis && { opacity: 0.6 }]}>
+              <View style={{ position: 'relative' }}>
+                {realItem.image_urls && realItem.image_urls.length > 0 ? (
+                  <Image source={{ uri: realItem.image_urls[0] }} style={styles.productImage} />
+                ) : realItem.image_url ? (
+                  <Image source={{ uri: realItem.image_url }} style={styles.productImage} />
+                ) : (
+                  <View style={styles.imagePlaceholder}>
+                    <Feather name="heart" size={24} color="#ef4444" />
+                  </View>
+                )}
+                {isHabis && (
+                  <View style={styles.habisOverlay}>
+                    <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>HABIS</Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.details}>
+                {(!isHabis && hasNewTag) && (
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>NEW</Text>
+                  </View>
+                )}
+                <Text style={styles.category}>{item.category || 'Uncategorized'}</Text>
+                <Text style={styles.name}>{displaySku}</Text>
+                <Text style={styles.price}>Rp {Number(displayPrice).toLocaleString('id-ID')}</Text>
+                <Text style={styles.stock}>Stok: {realItem.stock}</Text>
+              </View>
+              <View style={styles.actions}>
+                <TouchableOpacity style={styles.removeBtn} onPress={() => removeItem(item.id)}>
+                  <Feather name="trash-2" size={18} color="#ef4444" />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.cartBtn, isHabis && { backgroundColor: '#cbd5e1' }]} 
+                  onPress={() => handleAddToCart(realItem)}
+                  disabled={isHabis}
+                >
+                  <Feather name="shopping-cart" size={16} color="white" />
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.details}>
-              <Text style={styles.category}>{item.category}</Text>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.price}>Rp {item.price.toLocaleString('id-ID')}</Text>
-              <Text style={styles.stock}>Stok: {item.stock}</Text>
-            </View>
-            <View style={styles.actions}>
-              <TouchableOpacity style={styles.removeBtn} onPress={() => removeItem(item.id)}>
-                <Feather name="trash-2" size={18} color="#ef4444" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.cartBtn} onPress={() => addToCart(item.name)}>
-                <Feather name="shopping-cart" size={16} color="white" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
+          );
+        })}
 
         {wishlistItems.length === 0 && (
           <View style={styles.emptyState}>
@@ -74,6 +119,7 @@ const styles = StyleSheet.create({
   list: { padding: 16, gap: 12 },
   card: { backgroundColor: 'white', borderRadius: 14, padding: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#f0f7e6', shadowColor: '#8ec44a', shadowOpacity: 0.05, elevation: 2 },
   imagePlaceholder: { width: 64, height: 64, backgroundColor: '#fef2f2', borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  productImage: { width: 64, height: 64, borderRadius: 10, marginRight: 12 },
   details: { flex: 1 },
   category: { fontSize: 10, color: '#8ec44a', fontWeight: 'bold', textTransform: 'uppercase' },
   name: { fontSize: 14, fontWeight: '600', color: '#0f172a', marginVertical: 2 },
@@ -85,5 +131,31 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', padding: 40, marginTop: 40 },
   emptyText: { marginTop: 12, color: '#64748b', fontSize: 14 },
   shopBtn: { marginTop: 16, backgroundColor: '#8ec44a', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
-  shopBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 }
+  shopBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
+  habisOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    borderRadius: 10,
+    marginRight: 12,
+  },
+  habisText: {
+    color: '#ef4444',
+    fontWeight: 'bold',
+    fontSize: 12,
+    transform: [{ rotate: '-15deg' }],
+    textShadowColor: 'rgba(255,255,255,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+    borderWidth: 2,
+    borderColor: '#ef4444',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  newBadge: { alignSelf: 'flex-start', backgroundColor: '#3b82f6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
+  newBadgeText: { color: 'white', fontSize: 8, fontWeight: 'bold' }
 });

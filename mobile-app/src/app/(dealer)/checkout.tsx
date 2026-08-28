@@ -149,7 +149,7 @@ export default function CheckoutScreen() {
           {items.map(item => (
             <View key={item.id} style={styles.itemRow}>
               <View style={{flex: 1}}>
-                <Text style={styles.itemName}>{item.name}</Text>
+                <Text style={styles.itemName}>{item.sku || 'SKU Tidak Diketahui'}</Text>
                 <Text style={styles.itemQty}>{item.quantity} x Rp {item.price.toLocaleString('id-ID')}</Text>
               </View>
               <Text style={styles.itemTotal}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</Text>

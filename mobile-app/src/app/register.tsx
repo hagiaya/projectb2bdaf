@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { Feather } from '@expo/vector-icons';
 import React, { useState } from 'react';
+import * as Location from 'expo-location';
 import MapPicker from '../components/MapPicker';
 import { supabase } from '../lib/supabase';
 
@@ -15,6 +16,7 @@ export default function RegisterScreen() {
   const [step, setStep] = useState(1); // 1 = Form, 2 = OTP
   const [otp, setOtp] = useState('');
 
+  const [accountType, setAccountType] = useState<'personal' | 'perusahaan'>('personal');
   const [storeName, setStoreName] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [email, setEmail] = useState('');
@@ -69,6 +71,38 @@ export default function RegisterScreen() {
     return digits;
   };
 
+  const handleAutoLocation = async () => {
+    try {
+      if (Platform.OS !== 'web') {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Izin Ditolak', 'Dibutuhkan izin lokasi untuk deteksi otomatis.');
+          return;
+        }
+      }
+      
+      const loc = await Location.getCurrentPositionAsync({});
+      setLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+      
+      const [addressDetails] = await Location.reverseGeocodeAsync({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude
+      });
+      
+      if (addressDetails) {
+        const fullAddress = [addressDetails.street, addressDetails.city, addressDetails.subregion, addressDetails.region].filter(Boolean).join(', ');
+        if (fullAddress) setAddress(fullAddress);
+      }
+      
+      if (Platform.OS !== 'web') Alert.alert('Berhasil', 'Lokasi berhasil dideteksi.');
+      else window.alert('Lokasi berhasil dideteksi.');
+    } catch (error) {
+      console.log('Location error:', error);
+      if (Platform.OS !== 'web') Alert.alert('Gagal', 'Gagal mendapatkan lokasi. Pastikan GPS aktif.');
+      else window.alert('Gagal mendapatkan lokasi. Pastikan GPS aktif.');
+    }
+  };
+
   const handleSendOtp = async () => {
     console.log('[Register] Memeriksa kelengkapan data...', {
       storeName: !!storeName,
@@ -80,8 +114,8 @@ export default function RegisterScreen() {
       npwpBase64: !!npwpBase64
     });
 
-    if (!storeName || !ownerName || !email || !phone || !location || !ktpBase64 || !npwpBase64) {
-      const msg = 'Harap isi semua kolom (Toko, Nama, Email, HP), pilih lokasi peta, dan sertakan foto KTP serta NPWP.';
+    if (!storeName || !ownerName || !email || !phone || !location || !ktpBase64 || (accountType === 'perusahaan' && !npwpBase64)) {
+      const msg = 'Harap isi semua kolom (Toko, Nama, Email, HP), lokasi peta, serta foto dokumen yang diwajibkan.';
       console.warn(msg);
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('Error', msg);
@@ -202,7 +236,7 @@ export default function RegisterScreen() {
         console.error("NPWP Upload error:", npwpError);
         throw npwpError;
       }
-      const npwpUrl = supabase.storage.from('dealer_documents').getPublicUrl(npwpFilePath).data.publicUrl;
+      const npwpUrl = npwpBase64 ? supabase.storage.from('dealer_documents').getPublicUrl(npwpFilePath).data.publicUrl : null;
 
       console.log("Upserting profile...");
       const { error } = await supabase.from('profiles').upsert({
@@ -289,6 +323,21 @@ export default function RegisterScreen() {
       <View style={styles.formContainer}>
         {step === 1 ? (
           <>
+            <View style={styles.accountTypeContainer}>
+              <TouchableOpacity 
+                style={[styles.typeButton, accountType === 'personal' && styles.typeButtonActive]}
+                onPress={() => setAccountType('personal')}
+              >
+                <Text style={[styles.typeButtonText, accountType === 'personal' && styles.typeButtonTextActive]}>Personal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.typeButton, accountType === 'perusahaan' && styles.typeButtonActive]}
+                onPress={() => setAccountType('perusahaan')}
+              >
+                <Text style={[styles.typeButtonText, accountType === 'perusahaan' && styles.typeButtonTextActive]}>Perusahaan</Text>
+              </TouchableOpacity>
+            </View>
+
             <TextInput 
               style={styles.input}
               placeholder="Nama Toko (Sesuai KTP/SIUP)"
@@ -335,6 +384,10 @@ export default function RegisterScreen() {
                   {location ? `✓ Lokasi Terpilih (${location.lat.toFixed(4)}, ${location.lng.toFixed(4)})` : '📍 Tandai Lokasi di Peta (Wajib)'}
                 </Text>
               </TouchableOpacity>
+              <TouchableOpacity style={styles.autoLocationButton} onPress={handleAutoLocation}>
+                <Feather name="navigation" size={16} color="white" />
+                <Text style={styles.autoLocationButtonText}>Deteksi Lokasi Otomatis</Text>
+              </TouchableOpacity>
             </View>
             
             {/* KTP Document */}
@@ -353,19 +406,21 @@ export default function RegisterScreen() {
             </View>
 
             {/* NPWP Document */}
-            <View style={styles.locationContainer}>
-              <Text style={styles.locationLabel}>Foto NPWP Toko/Pemilik</Text>
-              <TouchableOpacity style={styles.mapButton} onPress={() => pickImage('NPWP')}>
-                {npwpImage ? (
-                  <Image source={{ uri: npwpImage }} style={styles.previewImage} />
-                ) : (
-                  <View style={styles.uploadPlaceholder}>
-                    <Feather name="camera" size={24} color="#8ec44a" />
-                    <Text style={styles.uploadText}>{Platform.OS === 'web' ? 'Pilih Foto NPWP' : 'Ambil Foto NPWP'}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
+            {accountType === 'perusahaan' && (
+              <View style={styles.locationContainer}>
+                <Text style={styles.locationLabel}>Foto NPWP Toko/Pemilik (Wajib untuk Perusahaan)</Text>
+                <TouchableOpacity style={styles.mapButton} onPress={() => pickImage('NPWP')}>
+                  {npwpImage ? (
+                    <Image source={{ uri: npwpImage }} style={styles.previewImage} />
+                  ) : (
+                    <View style={styles.uploadPlaceholder}>
+                      <Feather name="camera" size={24} color="#8ec44a" />
+                      <Text style={styles.uploadText}>{Platform.OS === 'web' ? 'Pilih Foto NPWP' : 'Ambil Foto NPWP'}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
             
             <TouchableOpacity style={styles.button} onPress={handleSendOtp} disabled={loading}>
               {loading ? (
@@ -545,6 +600,47 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     color: '#64748b',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  accountTypeContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#dcf0c3',
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  typeButton: {
+    flex: 1,
+    padding: 14,
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  typeButtonActive: {
+    backgroundColor: '#8ec44a',
+  },
+  typeButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#94a3b8',
+  },
+  typeButtonTextActive: {
+    color: 'white',
+  },
+  autoLocationButton: {
+    flexDirection: 'row',
+    backgroundColor: '#3b82f6',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  autoLocationButtonText: {
+    color: 'white',
     fontSize: 14,
     fontWeight: 'bold',
   }

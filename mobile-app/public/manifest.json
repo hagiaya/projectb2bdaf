@@ -1,8 +1,8 @@
 {
   "id": "/?source=pwa",
-  "name": "B2B Retail Dealer App",
-  "short_name": "B2B Dealer",
-  "description": "B2B Retail Dealer App for managing orders, products, and promotions.",
+  "name": "DAP",
+  "short_name": "DAP",
+  "description": "DAP App for managing orders, products, and promotions.",
   "start_url": "/login",
   "scope": "/",
   "display": "fullscreen",

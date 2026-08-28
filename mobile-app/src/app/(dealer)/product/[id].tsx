@@ -65,6 +65,11 @@ export default function ProductDetailScreen() {
     );
   }
 
+  const isHabis = product.stock === 0;
+  const hasNewTag = (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW'));
+  const displaySku = product.sku ? product.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
+  const displayName = product.name ? product.name.replace(/NEW/gi, '').trim() : '';
+
   const images = (product.image_urls && product.image_urls.length > 0) 
                  ? product.image_urls 
                  : (product.image_url ? [product.image_url] : []);
@@ -126,13 +131,18 @@ export default function ProductDetailScreen() {
 
         {/* BASIC DETAILS */}
         <View style={styles.detailsSection}>
+          {(!isHabis && hasNewTag) && (
+            <View style={styles.newBadge}>
+              <Text style={styles.newBadgeText}>NEW</Text>
+            </View>
+          )}
           <View style={styles.priceRow}>
             <Text style={styles.price}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
             <View style={styles.categoryTag}>
               <Text style={styles.categoryTagText}>{product.categories?.name || 'Lainnya'}</Text>
             </View>
           </View>
-          <Text style={styles.productName}>{product.name}</Text>
+          <Text style={styles.productName}>{displaySku}</Text>
           
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
@@ -158,8 +168,10 @@ export default function ProductDetailScreen() {
           <Text style={styles.sectionTitle}>Informasi Produk</Text>
           <View style={styles.infoGrid}>
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>SKU</Text>
-              <Text style={styles.infoValue}>{product.sku || '-'}</Text>
+              <Text style={styles.infoLabel}>Nama Produk</Text>
+              <Text style={[styles.infoValue, { flex: 1, textAlign: 'right', marginLeft: 16 }]} numberOfLines={3}>
+                {displayName}
+              </Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Status</Text>
@@ -170,7 +182,7 @@ export default function ProductDetailScreen() {
           </View>
         </View>
 
-        {/* DESKRIPSI (Untuk saat ini mockup jika belum ada field description di DB) */}
+        {/* DESKRIPSI */}
         <View style={styles.descriptionSection}>
           <Text style={styles.sectionTitle}>Deskripsi Produk</Text>
           <Text style={styles.descriptionText}>
@@ -182,17 +194,21 @@ export default function ProductDetailScreen() {
       {/* BOTTOM ACTION BAR */}
       <View style={styles.bottomBar}>
         <View style={styles.quantityControl}>
-          <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
+          <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(Math.max(1, quantity - 1))} disabled={product.stock === 0}>
             <Feather name="minus" size={20} color="#64748b" />
           </TouchableOpacity>
           <Text style={styles.qtyText}>{quantity}</Text>
-          <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(quantity + 1)}>
+          <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(quantity + 1)} disabled={product.stock === 0}>
             <Feather name="plus" size={20} color="#64748b" />
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.addToCartBtn} disabled={product.stock === 0} onPress={() => addToCart(product, quantity)}>
-          <Feather name="shopping-cart" size={20} color="white" />
-          <Text style={styles.addToCartText}>Tambah ke Keranjang</Text>
+        <TouchableOpacity 
+          style={[styles.addToCartBtn, product.stock === 0 && { backgroundColor: '#cbd5e1' }]} 
+          disabled={product.stock === 0} 
+          onPress={() => addToCart(product, quantity)}
+        >
+          {product.stock > 0 && <Feather name="shopping-cart" size={20} color="white" />}
+          <Text style={styles.addToCartText}>{product.stock === 0 ? 'Stok Habis' : 'Tambah ke Keranjang'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -266,6 +282,8 @@ const styles = StyleSheet.create({
   dotInactive: { backgroundColor: 'rgba(255,255,255,0.7)' },
   noImageContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   noImageText: { color: '#94a3b8', marginTop: 12, fontWeight: '600' },
+  newBadge: { alignSelf: 'flex-start', backgroundColor: '#3b82f6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginBottom: 8 },
+  newBadgeText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
 
   detailsSection: {
     backgroundColor: 'white',

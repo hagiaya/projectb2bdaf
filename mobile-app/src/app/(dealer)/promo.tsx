@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Modal, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { supabase } from '../../lib/supabase';
 
 interface Promo {
   id: number;
@@ -14,12 +15,41 @@ interface Promo {
 export default function PromoScreen() {
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
   const [selectedPromo, setSelectedPromo] = useState<Promo | null>(null);
+  const [promos, setPromos] = useState<Promo[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const dummyPromos: Promo[] = [
-    { id: 1, title: 'Diskon Akhir Tahun 15%', desc: 'Berlaku untuk semua pembelian cat tembok minimal 50 pail.', code: 'YEAREND15', expire: '31 Des 2026' },
-    { id: 2, title: 'Cashback Rp 500.000', desc: 'Khusus pembelian Semen Tiga Roda di atas Rp 20.000.000.', code: 'CASHBACK500', expire: '30 Nov 2026' },
-    { id: 3, title: 'Gratis Ongkir B2B', desc: 'Tanpa minimal belanja khusus pengiriman area Surabaya & Sidoarjo.', code: 'FREEONGKIRB2B', expire: '15 Nov 2026' },
-  ];
+  React.useEffect(() => {
+    fetchPromos();
+  }, []);
+
+  const fetchPromos = async () => {
+    setIsLoading(true);
+    // You may need to import supabase if not already imported
+    const { data, error } = await supabase
+      .from('promos')
+      .select('*')
+      .eq('status', 'ACTIVE')
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      // Map database fields to the UI interface
+      const mappedPromos: Promo[] = data.map(p => ({
+        id: p.id as any,
+        title: `Diskon ${p.discount_percentage}%`, // Title fallback since it's just 'title' in DB but they have description
+        desc: p.description || p.title,
+        code: p.code,
+        expire: new Date(p.end_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+      }));
+      
+      // Override title with actual title from DB
+      data.forEach((p, idx) => {
+        mappedPromos[idx].title = p.title;
+      });
+
+      setPromos(mappedPromos);
+    }
+    setIsLoading(false);
+  };
 
   const handleUsePromo = (promo: Promo) => {
     setSelectedPromo(promo);
@@ -55,37 +85,46 @@ export default function PromoScreen() {
           </View>
         )}
 
-        {dummyPromos.map(promo => {
-          const isApplied = appliedCode === promo.code;
-          return (
-            <View key={promo.id} style={[styles.card, isApplied && styles.cardApplied]}>
-              <View style={styles.badge}><Feather name="percent" size={20} color="white" /></View>
-              <View style={{ marginLeft: 60 }}>
-                <Text style={styles.title}>{promo.title}</Text>
-                <Text style={styles.desc}>{promo.desc}</Text>
-                <View style={styles.footer}>
-                  <View>
-                    <Text style={styles.codeLabel}>Kode Voucher:</Text>
-                    <Text style={styles.code}>{promo.code}</Text>
+        {isLoading ? (
+          <ActivityIndicator size="large" color="#8ec44a" style={{ marginTop: 40 }} />
+        ) : promos.length === 0 ? (
+          <View style={{ alignItems: 'center', padding: 40, marginTop: 40 }}>
+            <Feather name="gift" size={48} color="#94a3b8" />
+            <Text style={{ marginTop: 12, color: '#64748b', fontSize: 14 }}>Belum ada promo saat ini.</Text>
+          </View>
+        ) : (
+          promos.map(promo => {
+            const isApplied = appliedCode === promo.code;
+            return (
+              <View key={promo.id} style={[styles.card, isApplied && styles.cardApplied]}>
+                <View style={styles.badge}><Feather name="percent" size={20} color="white" /></View>
+                <View style={{ marginLeft: 60 }}>
+                  <Text style={styles.title}>{promo.title}</Text>
+                  <Text style={styles.desc}>{promo.desc}</Text>
+                  <View style={styles.footer}>
+                    <View>
+                      <Text style={styles.codeLabel}>Kode Voucher:</Text>
+                      <Text style={styles.code}>{promo.code}</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={styles.expireLabel}>Berakhir:</Text>
+                      <Text style={styles.expire}>{promo.expire}</Text>
+                    </View>
                   </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.expireLabel}>Berakhir:</Text>
-                    <Text style={styles.expire}>{promo.expire}</Text>
-                  </View>
+                  <TouchableOpacity 
+                    style={[styles.useBtn, isApplied && styles.useBtnDisabled]} 
+                    onPress={() => handleUsePromo(promo)}
+                    disabled={isApplied}
+                  >
+                    <Text style={styles.useBtnText}>
+                      {isApplied ? '✓ Voucher Terpakai' : 'Gunakan Promo'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity 
-                  style={[styles.useBtn, isApplied && styles.useBtnDisabled]} 
-                  onPress={() => handleUsePromo(promo)}
-                  disabled={isApplied}
-                >
-                  <Text style={styles.useBtnText}>
-                    {isApplied ? '✓ Voucher Terpakai' : 'Gunakan Promo'}
-                  </Text>
-                </TouchableOpacity>
               </View>
-            </View>
-          );
-        })}
+            );
+          })
+        )}
       </ScrollView>
 
       {/* MODAL KONFIRMASI PENGGUNAAN PROMO */}

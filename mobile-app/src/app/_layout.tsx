@@ -3,6 +3,7 @@ import { useFonts } from 'expo-font';
 import { Feather } from '@expo/vector-icons';
 import { useEffect } from 'react';
 import { CartProvider } from '../context/CartContext';
+import { WishlistProvider } from '../context/WishlistContext';
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -14,8 +15,10 @@ export default function RootLayout() {
   }
 
   return (
-    <CartProvider>
-      <Stack screenOptions={{ headerShown: false }} />
-    </CartProvider>
+    <WishlistProvider>
+      <CartProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+      </CartProvider>
+    </WishlistProvider>
   );
 }

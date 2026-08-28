@@ -106,7 +106,7 @@ export default function CartScreen() {
                 </View>
                 
                 <View style={styles.itemDetails}>
-                  <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+                  <Text style={styles.itemName} numberOfLines={2}>{item.sku || 'SKU Tidak Diketahui'}</Text>
                   <Text style={styles.itemPrice}>Rp {item.price.toLocaleString('id-ID')}</Text>
                   
                   <View style={styles.actionRow}>
@@ -129,7 +129,7 @@ export default function CartScreen() {
                     <TouchableOpacity 
                       style={styles.deleteBtn}
                       onPress={() => {
-                        Alert.alert('Hapus Item', `Yakin ingin menghapus ${item.name} dari keranjang?`, [
+                        Alert.alert('Hapus Item', `Yakin ingin menghapus ${item.sku || 'item ini'} dari keranjang?`, [
                           { text: 'Batal', style: 'cancel' },
                           { text: 'Hapus', style: 'destructive', onPress: () => removeFromCart(item.id) }
                         ]);

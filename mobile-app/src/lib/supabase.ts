@@ -1,6 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -10,12 +11,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Storage adapter yang aman untuk SSR (web server-side rendering)
-// Pada native (iOS/Android), gunakan AsyncStorage
-// Pada web client, gunakan localStorage
+// Pada native dan web client, gunakan AsyncStorage (sudah support web)
 // Pada SSR (Node.js), gunakan memory storage (no-op)
 const createStorage = () => {
   // SSR / Node.js environment - tidak ada window
-  if (typeof window === 'undefined') {
+  if (typeof window === 'undefined' && Platform.OS === 'web') {
     return {
       getItem: (_key: string) => Promise.resolve(null),
       setItem: (_key: string, _value: string) => Promise.resolve(),
@@ -23,36 +23,8 @@ const createStorage = () => {
     };
   }
 
-  // Native (iOS/Android)
-  if (Platform.OS !== 'web') {
-    // Lazy import AsyncStorage hanya di native
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-    return AsyncStorage;
-  }
-
-  // Web browser - gunakan localStorage
-  return {
-    getItem: (key: string) => {
-      try {
-        return Promise.resolve(window.localStorage.getItem(key));
-      } catch {
-        return Promise.resolve(null);
-      }
-    },
-    setItem: (key: string, value: string) => {
-      try {
-        window.localStorage.setItem(key, value);
-      } catch {}
-      return Promise.resolve();
-    },
-    removeItem: (key: string) => {
-      try {
-        window.localStorage.removeItem(key);
-      } catch {}
-      return Promise.resolve();
-    },
-  };
+  // Native & Web Client (Expo sudah support web untuk AsyncStorage)
+  return AsyncStorage;
 };
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {

@@ -123,10 +123,14 @@ export default function DealerHome() {
   const [isNotifVisible, setIsNotifVisible] = useState(false);
   const [isProfileVisible, setIsProfileVisible] = useState(false);
   const [isTrackVisible, setIsTrackVisible] = useState(false);
+  // Real Notifications State
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const unreadCount = notifications.filter(n => !n.is_read).length;
 
   useEffect(() => {
     fetchProducts();
     fetchProfile();
+    fetchNotifications();
   }, []);
 
   const fetchProducts = async () => {
@@ -152,22 +156,31 @@ export default function DealerHome() {
     }
   };
 
+  const fetchNotifications = async () => {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (data && !error) {
+      setNotifications(data);
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setIsProfileVisible(false);
     router.replace('/login');
   };
 
+  const markNotificationRead = async (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+  };
+
   // derived lists (Membagi produk yang diacak ke berbagai section agar tidak sama)
   const bestSellerProducts = products.slice(0, 4);
   const flashSaleProducts = products.slice(4, 9);
   const recentlyViewed = products.slice(9, 14);
-
-  const notifications = [
-    { id: '1', title: 'Pesanan INV-20231024-001 Diproses', desc: 'Semen Gresik 40kg (50 sak) sedang disiapkan oleh gudang.', time: '10 menit lalu' },
-    { id: '2', title: 'Promo Diskon 15%', desc: 'Gunakan kode YEAREND15 sebelum 31 Des 2026.', time: '2 jam lalu' },
-    { id: '3', title: 'Selamat Datang!', desc: 'Akun Toko Makmur Jaya telah terverifikasi sebagai Dealer Resmi.', time: '1 hari lalu' },
-  ];
 
   const storeName = dealer?.store_name || 'Toko Anda';
   const initial = storeName.substring(0, 2).toUpperCase();
@@ -188,7 +201,7 @@ export default function DealerHome() {
           {/* 1. ICON NOTIFIKASI BERFUNGSI */}
           <TouchableOpacity style={styles.iconBtn} onPress={() => setIsNotifVisible(true)}>
             <Feather name="bell" size={20} color="white" />
-            <View style={styles.notifBadge} />
+            {unreadCount > 0 && <View style={styles.notifBadge} />}
           </TouchableOpacity>
 
           {/* KERANJANG */}
@@ -256,11 +269,15 @@ export default function DealerHome() {
               <Text style={styles.emptyProductText}>Belum ada produk terlaris saat ini.</Text>
             </View>
           ) : (
-            bestSellerProducts.map((item) => (
+            bestSellerProducts.map((item) => {
+              const isHabis = item.stock === 0;
+              const hasNewTag = (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
+              const displaySku = item.sku ? item.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
+              return (
               <TouchableOpacity 
                 key={item.id} 
-                style={[styles.productCard, item.stock === 0 && { opacity: 0.5 }]}
-                disabled={item.stock === 0}
+                style={[styles.productCard, isHabis && { opacity: 0.6 }]}
+                disabled={isHabis}
                 onPress={() => router.push(`/product/${item.id}`)}
               >
                 <View style={styles.productImage}>
@@ -271,15 +288,30 @@ export default function DealerHome() {
                   ) : (
                     <Feather name="box" size={32} color="#8ec44a" />
                   )}
+                  
+                  {isHabis && (
+                    <View style={styles.habisOverlay}>
+                      <Text style={styles.habisText}>HABIS</Text>
+                    </View>
+                  )}
                 </View>
-                <Text style={styles.productName}>{item.name}</Text>
+                {(!isHabis && hasNewTag) && (
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>NEW</Text>
+                  </View>
+                )}
+                <Text style={styles.productName} numberOfLines={2}>{displaySku}</Text>
                 <Text style={styles.productSold}>100+ terjual</Text>
                 <Text style={styles.productPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
-                <TouchableOpacity style={styles.buyButton} onPress={() => addToCart(item)} disabled={item.stock === 0}>
-                  <Text style={styles.buyText}>+ Keranjang</Text>
+                <TouchableOpacity 
+                  style={[styles.buyButton, isHabis && { backgroundColor: '#cbd5e1' }]} 
+                  onPress={() => addToCart(item)} 
+                  disabled={isHabis}
+                >
+                  <Text style={styles.buyText}>{isHabis ? 'Habis' : '+ Keranjang'}</Text>
                 </TouchableOpacity>
               </TouchableOpacity>
-            ))
+            )})
           )}
         </ScrollView>
       </View>
@@ -306,19 +338,39 @@ export default function DealerHome() {
               <Text style={styles.emptyProductText}>Belum ada produk yang dilihat.</Text>
             </View>
           ) : (
-            recentlyViewed.map((item) => (
+            recentlyViewed.map((item) => {
+              const isHabis = item.stock === 0;
+              const hasNewTag = (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
+              const displaySku = item.sku ? item.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
+              return (
               <View 
                 key={item.id} 
-                style={[styles.recentCard, item.stock === 0 && { opacity: 0.5 }]}
-                pointerEvents={item.stock === 0 ? 'none' : 'auto'}
+                style={[styles.recentCard, isHabis && { opacity: 0.6 }]}
+                pointerEvents={isHabis ? 'none' : 'auto'}
               >
                 <View style={styles.recentImage}>
-                  <Feather name="package" size={24} color="#8ec44a" />
+                  {item.image_urls && item.image_urls.length > 0 ? (
+                    <FallbackImage uri={item.image_urls[0]} style={{ width: '100%', height: '100%', borderRadius: 8 }} resizeMode="cover" />
+                  ) : item.image_url ? (
+                    <FallbackImage uri={item.image_url} style={{ width: '100%', height: '100%', borderRadius: 8 }} resizeMode="cover" />
+                  ) : (
+                    <Feather name="package" size={24} color="#8ec44a" />
+                  )}
+                  {isHabis && (
+                    <View style={styles.habisOverlay}>
+                      <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>HABIS</Text>
+                    </View>
+                  )}
                 </View>
-                <Text style={styles.productName}>{item.name}</Text>
+                {(!isHabis && hasNewTag) && (
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>NEW</Text>
+                  </View>
+                )}
+                <Text style={styles.productName} numberOfLines={2}>{displaySku}</Text>
                 <Text style={styles.productPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
               </View>
-            ))
+            )})
           )}
         </ScrollView>
       </View>
@@ -348,13 +400,30 @@ export default function DealerHome() {
               </TouchableOpacity>
             </View>
             <ScrollView style={{ maxHeight: 350 }}>
-              {notifications.map((n) => (
-                <View key={n.id} style={styles.notifItem}>
-                  <Text style={styles.notifTitle}>{n.title}</Text>
-                  <Text style={styles.notifDesc}>{n.desc}</Text>
-                  <Text style={styles.notifTime}>{n.time}</Text>
-                </View>
-              ))}
+              {notifications.length === 0 ? (
+                <Text style={{ textAlign: 'center', marginTop: 20, color: '#64748b' }}>Tidak ada notifikasi baru.</Text>
+              ) : (
+                notifications.map((n) => {
+                  const dateObj = new Date(n.created_at);
+                  const isToday = new Date().toDateString() === dateObj.toDateString();
+                  const timeStr = isToday ? dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : dateObj.toLocaleDateString('id-ID');
+                  
+                  return (
+                    <TouchableOpacity 
+                      key={n.id} 
+                      style={[styles.notifItem, !n.is_read && { backgroundColor: '#f0fdf4' }]} 
+                      onPress={() => !n.is_read && markNotificationRead(n.id)}
+                    >
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Text style={[styles.notifTitle, !n.is_read && { color: '#16a34a' }]}>{n.title}</Text>
+                        {!n.is_read && <View style={{ width: 8, height: 8, backgroundColor: '#eab308', borderRadius: 4, marginTop: 4 }} />}
+                      </View>
+                      <Text style={styles.notifDesc}>{n.description}</Text>
+                      <Text style={styles.notifTime}>{timeStr}</Text>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
             </ScrollView>
           </View>
         </View>
@@ -602,5 +671,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#78350f',
     lineHeight: 18,
-  }
+  },
+  habisOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    borderRadius: 8,
+  },
+  habisText: {
+    color: '#ef4444',
+    fontWeight: 'bold',
+    fontSize: 14,
+    transform: [{ rotate: '-15deg' }],
+    textShadowColor: 'rgba(255,255,255,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+    borderWidth: 2,
+    borderColor: '#ef4444',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  newBadge: { alignSelf: 'flex-start', backgroundColor: '#3b82f6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
+  newBadgeText: { color: 'white', fontSize: 9, fontWeight: 'bold' }
 });
