@@ -1,6 +1,12 @@
-mail : ditoapp@atomicmail.io
-pass : DIto!uyyw23@
+# KREDENSIAL RESMI LOGIN ADMIN WEB B2B (DAP APP)
+# URL: http://localhost:3000/login
+email    : ditoapp@atomicmail.io
+password : admin123
 
-seed : angry axis veteran lamp silk reform coral letter outer edge now nurse
+---------------------------------------------------
+# KREDENSIAL WEBMAIL / ATOMICMAIL (BACKUP / EMAIL PROVIDER)
+mail     : ditoapp@atomicmail.io
+pass     : DIto!uyyw23@
+
+seed     : angry axis veteran lamp silk reform coral letter outer edge now nurse
 password : 704ASfPYejrtyvsd
-

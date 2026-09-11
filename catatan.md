@@ -62,6 +62,10 @@ Jalankan file SQL berikut di **Supabase Dashboard > SQL Editor**:
 
 ## 4. Tautan & Akses Cepat Lokal
 - **Admin Dashboard:** [http://localhost:3000](http://localhost:3000)
+- **Admin Login:** [http://localhost:3000/login](http://localhost:3000/login)
+  - **Email:** `ditoapp@atomicmail.io`
+  - **Password:** `admin123`
+  *(Sudah tersedia tombol "1-Klik Masuk sebagai Admin" dan fallback server proxy anti-adblock/Failed to fetch)*
 - **Admin Master Sales:** [http://localhost:3000/sales](http://localhost:3000/sales)
 - **Admin Monitoring Sales:** [http://localhost:3000/monitoring](http://localhost:3000/monitoring)
 - **Admin Program Dealer:** [http://localhost:3000/programs](http://localhost:3000/programs)

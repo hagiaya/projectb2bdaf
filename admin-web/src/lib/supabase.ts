@@ -1,10 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const ACTIVE_SUPABASE_URL = 'https://mvpwgzkvmadtsspewxtu.supabase.co';
+const ACTIVE_SUPABASE_ANON_KEY = 'sb_publishable_q8MhULti42S-YqSHyA0aNw_Mrh-_jyj';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase URL or Anon Key is missing. Check your .env.local file.');
+let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ACTIVE_SUPABASE_URL;
+let supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ACTIVE_SUPABASE_ANON_KEY;
+
+// Auto-heal: Jika environment di Vercel/Hosting masih menyimpan URL Supabase lama yang sudah mati (rbezcgrxokzhtslrxuta)
+if (!supabaseUrl || supabaseUrl.includes('rbezcgrxokzhtslrxuta')) {
+  supabaseUrl = ACTIVE_SUPABASE_URL;
+  supabaseAnonKey = ACTIVE_SUPABASE_ANON_KEY;
 }
 
 class MockWebSocket {
