@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useWishlist } from '../../context/WishlistContext';
 import { useCart } from '../../context/CartContext';
 import { supabase } from '../../lib/supabase';
+import FallbackImage from '../../components/FallbackImage';
 
 export default function WishlistScreen() {
   const { items: wishlistItems, removeFromWishlist } = useWishlist();
@@ -55,15 +56,12 @@ export default function WishlistScreen() {
           return (
             <View key={item.id} style={[styles.card, isHabis && { opacity: 0.6 }]}>
               <View style={{ position: 'relative' }}>
-                {realItem.image_urls && realItem.image_urls.length > 0 ? (
-                  <Image source={{ uri: realItem.image_urls[0] }} style={styles.productImage} />
-                ) : realItem.image_url ? (
-                  <Image source={{ uri: realItem.image_url }} style={styles.productImage} />
-                ) : (
-                  <View style={styles.imagePlaceholder}>
-                    <Feather name="heart" size={24} color="#ef4444" />
-                  </View>
-                )}
+                <FallbackImage 
+                  uri={(realItem.image_urls && realItem.image_urls.length > 0) ? realItem.image_urls[0] : realItem.image_url} 
+                  style={styles.productImage} 
+                  fallbackIcon="heart"
+                  iconColor="#ef4444"
+                />
                 {isHabis && (
                   <View style={styles.habisOverlay}>
                     <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>HABIS</Text>
@@ -133,7 +131,11 @@ const styles = StyleSheet.create({
   shopBtn: { marginTop: 16, backgroundColor: '#8ec44a', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
   shopBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
   habisOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(255, 255, 255, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',

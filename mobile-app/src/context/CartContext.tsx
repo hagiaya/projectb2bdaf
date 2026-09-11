@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 export type CartItem = {
   id: string; // product id
   name: string;
+  sku?: string;
   price: number;
   quantity: number;
   stock: number;
@@ -54,11 +55,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       return [...prevItems, { 
         id: product.id, 
         name: product.name, 
+        sku: product.sku || product.name,
         price: Number(product.price), 
         quantity, 
         stock: product.stock,
         image_url: product.image_url,
-        image_urls: product.image_urls
+        image_urls: product.image_urls,
       }];
     });
     Alert.alert('Berhasil', `${product.name} telah ditambahkan ke keranjang.`);

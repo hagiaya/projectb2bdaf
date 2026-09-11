@@ -28,18 +28,31 @@ export default function WelcomeScreen() {
   const [motifs] = useState(generateMotifs());
 
   useEffect(() => {
+    const checkRoleAndRedirect = async (session: any) => {
+      if (session) {
+        try {
+          const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+          if (profile?.role === 'SALES') {
+            router.replace('/(sales)' as any);
+          } else {
+            router.replace('/(dealer)/home' as any);
+          }
+        } catch (error) {
+          console.error(error);
+          router.replace('/(dealer)/home' as any);
+        }
+      }
+    };
+
     // Auto redirect to home if already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        // If they already have a session, auto redirect to home
-        router.replace('/(dealer)/home');
-      }
+      checkRoleAndRedirect(session);
     });
     
     // Also listen for auth state changes just in case
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
-        router.replace('/(dealer)/home');
+        checkRoleAndRedirect(session);
       }
     });
 
@@ -81,7 +94,7 @@ export default function WelcomeScreen() {
           style={styles.button}
           onPress={() => router.push('/login')}
         >
-          <Text style={styles.buttonText}>Login / Daftar</Text>
+          <Text style={styles.buttonText}>Masuk ke Akun B2B</Text>
           <Feather name="arrow-right" size={20} color="#166534" />
         </TouchableOpacity>
       </View>

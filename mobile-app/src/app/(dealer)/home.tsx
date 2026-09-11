@@ -17,17 +17,18 @@ const BANNER_WIDTH = width - 32;
 // =========================================================
 
 const bannerAds = [
-  { id: '1', title: 'Promo Akhir Tahun', subtitle: 'Diskon hingga 30% untuk semua produk', color: '#8ec44a', accent: '#4a6b22' },
-  { id: '3', title: 'Gratis Ongkir', subtitle: 'Untuk pembelian minimal Rp 500.000', color: '#7eb33a', accent: '#166534' },
+  { id: '1', title: 'Promo Akhir Tahun', subtitle: 'Diskon hingga 30% untuk semua produk', color: '#8ec44a', accent: '#4a6b22', route: '/(dealer)/promo' },
+  { id: '2', title: 'Target Program Reward', subtitle: 'Capai omset & dapatkan Trip Bangkok, Etalase, & Cashback!', color: '#2563eb', accent: '#1e40af', route: '/(dealer)/programs' },
+  { id: '3', title: 'Gratis Ongkir', subtitle: 'Untuk pembelian minimal Rp 500.000', color: '#7eb33a', accent: '#166534', route: '/(dealer)/promo' },
 ];
 
 // MENU DENGAN PILIHAN BERFUNGSI (Menu "Lainnya" sudah dihapus)
 const menuItems = [
   { name: 'Katalog', route: '/(dealer)/catalog', icon: 'grid' },
   { name: 'Pesanan', route: '/(dealer)/orders', icon: 'shopping-bag' },
-  { name: 'Retur', route: '/(dealer)/returns', icon: 'refresh-ccw' },
+  { name: 'Program', route: '/(dealer)/programs', icon: 'award' },
   { name: 'Promo', route: '/(dealer)/promo', icon: 'gift' },
-  { name: 'Lacak', route: '/(dealer)/orders', icon: 'map-pin' },
+  { name: 'Retur', route: '/(dealer)/returns', icon: 'refresh-ccw' },
   { name: 'Wishlist', route: '/(dealer)/wishlist', icon: 'heart' },
   { name: 'Histori', route: '/(dealer)/orders', icon: 'clock' },
 ];
@@ -89,7 +90,7 @@ function BannerCarousel() {
             <Feather name="tag" size={32} color="rgba(255,255,255,0.3)" style={{ marginBottom: 8 }} />
             <Text style={styles.bannerTitle}>{item.title}</Text>
             <Text style={styles.bannerSubtitle}>{item.subtitle}</Text>
-            <TouchableOpacity style={styles.bannerBtn} onPress={() => router.push('/(dealer)/promo')}>
+            <TouchableOpacity style={styles.bannerBtn} onPress={() => router.push(((item as any).route || '/(dealer)/promo') as any)}>
               <Text style={styles.bannerBtnText}>Lihat Sekarang →</Text>
             </TouchableOpacity>
           </View>
@@ -147,13 +148,15 @@ export default function DealerHome() {
 
   const fetchProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      const { data: dealerData } = await supabase.from('dealers').select('*').eq('profile_id', user.id).single();
-      
-      if (profileData) setProfile(profileData);
-      if (dealerData) setDealer(dealerData);
+    if (!user) {
+      router.replace('/login');
+      return;
     }
+    const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    const { data: dealerData } = await supabase.from('dealers').select('*').eq('profile_id', user.id).single();
+    
+    if (profileData) setProfile(profileData);
+    if (dealerData) setDealer(dealerData);
   };
 
   const fetchNotifications = async () => {
@@ -673,7 +676,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   habisOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(255, 255, 255, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',

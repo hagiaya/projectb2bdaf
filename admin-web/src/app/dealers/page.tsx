@@ -12,6 +12,8 @@ interface Dealer {
   credit_limit: number;
   status: string;
   created_at: string;
+  sales_id?: string | null;
+  sales?: { id: string; profiles?: { full_name: string } };
   profiles?: { full_name: string, approval_status?: string, phone_number?: string };
   regions?: { name: string };
 }
@@ -43,6 +45,7 @@ export default function DealersPage() {
   const [pendingProfiles, setPendingProfiles] = useState<PendingProfile[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [salesList, setSalesList] = useState<{ id: string; name: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'active' | 'pending'>('pending');
 
@@ -53,6 +56,7 @@ export default function DealersPage() {
   const [newStoreName, setNewStoreName] = useState('');
   const [newOwnerId, setNewOwnerId] = useState('');
   const [newRegionId, setNewRegionId] = useState('');
+  const [newSalesId, setNewSalesId] = useState('');
   const [newAddress, setNewAddress] = useState('');
   const [newCreditLimit, setNewCreditLimit] = useState('');
 
@@ -77,10 +81,19 @@ export default function DealersPage() {
       if (profData.length > 0) setNewOwnerId(profData[0].id);
     }
 
-    // Fetch dealers (APPROVED)
+    // Fetch active sales for dropdown
+    const { data: sData } = await supabase
+      .from('sales')
+      .select('id, profiles(full_name)')
+      .eq('status', 'ACTIVE');
+    if (sData) {
+      setSalesList(sData.map((s: any) => ({ id: s.id, name: s.profiles?.full_name || 'Sales' })));
+    }
+
+    // Fetch dealers (APPROVED) with sales relation
     const { data: dlrData, error } = await supabase
       .from('dealers')
-      .select('*, profiles(full_name, approval_status, phone_number), regions(name)')
+      .select('*, profiles(full_name, approval_status, phone_number), regions(name), sales(id, profiles(full_name))')
       .order('created_at', { ascending: false });
       
     if (!error && dlrData) {
@@ -107,7 +120,7 @@ export default function DealersPage() {
     e.preventDefault();
     if (!newStoreName || !newOwnerId || !newRegionId || !newCreditLimit) return;
 
-    const newDlr = {
+    const newDlr: any = {
       store_name: newStoreName,
       profile_id: newOwnerId,
       region_id: newRegionId,
@@ -115,8 +128,9 @@ export default function DealersPage() {
       credit_limit: parseFloat(newCreditLimit),
       status: 'ACTIVE',
     };
+    if (newSalesId) newDlr.sales_id = newSalesId;
 
-    const { data, error } = await supabase.from('dealers').insert([newDlr]).select('*, profiles(full_name), regions(name)');
+    const { data, error } = await supabase.from('dealers').insert([newDlr]).select('*, profiles(full_name), regions(name), sales(id, profiles(full_name))');
 
     if (!error && data) {
       setDealers([data[0] as any, ...dealers]);
@@ -124,6 +138,7 @@ export default function DealersPage() {
       setNewStoreName('');
       setNewAddress('');
       setNewCreditLimit('');
+      setNewSalesId('');
     } else {
       alert("Gagal menambahkan dealer.");
     }
@@ -401,6 +416,7 @@ export default function DealersPage() {
               <tr className="bg-white text-gray-500 text-xs uppercase tracking-wider">
                 <th className="p-5 font-semibold border-b border-gray-100">ID / Toko</th>
                 <th className="p-5 font-semibold border-b border-gray-100">Pemilik & Wilayah</th>
+                <th className="p-5 font-semibold border-b border-gray-100">Sales PIC</th>
                 <th className="p-5 font-semibold border-b border-gray-100">Batas Kredit</th>
                 <th className="p-5 font-semibold border-b border-gray-100">Tgl Bergabung</th>
                 <th className="p-5 font-semibold border-b border-gray-100">Status</th>
@@ -409,9 +425,9 @@ export default function DealersPage() {
             </thead>
             <tbody className="text-sm divide-y divide-gray-50">
               {isLoading ? (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-500">Memuat data...</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-gray-500">Memuat data...</td></tr>
               ) : filteredDealers.length === 0 ? (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-500">Belum ada dealer aktif.</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-gray-500">Belum ada dealer aktif.</td></tr>
               ) : filteredDealers.map((dealer) => (
                 <tr key={dealer.id} className="hover:bg-emerald-50/30 transition-colors group">
                   <td className="p-5">
@@ -425,6 +441,15 @@ export default function DealersPage() {
                     <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium">
                       <MapPin size={12} className="text-emerald-500" /> {dealer.regions?.name || 'Belum Diatur'}
                     </div>
+                  </td>
+                  <td className="p-5">
+                    {dealer.sales?.profiles?.full_name ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg border border-blue-100">
+                        {dealer.sales.profiles.full_name}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400 italic">Belum Ada</span>
+                    )}
                   </td>
                   <td className="p-5 text-emerald-700 font-bold tracking-tight">
                     Rp {dealer.credit_limit.toLocaleString('id-ID')}
@@ -530,6 +555,19 @@ export default function DealersPage() {
                     className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold text-gray-900"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">SALES PIC (OPSIONAL)</label>
+                <select 
+                  value={newSalesId} onChange={(e) => setNewSalesId(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-semibold text-gray-800"
+                >
+                  <option value="">-- Tanpa Sales PIC --</option>
+                  {salesList.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div>

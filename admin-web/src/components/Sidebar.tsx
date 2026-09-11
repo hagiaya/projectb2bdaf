@@ -1,11 +1,14 @@
 import Link from 'next/link';
-import { Home, Package, Users, Map, ShoppingCart, Archive, DollarSign, Activity, Gift, FileText, Settings, ArrowLeftRight, Lock } from 'lucide-react';
+import { Home, Package, Users, Map, ShoppingCart, Archive, DollarSign, Activity, Gift, FileText, Settings, ArrowLeftRight, Lock, Award } from 'lucide-react';
 
 const menuItems = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Master Kategori', href: '/categories', icon: Package },
   { name: 'Master Produk', href: '/products', icon: Package },
   { name: 'Master Dealer', href: '/dealers', icon: Users },
+  { name: 'Program Dealer', href: '/programs', icon: Award },
+  { name: 'Master Sales', href: '/sales', icon: Users },
+  { name: 'Monitoring Sales', href: '/monitoring', icon: Activity },
   { name: 'Master Wilayah', href: '/regions', icon: Map },
   { name: 'Manajemen Order', href: '/orders', icon: ShoppingCart },
   { name: 'Manajemen Stok', href: '/inventory', icon: Archive },
@@ -16,9 +19,7 @@ const menuItems = [
 ];
 
 const proMenuItems = [
-  { name: 'Master Sales', href: '/sales', icon: Users },
   { name: 'Target Sales', href: '/targets', icon: DollarSign },
-  { name: 'Monitoring Sales', href: '/monitoring', icon: Activity },
   { name: 'CRM Dealer', href: '/crm', icon: Activity },
   { name: 'Peta Pelanggan', href: '/customers-map', icon: Map },
 ];
@@ -50,7 +51,7 @@ export default function Sidebar() {
         })}
 
         <div className="mt-8 mb-2 px-3 text-[10px] font-bold text-emerald-300/50 tracking-widest uppercase flex items-center gap-2">
-          PRO FEATURES <Lock size={10} />
+          ADVANCED FEATURES
         </div>
         {proMenuItems.map((item) => {
           const Icon = item.icon;
@@ -58,13 +59,10 @@ export default function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
-              className="flex items-center justify-between px-3 py-2.5 rounded-xl text-emerald-100/60 hover:bg-emerald-900/30 hover:text-emerald-100 transition-all group border border-transparent hover:border-emerald-800/30"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-emerald-100/80 hover:bg-emerald-900/50 hover:text-white transition-all group"
             >
-              <div className="flex items-center gap-3">
-                <Icon size={20} className="group-hover:scale-110 transition-transform opacity-70" />
-                <span className="text-sm font-medium tracking-wide">{item.name}</span>
-              </div>
-              <Lock size={14} className="text-emerald-400/50" />
+              <Icon size={20} className="group-hover:scale-110 transition-transform" />
+              <span className="text-sm font-semibold tracking-wide">{item.name}</span>
             </Link>
           );
         })}

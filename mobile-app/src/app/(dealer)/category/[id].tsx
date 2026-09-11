@@ -91,7 +91,7 @@ export default function CategoryProductsScreen() {
           <View style={styles.gridContainer}>
             {filteredProducts.map((product) => {
               const isHabis = product.stock === 0;
-              const hasNewTag = (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW'));
+              const hasNewTag = Boolean((product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW')));
               const displaySku = product.sku ? product.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
               return (
               <TouchableOpacity 
@@ -250,7 +250,11 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   habisOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(255, 255, 255, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',

@@ -1,5 +1,8 @@
-../foto_produk/
 node_modules/
 .expo/
-android/
-ios/
+dist/
+web-build/
+FOTO PRODUK/
+FOTO_PRODUK_COMPRESSED/
+.vercel
+*.log

@@ -3,6 +3,41 @@ import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Polyfill WebSocket untuk SSR di Node.js < 22 agar Supabase Realtime tidak crash saat prerender
+class MockWebSocket {
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
+  readyState = 3;
+  url = '';
+  protocol = '';
+  onopen = null;
+  onmessage = null;
+  onclose = null;
+  onerror = null;
+  constructor(_url?: string, _protocols?: string | string[]) {}
+  close() {}
+  send() {}
+  addEventListener() {}
+  removeEventListener() {}
+  dispatchEvent() { return false; }
+}
+
+const getWebSocketTransport = () => {
+  if (typeof WebSocket !== 'undefined') {
+    return WebSocket;
+  }
+  if (typeof globalThis !== 'undefined' && (globalThis as any).WebSocket) {
+    return (globalThis as any).WebSocket;
+  }
+  return MockWebSocket;
+};
+
+if (typeof WebSocket === 'undefined' && typeof window === 'undefined') {
+  (globalThis as any).WebSocket = MockWebSocket;
+}
+
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
@@ -33,5 +68,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+  },
+  realtime: {
+    transport: getWebSocketTransport(),
   },
 });

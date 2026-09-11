@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
 import { useCart } from '../../../context/CartContext';
+import FallbackImage from '../../../components/FallbackImage';
 
 const { width } = Dimensions.get('window');
 
@@ -103,7 +104,7 @@ export default function ProductDetailScreen() {
                 style={styles.imageSlider}
               >
                 {images.map((url: string, index: number) => (
-                  <Image key={index} source={{ uri: url }} style={styles.productImage} resizeMode="cover" />
+                  <FallbackImage key={index} uri={url} style={styles.productImage} resizeMode="cover" />
                 ))}
               </ScrollView>
               
