@@ -1,5 +1,19 @@
+*FOTO*
+*FOTO*/**
+*foto*
+*foto*/**
+FOTO PRODUK/
+FOTO_PRODUK_COMPRESSED/
 foto_produk_backup/
-admin-web/
 foto_produk/
+admin-web/
 node_modules/
 .git/
+supabase/
+scripts/
+drive_photos/
+*.xlsx
+*.csv
+*.sql
+*.py
+*.tar.gz
