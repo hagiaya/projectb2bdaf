@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "com.alpsstudiowebid.dap",
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#8dc54a",
         "foregroundImage": "./assets/adaptive-icon.png"
