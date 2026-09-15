@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Users, Search, Plus, CheckCircle, XCircle, MapPin, Store, Shield, Phone, Edit2, Check, X, Award } from 'lucide-react';
+import { Users, Search, Plus, CheckCircle, XCircle, MapPin, Store, Shield, Phone, Edit2, Check, X, Award, Briefcase, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface SalesRep {
@@ -11,6 +11,11 @@ interface SalesRep {
   region_id?: string;
   balance: number;
   status: 'PENDING' | 'ACTIVE' | 'INACTIVE';
+  is_spv?: boolean;
+  spv_id?: string | null;
+  base_salary?: number;
+  daily_visit_target?: number;
+  work_days_per_month?: number;
   created_at: string;
   profiles?: {
     id: string;
@@ -22,6 +27,11 @@ interface SalesRep {
   regions?: {
     id: string;
     name: string;
+  };
+  spv?: {
+    profiles?: {
+      full_name: string;
+    };
   };
   assignedDealersCount?: number;
 }
@@ -64,6 +74,16 @@ export default function SalesPage() {
   const [newSalesRegion, setNewSalesRegion] = useState('');
   const [savingNewSales, setSavingNewSales] = useState(false);
 
+  // Modal: SPV & Gaji Pokok
+  const [spvModalOpen, setSpvModalOpen] = useState(false);
+  const [activeSalesForSpv, setActiveSalesForSpv] = useState<SalesRep | null>(null);
+  const [isSpvToggle, setIsSpvToggle] = useState(false);
+  const [selectedSpvParent, setSelectedSpvParent] = useState('');
+  const [baseSalaryInput, setBaseSalaryInput] = useState('4500000');
+  const [dailyVisitsInput, setDailyVisitsInput] = useState('6');
+  const [workDaysInput, setWorkDaysInput] = useState('26');
+  const [savingSpv, setSavingSpv] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -81,7 +101,8 @@ export default function SalesPage() {
       setAllDealers(dealersList);
 
       // 3. Fetch Sales records with profiles and regions
-      const { data: sData, error: sError } = await supabase
+      let sData: any = null;
+      const { data: fullSalesData, error: sError } = await supabase
         .from('sales')
         .select(`
           id,
@@ -90,14 +111,39 @@ export default function SalesPage() {
           region_id,
           balance,
           status,
+          is_spv,
+          spv_id,
+          base_salary,
+          daily_visit_target,
+          work_days_per_month,
           created_at,
           profiles (id, full_name, phone_number, role, approval_status),
-          regions (id, name)
+          regions (id, name),
+          spv:spv_id (
+            profiles (full_name)
+          )
         `)
         .order('created_at', { ascending: false });
 
       if (sError) {
-        console.error('Error fetching sales:', sError);
+        // Fallback in case newly added columns aren't migrated yet in supabase
+        const { data: fallbackData } = await supabase
+          .from('sales')
+          .select(`
+            id,
+            profile_id,
+            ktp_number,
+            region_id,
+            balance,
+            status,
+            created_at,
+            profiles (id, full_name, phone_number, role, approval_status),
+            regions (id, name)
+          `)
+          .order('created_at', { ascending: false });
+        sData = fallbackData;
+      } else {
+        sData = fullSalesData;
       }
 
       // Also check if there are profiles with role = 'SALES' that don't have a sales row yet
@@ -211,6 +257,42 @@ export default function SalesPage() {
       fetchData();
     } catch (err: any) {
       alert(`Gagal memperbarui wilayah: ${err.message}`);
+    }
+  };
+
+  const handleSaveSpvAndSalary = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeSalesForSpv) return;
+
+    setSavingSpv(true);
+    try {
+      const payload = {
+        is_spv: isSpvToggle,
+        spv_id: isSpvToggle ? null : (selectedSpvParent || null),
+        base_salary: Number(baseSalaryInput) || 4500000,
+        daily_visit_target: Number(dailyVisitsInput) || 6,
+        work_days_per_month: Number(workDaysInput) || 26,
+      };
+
+      const { error } = await supabase
+        .from('sales')
+        .update(payload)
+        .eq('id', activeSalesForSpv.id);
+
+      if (error) {
+        console.warn('Update SPV warning:', error);
+        alert('Gagal menyimpan ke database: ' + error.message);
+      } else {
+        alert('Berhasil memperbarui jabatan SPV, gaji pokok, dan target visit!');
+      }
+
+      setSpvModalOpen(false);
+      setActiveSalesForSpv(null);
+      fetchData();
+    } catch (err: any) {
+      alert('Gagal menyimpan: ' + err.message);
+    } finally {
+      setSavingSpv(false);
     }
   };
 
@@ -439,10 +521,22 @@ export default function SalesPage() {
                           {sales.profiles?.full_name?.[0]?.toUpperCase() || 'S'}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900">{sales.profiles?.full_name || 'Tanpa Nama'}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-bold text-slate-900">{sales.profiles?.full_name || 'Tanpa Nama'}</p>
+                            {sales.is_spv && (
+                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-black rounded">
+                                SPV
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                             <Phone size={11} /> {sales.profiles?.phone_number || '-'}
                           </p>
+                          {sales.spv?.profiles?.full_name && !sales.is_spv && (
+                            <span className="text-[10px] text-blue-600 font-semibold block">
+                              SPV: {sales.spv.profiles.full_name}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -505,6 +599,22 @@ export default function SalesPage() {
                     {/* Actions */}
                     <td className="p-5 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => {
+                            setActiveSalesForSpv(sales);
+                            setIsSpvToggle(Boolean(sales.is_spv));
+                            setSelectedSpvParent(sales.spv_id || '');
+                            setBaseSalaryInput(String(sales.base_salary || 4500000));
+                            setDailyVisitsInput(String(sales.daily_visit_target || 6));
+                            setWorkDaysInput(String(sales.work_days_per_month || 26));
+                            setSpvModalOpen(true);
+                          }}
+                          className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-sm"
+                          title="Atur Jabatan SPV & Target Visit Gaji"
+                        >
+                          <Briefcase size={12} /> SPV & Gaji
+                        </button>
+
                         {isPending ? (
                           <button
                             onClick={() => handleApprove(sales)}
@@ -715,6 +825,141 @@ export default function SalesPage() {
                 {savingNewSales ? 'Menyimpan...' : 'Jadikan Sales'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: Manage SPV & Base Salary */}
+      {spvModalOpen && activeSalesForSpv && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Briefcase size={20} className="text-blue-600" />
+                <h3 className="font-bold text-slate-900 text-lg">Jabatan SPV & Gaji Pokok</h3>
+              </div>
+              <button
+                onClick={() => setSpvModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSpvAndSalary} className="space-y-4">
+              <p className="text-xs text-slate-500">
+                Personil: <span className="font-bold text-slate-800">{activeSalesForSpv.profiles?.full_name}</span> ({activeSalesForSpv.regions?.name || 'Tanpa Wilayah'})
+              </p>
+
+              {/* Toggle SPV */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div>
+                    <span className="text-sm font-bold text-slate-800 block">Jadikan Supervisor (SPV)</span>
+                    <span className="text-[11px] text-slate-500">
+                      SPV dapat memantau tim sales binaan dan melakukan penjualan langsung di wilayah uncovered.
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={isSpvToggle}
+                    onChange={(e) => setIsSpvToggle(e.target.checked)}
+                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
+                  />
+                </label>
+              </div>
+
+              {/* Atasan SPV jika bukan SPV */}
+              {!isSpvToggle && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Supervisor (SPV) Pembimbing
+                  </label>
+                  <select
+                    value={selectedSpvParent}
+                    onChange={(e) => setSelectedSpvParent(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold"
+                  >
+                    <option value="">-- Tanpa SPV (Langsung ke Pusat) --</option>
+                    {salesList
+                      .filter((s) => s.is_spv && s.id !== activeSalesForSpv.id)
+                      .map((spv) => (
+                        <option key={spv.id} value={spv.id}>
+                          SPV {spv.profiles?.full_name} ({spv.regions?.name || 'Seluruh Area'})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Gaji Pokok */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Gaji Pokok Bulanan (Rp)
+                </label>
+                <input
+                  type="number"
+                  value={baseSalaryInput}
+                  onChange={(e) => setBaseSalaryInput(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-800"
+                  placeholder="4500000"
+                  required
+                />
+                <p className="text-[11px] text-slate-400 mt-1">Standar perusahaan: Rp 4.500.000 / bulan.</p>
+              </div>
+
+              {/* Target Visit Harian & Hari Kerja */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Target Visit / Hari
+                  </label>
+                  <input
+                    type="number"
+                    value={dailyVisitsInput}
+                    onChange={(e) => setDailyVisitsInput(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold"
+                    placeholder="6"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Hari Kerja / Bulan
+                  </label>
+                  <input
+                    type="number"
+                    value={workDaysInput}
+                    onChange={(e) => setWorkDaysInput(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold"
+                    placeholder="26"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900">
+                <span className="font-bold block">Formula Gaji Pokok Visit:</span>
+                {(Number(dailyVisitsInput) || 6) * (Number(workDaysInput) || 26)} visit bulanan. Nilai per visit: <b className="text-blue-950">Rp {Math.round((Number(baseSalaryInput) || 4500000) / ((Number(dailyVisitsInput) || 6) * (Number(workDaysInput) || 26))).toLocaleString('id-ID')}</b> / visit.
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setSpvModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingSpv}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-bold shadow-sm disabled:opacity-50"
+                >
+                  {savingSpv ? 'Menyimpan...' : 'Simpan Pengaturan'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

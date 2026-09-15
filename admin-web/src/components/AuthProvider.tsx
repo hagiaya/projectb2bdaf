@@ -12,8 +12,15 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      let { data: { session } } = await supabase.auth.getSession();
       
+      if (!session && pathname !== '/login') {
+        // Toleransi waktu untuk pemulihan session dari storage lokal
+        await new Promise((r) => setTimeout(r, 400));
+        const retryRes = await supabase.auth.getSession();
+        session = retryRes.data.session;
+      }
+
       if (!session) {
         if (pathname !== '/login') {
           router.push('/login');

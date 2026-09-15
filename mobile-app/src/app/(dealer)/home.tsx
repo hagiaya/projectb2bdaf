@@ -136,12 +136,28 @@ export default function DealerHome() {
 
   const fetchProducts = async () => {
     setLoading(true);
-    // Ambil 15 produk secara acak (karena belum ada tabel khusus flash sale)
-    const { data } = await supabase.from('products').select('*').limit(20);
+    // Ambil produk dengan prioritas urutan yang ditentukan admin
+    let { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('status', 'ACTIVE')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+      .limit(20);
+
+    if (error && (error.message?.includes('sort_order') || error.code === '42703')) {
+      const fb = await supabase.from('products').select('*').limit(20);
+      data = fb.data;
+    }
+
     if (data) {
-      // Acak urutan agar terlihat berbeda setiap kali dibuka
-      const shuffled = data.sort(() => 0.5 - Math.random());
-      setProducts(shuffled);
+      const sorted = [...data].sort((a: any, b: any) => {
+        const orderA = a.sort_order ?? 9999;
+        const orderB = b.sort_order ?? 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+      setProducts(sorted);
     }
     setLoading(false);
   };

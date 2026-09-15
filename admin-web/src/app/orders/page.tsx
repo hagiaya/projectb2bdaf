@@ -287,6 +287,7 @@ export default function OrdersPage() {
                   const stage = getStageBadge(order.status);
                   const StageIcon = stage.icon;
                   const isCOD = (order.payment_method || '').toUpperCase() === 'COD';
+                  const isKredit = (order.payment_method || '').toUpperCase() === 'KREDIT';
                   const hasProof = !!order.payment_proof_url;
 
                   return (
@@ -313,6 +314,11 @@ export default function OrdersPage() {
                           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-xs font-bold">
                             <DollarSign size={13} />
                             COD (Bayar di Tempat)
+                          </div>
+                        ) : isKredit ? (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-xs font-bold">
+                            <CreditCard size={13} />
+                            Kredit / Tempo (TOP)
                           </div>
                         ) : (
                           <div>
@@ -467,7 +473,11 @@ export default function OrdersPage() {
                   <div>
                     <p className="text-sm font-semibold text-slate-700">
                       Metode: <span className="font-bold text-slate-900">
-                        {(selectedOrder.payment_method || '').toUpperCase() === 'COD' ? 'COD (Bayar di Tempat)' : 'Transfer Bank Manual'}
+                        {(selectedOrder.payment_method || '').toUpperCase() === 'COD' 
+                          ? 'COD (Bayar di Tempat)' 
+                          : (selectedOrder.payment_method || '').toUpperCase() === 'KREDIT'
+                          ? 'Kredit / Tempo (TOP)'
+                          : 'Transfer Bank Manual'}
                       </span>
                     </p>
                     {selectedOrder.unique_code ? (

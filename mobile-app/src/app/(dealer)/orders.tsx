@@ -28,6 +28,7 @@ export default function OrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showTransferAlert, setShowTransferAlert] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -319,7 +320,7 @@ export default function OrdersScreen() {
                   {selectedOrder.payment_method === 'TRANSFER' && (
                     <View style={{ marginTop: 6 }}>
                       <Text style={{ fontSize: 12, color: '#475569' }}>
-                        Rekening Tujuan: <Text style={{ fontWeight: 'bold' }}>BCA 8730-123-4567 a/n PT DAP</Text>
+                        Rekening Tujuan: <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>BCA 829-019-8821 a.n. PT DISTRIBUSI AKSESORIS PRIMA</Text>
                       </Text>
                       <Text style={{ fontSize: 12, color: '#b45309', marginTop: 2 }}>
                         Kode Acak Transaksi: <Text style={{ fontWeight: 'bold' }}>+{selectedOrder.unique_code || 0}</Text>
@@ -345,7 +346,7 @@ export default function OrdersScreen() {
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.reuploadBtn}
-                          onPress={() => handleUploadProof(selectedOrder.id)}
+                          onPress={() => setShowTransferAlert(true)}
                           disabled={uploadingProof}
                         >
                           {uploadingProof ? (
@@ -364,7 +365,7 @@ export default function OrdersScreen() {
                         </View>
                         <TouchableOpacity
                           style={styles.uploadProofSmallBtn}
-                          onPress={() => handleUploadProof(selectedOrder.id)}
+                          onPress={() => setShowTransferAlert(true)}
                           disabled={uploadingProof}
                         >
                           {uploadingProof ? (
@@ -425,6 +426,68 @@ export default function OrdersScreen() {
           {previewImage && (
             <Image source={{ uri: previewImage }} style={styles.zoomImg} contentFit="contain" />
           )}
+        </View>
+      </Modal>
+
+      {/* POPUP PERINGATAN DATA TRANSFER SEBELUM UPLOAD */}
+      <Modal visible={showTransferAlert} transparent animationType="fade">
+        <View style={styles.alertOverlay}>
+          <View style={styles.alertBox}>
+            <View style={styles.alertIconWrap}>
+              <Feather name="alert-triangle" size={30} color="#d97706" />
+            </View>
+            <Text style={styles.alertTitle}>Peringatan Transfer Bank</Text>
+            <Text style={styles.alertSubtitle}>
+              Harap periksa dan pastikan kembali data transfer Anda sebelum mengunggah bukti pembayaran:
+            </Text>
+
+            <View style={styles.alertDetailsCard}>
+              <View style={styles.alertDetailRow}>
+                <Text style={styles.alertDetailLabel}>Rekening Tujuan Resmi:</Text>
+                <Text style={styles.alertDetailValBold}>BCA 829-019-8821</Text>
+                <Text style={styles.alertDetailSub}>a.n. PT DISTRIBUSI AKSESORIS PRIMA</Text>
+              </View>
+
+              {selectedOrder && (
+                <View style={[styles.alertDetailRow, { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#fde68a' }]}>
+                  <Text style={styles.alertDetailLabel}>Nominal Transfer Wajib Sesuai:</Text>
+                  <Text style={[styles.alertDetailValBold, { color: '#b45309', fontSize: 16 }]}>
+                    Rp {Number(selectedOrder.final_amount).toLocaleString('id-ID')}
+                  </Text>
+                  <Text style={styles.alertDetailSub}>
+                    * Termasuk kode unik (+Rp {selectedOrder.unique_code || 0}). Dilarang membulatkan nominal!
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.alertNoticeBox}>
+              <Feather name="info" size={14} color="#92400e" style={{ marginTop: 2 }} />
+              <Text style={styles.alertNoticeText}>
+                Pastikan foto struk atau screenshot m-banking yang Anda unggah terlihat jelas, menampilkan tanggal/jam, dan nominal transfer persis sesuai tagihan.
+              </Text>
+            </View>
+
+            <View style={styles.alertActionRow}>
+              <TouchableOpacity 
+                style={styles.alertBtnCancel} 
+                onPress={() => setShowTransferAlert(false)}
+              >
+                <Text style={styles.alertBtnCancelText}>Periksa Ulang</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.alertBtnConfirm} 
+                onPress={() => {
+                  setShowTransferAlert(false);
+                  if (selectedOrder) handleUploadProof(selectedOrder.id);
+                }}
+              >
+                <Feather name="upload" size={15} color="white" />
+                <Text style={styles.alertBtnConfirmText}>Pilih Foto Bukti</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     </View>
@@ -612,4 +675,118 @@ const styles = StyleSheet.create({
   },
   zoomClose: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 8 },
   zoomImg: { width: '100%', height: '80%' },
+
+  /* POPUP PERINGATAN TRANSFER */
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  alertBox: {
+    backgroundColor: 'white',
+    borderRadius: 24,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  alertIconWrap: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  alertTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0f172a',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  alertSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  alertDetailsCard: {
+    backgroundColor: '#fffbeb',
+    borderWidth: 1.5,
+    borderColor: '#fde68a',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+  alertDetailRow: {
+    gap: 2,
+  },
+  alertDetailLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#92400e',
+    textTransform: 'uppercase',
+  },
+  alertDetailValBold: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  alertDetailSub: {
+    fontSize: 11,
+    color: '#78350f',
+  },
+  alertNoticeBox: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: '#fef3c7',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 14,
+  },
+  alertNoticeText: {
+    fontSize: 11,
+    color: '#92400e',
+    flex: 1,
+    lineHeight: 16,
+  },
+  alertActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  alertBtnCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+  },
+  alertBtnCancelText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  alertBtnConfirm: {
+    flex: 1.2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#8ec44a',
+  },
+  alertBtnConfirmText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: 'white',
+  },
 });
+

@@ -20,54 +20,81 @@ export async function GET(req: NextRequest) {
   let key = searchParams.get('key');
   const rawUrl = searchParams.get('url');
 
-  if (!key && rawUrl) {
+  // 1. External fallback URL (e.g. placehold.co or other CDNs)
+  if (rawUrl && !rawUrl.includes('r2.dev') && !rawUrl.includes('cloudflarestorage.com')) {
     try {
-      const parsed = new URL(rawUrl);
-      key = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
+      const extRes = await fetch(rawUrl);
+      if (extRes.ok && extRes.body) {
+        const headers = new Headers();
+        headers.set('Content-Type', extRes.headers.get('content-type') || 'image/png');
+        headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+        headers.set('Access-Control-Allow-Origin', '*');
+        return new NextResponse(extRes.body as any, { status: 200, headers });
+      }
     } catch {
-      key = rawUrl;
+      // If external fetch fails, continue to key resolution
     }
   }
 
-  if (!key) {
+  // 2. Extract potential keys from URL or key parameter
+  const candidates: string[] = [];
+
+  if (key) {
+    candidates.push(key);
+    try { candidates.push(decodeURIComponent(key)); } catch {}
+  }
+
+  if (rawUrl) {
+    try {
+      const parsed = new URL(rawUrl);
+      const rawPath = parsed.pathname.replace(/^\//, '');
+      candidates.push(rawPath);
+      try { candidates.push(decodeURIComponent(rawPath)); } catch {}
+      try { candidates.push(decodeURIComponent(decodeURIComponent(rawPath))); } catch {}
+      try { candidates.push(encodeURI(decodeURIComponent(rawPath))); } catch {}
+    } catch {
+      candidates.push(rawUrl);
+    }
+  }
+
+  const uniqueCandidates = Array.from(new Set(candidates)).filter(Boolean);
+
+  if (uniqueCandidates.length === 0) {
     return new NextResponse('Missing key or url parameter', { status: 400 });
   }
 
-  // Ensure key is properly decoded
-  key = decodeURIComponent(key);
+  // 3. Try each candidate key on R2
+  for (const candidateKey of uniqueCandidates) {
+    try {
+      const command = new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: candidateKey,
+      });
 
-  try {
-    const command = new GetObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-    });
+      const s3Response = await s3Client.send(command);
 
-    const s3Response = await s3Client.send(command);
+      if (s3Response.Body) {
+        const stream = s3Response.Body.transformToWebStream();
+        const headers = new Headers();
+        headers.set('Content-Type', s3Response.ContentType || 'image/jpeg');
+        if (s3Response.ContentLength) {
+          headers.set('Content-Length', String(s3Response.ContentLength));
+        }
+        headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+        headers.set('Access-Control-Allow-Origin', '*');
 
-    if (!s3Response.Body) {
-      return new NextResponse('Image not found', { status: 404 });
+        return new NextResponse(stream as any, {
+          status: 200,
+          headers,
+        });
+      }
+    } catch (error: any) {
+      if (error.name === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) {
+        continue;
+      }
+      console.error(`Error fetching key "${candidateKey}" from R2:`, error?.message);
     }
-
-    // transformToWebStream is built-in in AWS SDK v3
-    const stream = s3Response.Body.transformToWebStream();
-
-    const headers = new Headers();
-    headers.set('Content-Type', s3Response.ContentType || 'image/jpeg');
-    if (s3Response.ContentLength) {
-      headers.set('Content-Length', String(s3Response.ContentLength));
-    }
-    headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-    headers.set('Access-Control-Allow-Origin', '*');
-
-    return new NextResponse(stream as any, {
-      status: 200,
-      headers,
-    });
-  } catch (error: any) {
-    console.error('Error fetching image from R2:', error?.message);
-    if (error.name === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) {
-      return new NextResponse('Image not found', { status: 404 });
-    }
-    return new NextResponse('Failed to load image: ' + error?.message, { status: 500 });
   }
+
+  return new NextResponse('Image not found', { status: 404 });
 }

@@ -80,12 +80,13 @@ export default function AdminLogin() {
 
         if (profileData?.role !== 'ADMIN') {
           await supabase.auth.signOut();
-          throw new Error('Akses ditolak. Anda bukan Admin.');
+          throw new Error(`Akses ditolak. Akun Anda terdaftar sebagai ${profileData?.role || 'User'}. Portal ini khusus untuk Administrator. Silakan gunakan Link User untuk login Sales/Dealer.`);
         }
       }
 
-      router.push('/');
-      router.refresh();
+      // Pastikan session tersimpan sempurna sebelum redirect
+      await new Promise((r) => setTimeout(r, 150));
+      window.location.href = '/';
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'Gagal login. Periksa email dan password Anda.');

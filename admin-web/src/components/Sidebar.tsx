@@ -1,17 +1,19 @@
 import Link from 'next/link';
-import { Home, Package, Users, Map, ShoppingCart, Archive, DollarSign, Activity, Gift, FileText, Settings, ArrowLeftRight, Lock, Award } from 'lucide-react';
+import { Home, Package, Users, Map, ShoppingCart, Archive, DollarSign, Activity, Gift, FileText, Settings, ArrowLeftRight, Lock, Award, ArrowDownToLine, Target } from 'lucide-react';
 
 const menuItems = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Master Kategori', href: '/categories', icon: Package },
   { name: 'Master Produk', href: '/products', icon: Package },
+  { name: 'Restok Produk', href: '/inventory?tab=restock', icon: ArrowDownToLine },
+  { name: 'Manajemen Stok', href: '/inventory', icon: Archive },
   { name: 'Master Dealer', href: '/dealers', icon: Users },
   { name: 'Program Dealer', href: '/programs', icon: Award },
   { name: 'Master Sales', href: '/sales', icon: Users },
   { name: 'Monitoring Sales', href: '/monitoring', icon: Activity },
+  { name: 'Penggajian Sales', href: '/payroll', icon: DollarSign },
   { name: 'Master Wilayah', href: '/regions', icon: Map },
   { name: 'Manajemen Order', href: '/orders', icon: ShoppingCart },
-  { name: 'Manajemen Stok', href: '/inventory', icon: Archive },
   { name: 'Manajemen Retur', href: '/returns', icon: ArrowLeftRight },
   { name: 'Promo & Diskon', href: '/promo', icon: Gift },
   { name: 'Laporan', href: '/reports', icon: FileText },
@@ -19,7 +21,7 @@ const menuItems = [
 ];
 
 const proMenuItems = [
-  { name: 'Target Sales', href: '/targets', icon: DollarSign },
+  { name: 'Target & SPV', href: '/targets', icon: Target },
   { name: 'CRM Dealer', href: '/crm', icon: Activity },
   { name: 'Peta Pelanggan', href: '/customers-map', icon: Map },
 ];
