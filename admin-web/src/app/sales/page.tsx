@@ -155,6 +155,46 @@ export default function SalesPage() {
       const existingProfileIds = new Set((sData || []).map((s: any) => s.profile_id));
       const unlinkedProfiles = (pData || []).filter((p) => !existingProfileIds.has(p.id));
 
+      if (unlinkedProfiles.length > 0) {
+        // Auto-heal: create corresponding sales record for any profile with role SALES
+        const rowsToInsert = unlinkedProfiles.map((up) => ({
+          profile_id: up.id,
+          status: up.approval_status === 'APPROVED' ? 'ACTIVE' : 'PENDING',
+          balance: 0,
+        }));
+        await supabase.from('sales').insert(rowsToInsert);
+
+        // Re-fetch sales so every record has an actual database UUID
+        const { data: refetchedSales } = await supabase
+          .from('sales')
+          .select(`
+            id,
+            profile_id,
+            region_id,
+            balance,
+            status,
+            created_at,
+            is_spv,
+            spv_id,
+            base_salary,
+            daily_visit_target,
+            work_days_per_month,
+            profiles (id, full_name, phone_number, role, approval_status),
+            regions (id, name),
+            spv:spv_id (
+              profiles (full_name)
+            )
+          `)
+          .order('created_at', { ascending: false });
+
+        if (refetchedSales && refetchedSales.length > 0) {
+          sData = refetchedSales;
+        }
+      }
+
+      const updatedExistingProfileIds = new Set((sData || []).map((s: any) => s.profile_id));
+      const remainingUnlinked = (pData || []).filter((p) => !updatedExistingProfileIds.has(p.id));
+
       // Calculate assigned dealers count
       const enrichedSales: SalesRep[] = (sData || []).map((s: any) => {
         const count = dealersList.filter((d) => d.sales_id === s.id).length;
@@ -164,8 +204,8 @@ export default function SalesPage() {
         };
       });
 
-      // Append unlinked profiles as virtual pending sales
-      unlinkedProfiles.forEach((up) => {
+      // Append remaining unlinked profiles only as safety fallback
+      remainingUnlinked.forEach((up) => {
         enrichedSales.push({
           id: `unlinked-${up.id}`,
           profile_id: up.id,
@@ -194,29 +234,50 @@ export default function SalesPage() {
     }
   };
 
+  // Helper to ensure a real sales table UUID exists before updating
+  const ensureRealSalesId = async (sales: SalesRep): Promise<string> => {
+    if (sales.id && !sales.id.startsWith('unlinked-')) {
+      return sales.id;
+    }
+    const profileId = sales.profile_id || sales.id.replace('unlinked-', '');
+
+    // Check if row already exists in sales
+    const { data: existing } = await supabase
+      .from('sales')
+      .select('id')
+      .eq('profile_id', profileId)
+      .maybeSingle();
+
+    if (existing?.id) {
+      sales.id = existing.id;
+      return existing.id;
+    }
+
+    // Insert new row into sales
+    const { data: created, error: insErr } = await supabase
+      .from('sales')
+      .insert({
+        profile_id: profileId,
+        status: sales.status === 'ACTIVE' ? 'ACTIVE' : 'PENDING',
+        balance: 0,
+      })
+      .select('id')
+      .single();
+
+    if (insErr) throw insErr;
+    sales.id = created.id;
+    return created.id;
+  };
+
   const handleApprove = async (sales: SalesRep) => {
     if (!confirm(`Setujui akun sales "${sales.profiles?.full_name}"?`)) return;
 
     try {
-      // 1. If unlinked, insert into sales table first
-      if (sales.id.startsWith('unlinked-')) {
-        const { data: inserted, error: insErr } = await supabase
-          .from('sales')
-          .insert({
-            profile_id: sales.profile_id,
-            status: 'ACTIVE',
-            balance: 0,
-          })
-          .select()
-          .single();
+      const realSalesId = await ensureRealSalesId(sales);
+      const { error } = await supabase.from('sales').update({ status: 'ACTIVE' }).eq('id', realSalesId);
+      if (error) throw error;
 
-        if (insErr) throw insErr;
-      } else {
-        const { error } = await supabase.from('sales').update({ status: 'ACTIVE' }).eq('id', sales.id);
-        if (error) throw error;
-      }
-
-      // 2. Update profile approval_status
+      // Update profile approval_status
       await supabase.from('profiles').update({ approval_status: 'APPROVED', role: 'SALES' }).eq('id', sales.profile_id);
 
       alert('Akun sales berhasil disetujui & diaktifkan.');
@@ -231,11 +292,12 @@ export default function SalesPage() {
     if (!confirm(`Ubah status sales "${sales.profiles?.full_name}" menjadi ${nextStatus}?`)) return;
 
     try {
-      const { error } = await supabase.from('sales').update({ status: nextStatus }).eq('id', sales.id);
+      const realSalesId = await ensureRealSalesId(sales);
+      const { error } = await supabase.from('sales').update({ status: nextStatus }).eq('id', realSalesId);
       if (error) throw error;
 
       setSalesList((prev) =>
-        prev.map((s) => (s.id === sales.id ? { ...s, status: nextStatus as any } : s))
+        prev.map((s) => (s.id === sales.id ? { ...s, id: realSalesId, status: nextStatus as any } : s))
       );
     } catch (err: any) {
       alert(`Gagal mengubah status: ${err.message}`);
@@ -245,10 +307,11 @@ export default function SalesPage() {
   const handleSaveRegion = async () => {
     if (!activeSalesForRegion) return;
     try {
+      const realSalesId = await ensureRealSalesId(activeSalesForRegion);
       const { error } = await supabase
         .from('sales')
         .update({ region_id: selectedNewRegion || null })
-        .eq('id', activeSalesForRegion.id);
+        .eq('id', realSalesId);
 
       if (error) throw error;
 
@@ -266,6 +329,7 @@ export default function SalesPage() {
 
     setSavingSpv(true);
     try {
+      const realSalesId = await ensureRealSalesId(activeSalesForSpv);
       const payload = {
         is_spv: isSpvToggle,
         spv_id: isSpvToggle ? null : (selectedSpvParent || null),
@@ -277,7 +341,7 @@ export default function SalesPage() {
       const { error } = await supabase
         .from('sales')
         .update(payload)
-        .eq('id', activeSalesForSpv.id);
+        .eq('id', realSalesId);
 
       if (error) {
         console.warn('Update SPV warning:', error);
@@ -300,7 +364,8 @@ export default function SalesPage() {
     if (!activeSalesForDealers) return;
     setSavingDealers(true);
     try {
-      const newSalesId = currentSalesId === activeSalesForDealers.id ? null : activeSalesForDealers.id;
+      const realSalesId = await ensureRealSalesId(activeSalesForDealers);
+      const newSalesId = currentSalesId === realSalesId ? null : realSalesId;
 
       const { error } = await supabase.from('dealers').update({ sales_id: newSalesId }).eq('id', dealerId);
 
@@ -313,9 +378,9 @@ export default function SalesPage() {
       // Update local count
       setSalesList((prev) =>
         prev.map((s) => {
-          if (s.id === activeSalesForDealers.id) {
+          if (s.id === activeSalesForDealers.id || s.id === realSalesId) {
             const count = (s.assignedDealersCount || 0) + (newSalesId ? 1 : -1);
-            return { ...s, assignedDealersCount: Math.max(0, count) };
+            return { ...s, id: realSalesId, assignedDealersCount: Math.max(0, count) };
           }
           return s;
         })
