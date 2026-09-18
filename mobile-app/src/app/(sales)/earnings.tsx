@@ -17,7 +17,7 @@ import { router } from 'expo-router';
 export default function SalesEarningsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'sales' | 'attendance' | 'payroll'>('sales');
+  const [activeTab, setActiveTab] = useState<'daily' | 'sales' | 'attendance' | 'payroll'>('daily');
   const [attendanceSubTab, setAttendanceSubTab] = useState<'attendance' | 'visits'>('attendance');
 
   // Sales profile & settings
@@ -177,6 +177,85 @@ export default function SalesEarningsScreen() {
   const valuePerVisit = targetVisits > 0 ? baseSalary / targetVisits : 28846;
   const earnedVisitSalary = Math.round(completedVisitsCount * valuePerVisit);
 
+  // Group all transactions by date for Tab "Per Hari"
+  const allInflowTransactions: any[] = [];
+
+  // Orders
+  orders.forEach((o) => {
+    const amount = (o.final_amount || o.total_amount || 0) * commissionRate;
+    const dateObj = new Date(o.created_at);
+    const dateKey = dateObj.toISOString().split('T')[0];
+    allInflowTransactions.push({
+      id: `order-${o.id}`,
+      type: 'sales',
+      title: `Komisi: ${o.dealers?.store_name || 'Toko Retail'}`,
+      subtitle: `Order #${o.order_number || o.id.slice(0, 8)} • Omset ${formatRupiah(o.final_amount || o.total_amount)}`,
+      amount: Math.round(amount),
+      isCompleted: o.status === 'COMPLETED',
+      status: o.status === 'COMPLETED' ? 'SELESAI' : o.status,
+      timestamp: dateObj.getTime(),
+      dateKey,
+      timeStr: dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      dateStr: dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }),
+    });
+  });
+
+  // Visits
+  visitsList.forEach((v) => {
+    const amount = Number(v.earned_amount) || Math.round(valuePerVisit);
+    const dateObj = new Date(v.created_at || v.check_in_time);
+    const dateKey = dateObj.toISOString().split('T')[0];
+    allInflowTransactions.push({
+      id: `visit-${v.id}`,
+      type: 'visit',
+      title: `Visit: ${v.dealers?.store_name || 'Toko Retail'}`,
+      subtitle: `Kunjungan Lapangan • ${v.status === 'COMPLETED' ? 'Terverifikasi' : 'Proses'}`,
+      amount: Math.round(amount),
+      isCompleted: v.status === 'COMPLETED',
+      status: v.status === 'COMPLETED' ? 'SELESAI' : 'PROSES',
+      timestamp: dateObj.getTime(),
+      dateKey,
+      timeStr: dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      dateStr: dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }),
+    });
+  });
+
+  // Attendance
+  attendanceList.forEach((a) => {
+    const dateObj = new Date(a.check_in_time || `${a.attendance_date}T10:00:00Z`);
+    const dateKey = a.attendance_date || dateObj.toISOString().split('T')[0];
+    allInflowTransactions.push({
+      id: `att-${a.id}`,
+      type: 'attendance',
+      title: `Presensi: ${a.is_late ? 'Terlambat' : 'Tepat Waktu'}`,
+      subtitle: `Kehadiran Harian • ${a.check_out_time ? 'Presensi Lengkap' : 'Masuk Kerja'}`,
+      amount: 0,
+      isCompleted: true,
+      status: a.status === 'PRESENT' ? 'HADIR' : a.status,
+      timestamp: dateObj.getTime(),
+      dateKey,
+      timeStr: a.check_in_time ? new Date(a.check_in_time).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '10:00',
+      dateStr: new Date(dateKey).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }),
+    });
+  });
+
+  allInflowTransactions.sort((a, b) => b.timestamp - a.timestamp);
+
+  const groupedByDay: { [key: string]: { dateStr: string; totalAmount: number; items: any[] } } = {};
+  allInflowTransactions.forEach((item) => {
+    if (!groupedByDay[item.dateKey]) {
+      groupedByDay[item.dateKey] = {
+        dateStr: item.dateStr,
+        totalAmount: 0,
+        items: [],
+      };
+    }
+    groupedByDay[item.dateKey].totalAmount += item.amount || 0;
+    groupedByDay[item.dateKey].items.push(item);
+  });
+
+  const totalMonthlyInflow = totalEstimatedCommission + earnedVisitSalary;
+
   return (
     <View style={styles.container}>
       {/* Top Header */}
@@ -208,16 +287,30 @@ export default function SalesEarningsScreen() {
       {/* Main Tab Switcher */}
       <View style={styles.tabContainer}>
         <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'daily' && styles.tabButtonActive]}
+          onPress={() => setActiveTab('daily')}
+        >
+          <Feather
+            name="calendar"
+            size={14}
+            color={activeTab === 'daily' ? '#8ec44a' : '#64748b'}
+          />
+          <Text style={[styles.tabText, activeTab === 'daily' && styles.tabTextActive]}>
+            Per Hari
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[styles.tabButton, activeTab === 'sales' && styles.tabButtonActive]}
           onPress={() => setActiveTab('sales')}
         >
           <Feather
             name="trending-up"
-            size={16}
+            size={14}
             color={activeTab === 'sales' ? '#8ec44a' : '#64748b'}
           />
           <Text style={[styles.tabText, activeTab === 'sales' && styles.tabTextActive]}>
-            1. Penjualan
+            Penjualan
           </Text>
         </TouchableOpacity>
 
@@ -227,11 +320,11 @@ export default function SalesEarningsScreen() {
         >
           <Feather
             name="check-circle"
-            size={16}
+            size={14}
             color={activeTab === 'attendance' ? '#8ec44a' : '#64748b'}
           />
           <Text style={[styles.tabText, activeTab === 'attendance' && styles.tabTextActive]}>
-            2. Absensi & Visit
+            Absensi & Visit
           </Text>
         </TouchableOpacity>
 
@@ -241,7 +334,7 @@ export default function SalesEarningsScreen() {
         >
           <Feather
             name="file-text"
-            size={16}
+            size={14}
             color={activeTab === 'payroll' ? '#8ec44a' : '#64748b'}
           />
           <Text style={[styles.tabText, activeTab === 'payroll' && styles.tabTextActive]}>
@@ -264,6 +357,129 @@ export default function SalesEarningsScreen() {
           </View>
         ) : (
           <>
+            {/* ==================== TAB 0: PER HARI (SALDO MASUK HARIAN) ==================== */}
+            {activeTab === 'daily' && (
+              <View>
+                {/* Highlight Card Per Hari */}
+                <View style={styles.summaryCardGreen}>
+                  <View style={styles.summaryCardHeader}>
+                    <View>
+                      <Text style={styles.summarySubTitle}>Total Estimasi Saldo Masuk Bulan Ini</Text>
+                      <Text style={styles.summaryMainValue}>{formatRupiah(totalMonthlyInflow)}</Text>
+                    </View>
+                    <View style={styles.summaryIconBox}>
+                      <Feather name="award" size={24} color="#ffffff" />
+                    </View>
+                  </View>
+                  <View style={styles.summaryCardFooter}>
+                    <View style={styles.summaryMiniStat}>
+                      <Text style={styles.miniStatLabel}>Komisi Penjualan</Text>
+                      <Text style={styles.miniStatValue}>{formatRupiah(totalEstimatedCommission)}</Text>
+                    </View>
+                    <View style={styles.summaryMiniDivider} />
+                    <View style={styles.summaryMiniStat}>
+                      <Text style={styles.miniStatLabel}>Gaji Pokok Visit</Text>
+                      <Text style={styles.miniStatValue}>{formatRupiah(earnedVisitSalary)}</Text>
+                    </View>
+                    <View style={styles.summaryMiniDivider} />
+                    <View style={styles.summaryMiniStat}>
+                      <Text style={styles.miniStatLabel}>Hari Bertugas</Text>
+                      <Text style={styles.miniStatValue}>{presentDaysCount} Hari</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Section Header */}
+                <View style={styles.sectionHeader}>
+                  <View>
+                    <Text style={styles.sectionTitle}>Saldo Masuk Per Hari</Text>
+                    <Text style={styles.sectionSubtitle}>
+                      Rincian per transaksi komisi penjualan dan kunjungan toko per tanggal
+                    </Text>
+                  </View>
+                </View>
+
+                {Object.keys(groupedByDay).length === 0 ? (
+                  <View style={styles.emptyCard}>
+                    <Feather name="calendar" size={36} color="#cbd5e1" />
+                    <Text style={styles.emptyTitle}>Belum Ada Aktivitas Harian</Text>
+                    <Text style={styles.emptyDesc}>
+                      Belum ada transaksi saldo masuk untuk periode {selectedMonth} {selectedYear}.
+                    </Text>
+                  </View>
+                ) : (
+                  Object.entries(groupedByDay).map(([dateKey, group]) => (
+                    <View key={dateKey} style={styles.dailyCardGroup}>
+                      <View style={styles.dailyCardGroupHeader}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Feather name="calendar" size={13} color="#166534" />
+                          <Text style={styles.dailyCardGroupDate}>{group.dateStr}</Text>
+                        </View>
+                        <View style={styles.dailyCardTotalBadge}>
+                          <Text style={styles.dailyCardTotalText}>Total: +{formatRupiah(group.totalAmount)}</Text>
+                        </View>
+                      </View>
+
+                      {group.items.map((item: any) => {
+                        const isSales = item.type === 'sales';
+                        const isVisit = item.type === 'visit';
+
+                        return (
+                          <View key={item.id} style={styles.dailyTransItem}>
+                            <View
+                              style={[
+                                styles.dailyTransIcon,
+                                isSales
+                                  ? { backgroundColor: '#f0fdf4' }
+                                  : isVisit
+                                  ? { backgroundColor: '#eff6ff' }
+                                  : { backgroundColor: '#faf5ff' },
+                              ]}
+                            >
+                              <Feather
+                                name={isSales ? 'shopping-bag' : isVisit ? 'map-pin' : 'clock'}
+                                size={15}
+                                color={isSales ? '#16a34a' : isVisit ? '#2563eb' : '#9333ea'}
+                              />
+                            </View>
+
+                            <View style={{ flex: 1, marginHorizontal: 10 }}>
+                              <Text style={styles.dailyTransTitle} numberOfLines={1}>{item.title}</Text>
+                              <Text style={styles.dailyTransSubtitle} numberOfLines={1}>{item.subtitle}</Text>
+                              <Text style={styles.dailyTransTime}>{item.timeStr}</Text>
+                            </View>
+
+                            <View style={{ alignItems: 'flex-end' }}>
+                              {item.amount > 0 ? (
+                                <Text style={styles.dailyTransAmount}>+{formatRupiah(item.amount)}</Text>
+                              ) : (
+                                <Text style={styles.dailyTransAmountGray}>-</Text>
+                              )}
+                              <View
+                                style={[
+                                  styles.dailyTransBadge,
+                                  item.isCompleted ? { backgroundColor: '#dcfce7' } : { backgroundColor: '#fef3c7' },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.dailyTransBadgeText,
+                                    item.isCompleted ? { color: '#15803d' } : { color: '#b45309' },
+                                  ]}
+                                >
+                                  {item.status}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
+
             {/* ==================== TAB 1: PENJUALAN & KOMISI ==================== */}
             {activeTab === 'sales' && (
               <View>
@@ -1523,6 +1739,96 @@ const styles = StyleSheet.create({
   modalCloseButtonText: {
     color: '#ffffff',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  dailyCardGroup: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  dailyCardGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    marginBottom: 10,
+  },
+  dailyCardGroupDate: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  dailyCardTotalBadge: {
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  dailyCardTotalText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#15803d',
+  },
+  dailyTransItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8fafc',
+    gap: 10,
+  },
+  dailyTransIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dailyTransTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  dailyTransSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  dailyTransTime: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  dailyTransAmount: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#15803d',
+  },
+  dailyTransAmountGray: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+  dailyTransBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  dailyTransBadgeText: {
+    fontSize: 10,
     fontWeight: '700',
   },
 });

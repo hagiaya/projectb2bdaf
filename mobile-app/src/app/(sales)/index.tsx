@@ -29,6 +29,12 @@ export default function SalesHome() {
   const [unitPercentage, setUnitPercentage] = useState('80');
   const [checkoutNotes, setCheckoutNotes] = useState('');
 
+  // Saldo Inflow History Modal State
+  const [balanceModalVisible, setBalanceModalVisible] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState<'daily' | 'all' | 'sales' | 'visits'>('daily');
+  const [historyTransactions, setHistoryTransactions] = useState<any[]>([]);
+
   // Image zoom preview
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -97,12 +103,131 @@ export default function SalesHome() {
           activeVisits: activeCount || 0,
           totalDealers: dealerCount || 0,
         });
+
+        // Pre-fetch Saldo Inflow History
+        fetchSaldoInflowHistory(sData.id);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const fetchSaldoInflowHistory = async (salesId: string) => {
+    try {
+      setLoadingHistory(true);
+
+      // 1. Fetch Dealers assigned
+      const { data: myDealers } = await supabase
+        .from('dealers')
+        .select('id, store_name')
+        .eq('sales_id', salesId);
+      const dealerIds = (myDealers || []).map((d) => d.id);
+
+      // 2. Fetch Orders (Penjualan)
+      let orderQuery = supabase
+        .from('orders')
+        .select('id, order_number, total_amount, final_amount, status, created_at, dealers(store_name)')
+        .order('created_at', { ascending: false })
+        .limit(60);
+      if (dealerIds.length > 0) {
+        orderQuery = orderQuery.or(`sales_id.eq.${salesId},dealer_id.in.(${dealerIds.join(',')})`);
+      } else {
+        orderQuery = orderQuery.eq('sales_id', salesId);
+      }
+      const { data: ordersData } = await orderQuery;
+
+      // 3. Fetch Visits (Kunjungan)
+      const { data: visitsData } = await supabase
+        .from('sales_visits')
+        .select('id, earned_amount, status, created_at, check_in_time, check_out_time, dealers(store_name)')
+        .eq('sales_id', salesId)
+        .order('created_at', { ascending: false })
+        .limit(60);
+
+      // 4. Fetch Attendance (Presensi Harian)
+      const { data: attData } = await supabase
+        .from('sales_attendance')
+        .select('id, attendance_date, check_in_time, check_out_time, is_late, status, created_at')
+        .eq('sales_id', salesId)
+        .order('attendance_date', { ascending: false })
+        .limit(40);
+
+      const commissionRate = Number(salesData?.direct_commission_pct || 1.0) / 100;
+      const baseSalary = Number(salesData?.base_salary || 4500000);
+      const targetVisits = (Number(salesData?.daily_visit_target) || 6) * (Number(salesData?.work_days_per_month) || 26);
+      const valuePerVisit = targetVisits > 0 ? baseSalary / targetVisits : 28846;
+
+      const items: any[] = [];
+
+      // Transform Orders
+      (ordersData || []).forEach((o: any) => {
+        const amount = (o.final_amount || o.total_amount || 0) * commissionRate;
+        const dateObj = new Date(o.created_at);
+        const dateKey = dateObj.toISOString().split('T')[0];
+        items.push({
+          id: `order-${o.id}`,
+          category: 'sales',
+          title: `Komisi: ${o.dealers?.store_name || 'Toko Retail'}`,
+          subtitle: `Order #${o.order_number || o.id.slice(0, 8)} • Omset ${formatRupiah(o.final_amount || o.total_amount)}`,
+          amount: Math.round(amount),
+          status: o.status === 'COMPLETED' ? 'SELESAI' : o.status,
+          isCompleted: o.status === 'COMPLETED',
+          timestamp: dateObj.getTime(),
+          dateKey,
+          timeStr: dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          dateStr: dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }),
+        });
+      });
+
+      // Transform Visits
+      (visitsData || []).forEach((v: any) => {
+        const amount = Number(v.earned_amount) || Math.round(valuePerVisit);
+        const dateObj = new Date(v.created_at || v.check_in_time);
+        const dateKey = dateObj.toISOString().split('T')[0];
+        items.push({
+          id: `visit-${v.id}`,
+          category: 'visit',
+          title: `Visit: ${v.dealers?.store_name || 'Toko Retail'}`,
+          subtitle: `Kunjungan Lapangan • ${v.status === 'COMPLETED' ? 'Terverifikasi' : 'Proses'}`,
+          amount: Math.round(amount),
+          status: v.status === 'COMPLETED' ? 'SELESAI' : 'PROSES',
+          isCompleted: v.status === 'COMPLETED',
+          timestamp: dateObj.getTime(),
+          dateKey,
+          timeStr: dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          dateStr: dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }),
+        });
+      });
+
+      // Transform Attendance
+      (attData || []).forEach((a: any) => {
+        const dateObj = new Date(a.check_in_time || `${a.attendance_date}T10:00:00Z`);
+        const dateKey = a.attendance_date || dateObj.toISOString().split('T')[0];
+        items.push({
+          id: `att-${a.id}`,
+          category: 'attendance',
+          title: `Presensi: ${a.is_late ? 'Terlambat' : 'Tepat Waktu'}`,
+          subtitle: `Kehadiran Harian • ${a.check_out_time ? 'Presensi Lengkap' : 'Masuk Kerja'}`,
+          amount: 0,
+          status: a.status === 'PRESENT' ? 'HADIR' : a.status,
+          isCompleted: true,
+          timestamp: dateObj.getTime(),
+          dateKey,
+          timeStr: a.check_in_time ? new Date(a.check_in_time).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '10:00',
+          dateStr: new Date(dateKey).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }),
+        });
+      });
+
+      // Sort by timestamp desc
+      items.sort((a, b) => b.timestamp - a.timestamp);
+      setHistoryTransactions(items);
+    } catch (e) {
+      console.error('Error fetching saldo history:', e);
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -350,26 +475,34 @@ export default function SalesHome() {
       <TouchableOpacity
         style={styles.balanceCard}
         activeOpacity={0.88}
-        onPress={() => router.push('/(sales)/earnings' as any)}
+        onPress={() => {
+          if (salesData?.id) fetchSaldoInflowHistory(salesData.id);
+          setBalanceModalVisible(true);
+        }}
       >
         <View style={styles.balanceHeader}>
           <View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text style={styles.balanceTitle}>Saldo Reward & Komisi</Text>
-              <Feather name="chevron-right" size={14} color="rgba(255,255,255,0.8)" />
+              <View style={styles.historyBadge}>
+                <Feather name="clock" size={10} color="#15803d" />
+                <Text style={styles.historyBadgeText}>Riwayat Saldo</Text>
+              </View>
             </View>
             <Text style={styles.balanceAmount}>{formatRupiah(salesData?.balance || 0)}</Text>
           </View>
           <View style={styles.balanceIconBox}>
-            <Feather name="trending-up" size={26} color="white" />
+            <Feather name="award" size={28} color="white" />
           </View>
         </View>
         <View style={styles.balanceFooter}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-            <Feather name="pie-chart" size={13} color="rgba(255,255,255,0.9)" />
-            <Text style={styles.balanceSub}>Cek Histori: 1. Penjualan • 2. Absensi</Text>
+            <Feather name="info" size={14} color="rgba(255,255,255,0.95)" />
+            <Text style={styles.balanceSub}>Klik di sini untuk melihat saldo masuk per hari & per transaksi</Text>
           </View>
-          <Text style={{ fontSize: 11, fontWeight: '800', color: '#ffffff' }}>Lihat Rincian →</Text>
+          <View style={styles.openHistoryTag}>
+            <Text style={styles.openHistoryTagText}>Lihat Riwayat →</Text>
+          </View>
         </View>
       </TouchableOpacity>
 
@@ -552,6 +685,259 @@ export default function SalesHome() {
           </View>
         </View>
       </View>
+
+      {/* MODAL RIWAYAT SALDO MASUK PER HARI PER TRANSAKSI */}
+      <Modal visible={balanceModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '90%' }]}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.modalTitle}>Riwayat Saldo Masuk</Text>
+                  <View style={styles.liveBadge}>
+                    <Text style={styles.liveBadgeText}>Real-time</Text>
+                  </View>
+                </View>
+                <Text style={styles.modalSubTitle}>Histori pendapatan per hari & per transaksi</Text>
+              </View>
+              <TouchableOpacity onPress={() => setBalanceModalVisible(false)} style={styles.closeBtn}>
+                <Feather name="x" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Saldo Summary Banner */}
+            <View style={styles.modalSaldoBanner}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalSaldoLabel}>Saldo Reward Saat Ini</Text>
+                <Text style={styles.modalSaldoValue}>{formatRupiah(salesData?.balance || 0)}</Text>
+              </View>
+              <View style={styles.modalSaldoMini}>
+                <Text style={styles.modalSaldoMiniLabel}>Total Masuk Terdata</Text>
+                <Text style={styles.modalSaldoMiniVal}>
+                  +{formatRupiah(historyTransactions.reduce((sum, t) => sum + (t.amount || 0), 0))}
+                </Text>
+              </View>
+            </View>
+
+            {/* Filter Pills */}
+            <View style={styles.filterPillsRow}>
+              <TouchableOpacity
+                style={[styles.filterPill, historyFilter === 'daily' && styles.filterPillActive]}
+                onPress={() => setHistoryFilter('daily')}
+              >
+                <Feather name="calendar" size={12} color={historyFilter === 'daily' ? '#ffffff' : '#475569'} />
+                <Text style={[styles.filterPillText, historyFilter === 'daily' && styles.filterPillTextActive]}>
+                  Per Hari
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterPill, historyFilter === 'all' && styles.filterPillActive]}
+                onPress={() => setHistoryFilter('all')}
+              >
+                <Feather name="list" size={12} color={historyFilter === 'all' ? '#ffffff' : '#475569'} />
+                <Text style={[styles.filterPillText, historyFilter === 'all' && styles.filterPillTextActive]}>
+                  Semua ({historyTransactions.length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterPill, historyFilter === 'sales' && styles.filterPillActive]}
+                onPress={() => setHistoryFilter('sales')}
+              >
+                <Feather name="shopping-bag" size={12} color={historyFilter === 'sales' ? '#ffffff' : '#475569'} />
+                <Text style={[styles.filterPillText, historyFilter === 'sales' && styles.filterPillTextActive]}>
+                  Penjualan
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterPill, historyFilter === 'visits' && styles.filterPillActive]}
+                onPress={() => setHistoryFilter('visits')}
+              >
+                <Feather name="map-pin" size={12} color={historyFilter === 'visits' ? '#ffffff' : '#475569'} />
+                <Text style={[styles.filterPillText, historyFilter === 'visits' && styles.filterPillTextActive]}>
+                  Visit & Absen
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Transactions List */}
+            <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+              {loadingHistory ? (
+                <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#8ec44a" />
+                  <Text style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>Memuat histori transaksi...</Text>
+                </View>
+              ) : historyTransactions.length === 0 ? (
+                <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                  <Feather name="inbox" size={36} color="#cbd5e1" />
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a', marginTop: 10 }}>
+                    Belum Ada Saldo Masuk
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#64748b', textAlign: 'center', marginTop: 4 }}>
+                    Histori saldo dari komisi penjualan dan kunjungan toko akan muncul di sini.
+                  </Text>
+                </View>
+              ) : historyFilter === 'daily' ? (
+                // Grouped by Date
+                (() => {
+                  const grouped: { [key: string]: { dateStr: string; totalAmount: number; items: any[] } } = {};
+                  historyTransactions.forEach((item) => {
+                    if (!grouped[item.dateKey]) {
+                      grouped[item.dateKey] = {
+                        dateStr: item.dateStr,
+                        totalAmount: 0,
+                        items: [],
+                      };
+                    }
+                    grouped[item.dateKey].totalAmount += item.amount || 0;
+                    grouped[item.dateKey].items.push(item);
+                  });
+
+                  return Object.entries(grouped).map(([dateKey, group]) => (
+                    <View key={dateKey} style={styles.dailyGroupBlock}>
+                      <View style={styles.dailyGroupHeader}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Feather name="calendar" size={13} color="#166534" />
+                          <Text style={styles.dailyGroupDateText}>{group.dateStr}</Text>
+                        </View>
+                        <View style={styles.dailyTotalBadge}>
+                          <Text style={styles.dailyTotalBadgeText}>
+                            Total: +{formatRupiah(group.totalAmount)}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {group.items.map((item: any) => (
+                        <View key={item.id} style={styles.transItemRow}>
+                          <View
+                            style={[
+                              styles.transIconBox,
+                              item.category === 'sales'
+                                ? { backgroundColor: '#f0fdf4' }
+                                : item.category === 'visit'
+                                ? { backgroundColor: '#eff6ff' }
+                                : { backgroundColor: '#faf5ff' },
+                            ]}
+                          >
+                            <Feather
+                              name={item.category === 'sales' ? 'shopping-bag' : item.category === 'visit' ? 'map-pin' : 'clock'}
+                              size={15}
+                              color={item.category === 'sales' ? '#16a34a' : item.category === 'visit' ? '#2563eb' : '#9333ea'}
+                            />
+                          </View>
+
+                          <View style={{ flex: 1, marginHorizontal: 10 }}>
+                            <Text style={styles.transTitle} numberOfLines={1}>{item.title}</Text>
+                            <Text style={styles.transSubtitle} numberOfLines={1}>{item.subtitle}</Text>
+                            <Text style={styles.transTime}>{item.timeStr}</Text>
+                          </View>
+
+                          <View style={{ alignItems: 'flex-end' }}>
+                            {item.amount > 0 ? (
+                              <Text style={styles.transAmountText}>+{formatRupiah(item.amount)}</Text>
+                            ) : (
+                              <Text style={styles.transAmountTextGray}>-</Text>
+                            )}
+                            <View
+                              style={[
+                                styles.transStatusTag,
+                                item.isCompleted ? { backgroundColor: '#dcfce7' } : { backgroundColor: '#fef3c7' },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.transStatusTagText,
+                                  item.isCompleted ? { color: '#15803d' } : { color: '#b45309' },
+                                ]}
+                              >
+                                {item.status}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  ));
+                })()
+              ) : (
+                // Flat List
+                historyTransactions
+                  .filter((item) => {
+                    if (historyFilter === 'sales') return item.category === 'sales';
+                    if (historyFilter === 'visits') return item.category === 'visit' || item.category === 'attendance';
+                    return true;
+                  })
+                  .map((item: any) => (
+                    <View key={item.id} style={styles.transItemRow}>
+                      <View
+                        style={[
+                          styles.transIconBox,
+                          item.category === 'sales'
+                            ? { backgroundColor: '#f0fdf4' }
+                            : item.category === 'visit'
+                            ? { backgroundColor: '#eff6ff' }
+                            : { backgroundColor: '#faf5ff' },
+                        ]}
+                      >
+                        <Feather
+                          name={item.category === 'sales' ? 'shopping-bag' : item.category === 'visit' ? 'map-pin' : 'clock'}
+                          size={15}
+                          color={item.category === 'sales' ? '#16a34a' : item.category === 'visit' ? '#2563eb' : '#9333ea'}
+                        />
+                      </View>
+
+                      <View style={{ flex: 1, marginHorizontal: 10 }}>
+                        <Text style={styles.transTitle} numberOfLines={1}>{item.title}</Text>
+                        <Text style={styles.transSubtitle} numberOfLines={1}>{item.subtitle}</Text>
+                        <Text style={styles.transTime}>{item.dateStr} • {item.timeStr}</Text>
+                      </View>
+
+                      <View style={{ alignItems: 'flex-end' }}>
+                        {item.amount > 0 ? (
+                          <Text style={styles.transAmountText}>+{formatRupiah(item.amount)}</Text>
+                        ) : (
+                          <Text style={styles.transAmountTextGray}>-</Text>
+                        )}
+                        <View
+                          style={[
+                            styles.transStatusTag,
+                            item.isCompleted ? { backgroundColor: '#dcfce7' } : { backgroundColor: '#fef3c7' },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.transStatusTagText,
+                              item.isCompleted ? { color: '#15803d' } : { color: '#b45309' },
+                            ]}
+                          >
+                            {item.status}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  ))
+              )}
+            </ScrollView>
+
+            {/* Modal Bottom Actions */}
+            <View style={styles.modalBottomActions}>
+              <TouchableOpacity
+                style={styles.openFullEarningsBtn}
+                onPress={() => {
+                  setBalanceModalVisible(false);
+                  router.push('/(sales)/earnings' as any);
+                }}
+              >
+                <Feather name="external-link" size={14} color="#ffffff" />
+                <Text style={styles.openFullEarningsBtnText}>Buka Halaman Lengkap Pendapatan & Slip Gaji</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* MODAL CHECK-OUT PULANG DENGAN 2 FOTO DISPLAY + 1 FOTO SELFIE */}
       <Modal visible={checkoutModalVisible} animationType="slide" transparent>
@@ -1071,4 +1457,209 @@ const styles = StyleSheet.create({
   },
   zoomClose: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 8 },
   zoomImg: { width: '100%', height: '80%' },
+
+  // New styles for Saldo Inflow History Modal & Card
+  historyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  historyBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#15803d',
+  },
+  openHistoryTag: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  openHistoryTagText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  liveBadge: {
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  liveBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#16a34a',
+  },
+  modalSaldoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#15803d',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+  },
+  modalSaldoLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '600',
+  },
+  modalSaldoValue: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#ffffff',
+    letterSpacing: -0.5,
+    marginTop: 2,
+  },
+  modalSaldoMini: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    alignItems: 'flex-end',
+  },
+  modalSaldoMiniLabel: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  modalSaldoMiniVal: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#ffffff',
+    marginTop: 2,
+  },
+  filterPillsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 14,
+  },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  filterPillActive: {
+    backgroundColor: '#8ec44a',
+  },
+  filterPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  filterPillTextActive: {
+    color: '#ffffff',
+  },
+  dailyGroupBlock: {
+    marginBottom: 14,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  dailyGroupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dcfce7',
+  },
+  dailyGroupDateText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#166534',
+  },
+  dailyTotalBadge: {
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  dailyTotalBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#15803d',
+  },
+  transItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8fafc',
+  },
+  transIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  transSubtitle: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  transTime: {
+    fontSize: 10,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  transAmountText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#16a34a',
+  },
+  transAmountTextGray: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#94a3b8',
+  },
+  transStatusTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 2,
+  },
+  transStatusTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  modalBottomActions: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+    marginTop: 8,
+  },
+  openFullEarningsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#0f172a',
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  openFullEarningsBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });
