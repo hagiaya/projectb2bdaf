@@ -3,7 +3,7 @@
     "name": "DAP",
     "owner": "dappditos-team",
     "slug": "dap-app",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "dap",
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "com.alpsstudiowebid.dap",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#8dc54a",
         "foregroundImage": "./assets/adaptive-icon.png"
