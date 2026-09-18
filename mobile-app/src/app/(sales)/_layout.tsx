@@ -37,6 +37,13 @@ export default function SalesLayout() {
         }}
       />
       <Tabs.Screen
+        name="earnings"
+        options={{
+          title: 'Pendapatan',
+          tabBarIcon: ({ color, size }) => <Feather name="trending-up" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="create-order"
         options={{
           title: 'Order Toko',

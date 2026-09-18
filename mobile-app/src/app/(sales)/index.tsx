@@ -346,22 +346,32 @@ export default function SalesHome() {
         </TouchableOpacity>
       </View>
 
-      {/* Balance & Commission Card */}
-      <View style={styles.balanceCard}>
+      {/* Balance & Commission Card with Direct Access to Earnings History */}
+      <TouchableOpacity
+        style={styles.balanceCard}
+        activeOpacity={0.88}
+        onPress={() => router.push('/(sales)/earnings' as any)}
+      >
         <View style={styles.balanceHeader}>
           <View>
-            <Text style={styles.balanceTitle}>Saldo Reward & Komisi</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={styles.balanceTitle}>Saldo Reward & Komisi</Text>
+              <Feather name="chevron-right" size={14} color="rgba(255,255,255,0.8)" />
+            </View>
             <Text style={styles.balanceAmount}>{formatRupiah(salesData?.balance || 0)}</Text>
           </View>
           <View style={styles.balanceIconBox}>
-            <Feather name="award" size={28} color="white" />
+            <Feather name="trending-up" size={26} color="white" />
           </View>
         </View>
         <View style={styles.balanceFooter}>
-          <Feather name="info" size={14} color="rgba(255,255,255,0.8)" />
-          <Text style={styles.balanceSub}>Akumulasi insentif dari kunjungan terverifikasi</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+            <Feather name="pie-chart" size={13} color="rgba(255,255,255,0.9)" />
+            <Text style={styles.balanceSub}>Cek Histori: 1. Penjualan • 2. Absensi</Text>
+          </View>
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#ffffff' }}>Lihat Rincian →</Text>
         </View>
-      </View>
+      </TouchableOpacity>
 
       {/* Attendance Section */}
       <View style={styles.section}>
@@ -480,6 +490,14 @@ export default function SalesHome() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Menu Operasional Sales</Text>
         <View style={styles.menuGrid}>
+          <TouchableOpacity style={styles.menuCard} onPress={() => router.push('/(sales)/earnings' as any)}>
+            <View style={[styles.menuIcon, { backgroundColor: '#f0fdf4' }]}>
+              <Feather name="dollar-sign" size={24} color="#16a34a" />
+            </View>
+            <Text style={styles.menuTitle}>Pendapatan</Text>
+            <Text style={styles.menuSub}>Komisi & Absensi</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.menuCard} onPress={() => router.push('/(sales)/visits')}>
             <View style={[styles.menuIcon, { backgroundColor: '#f0fdf4' }]}>
               <Feather name="map-pin" size={24} color="#16a34a" />
@@ -488,20 +506,20 @@ export default function SalesHome() {
             <Text style={styles.menuSub}>Daftar outlet binaan</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuCard} onPress={() => router.push('/(sales)/new-dealer')}>
-            <View style={[styles.menuIcon, { backgroundColor: '#eff6ff' }]}>
-              <Feather name="user-plus" size={24} color="#2563eb" />
-            </View>
-            <Text style={styles.menuTitle}>Toko Baru</Text>
-            <Text style={styles.menuSub}>Registrasi prospek</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity style={styles.menuCard} onPress={() => router.push('/(sales)/create-order')}>
             <View style={[styles.menuIcon, { backgroundColor: '#fef3c7' }]}>
               <Feather name="file-text" size={24} color="#d97706" />
             </View>
             <Text style={styles.menuTitle}>Pesanan Toko</Text>
             <Text style={styles.menuSub}>Detail order binaan</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuCard} onPress={() => router.push('/(sales)/new-dealer')}>
+            <View style={[styles.menuIcon, { backgroundColor: '#eff6ff' }]}>
+              <Feather name="user-plus" size={24} color="#2563eb" />
+            </View>
+            <Text style={styles.menuTitle}>Toko Baru</Text>
+            <Text style={styles.menuSub}>Registrasi prospek</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuCard} onPress={() => router.push('/(sales)/leave')}>
