@@ -195,7 +195,7 @@ export default function PayrollPage() {
           .from('sales_targets')
           .select('*')
           .eq('sales_id', s.id)
-          .eq('period_month', selectedMonth)
+          .in('period_month', [selectedMonth, selectedMonth.slice(0, 3)])
           .eq('period_year', selectedYear)
           .maybeSingle();
 

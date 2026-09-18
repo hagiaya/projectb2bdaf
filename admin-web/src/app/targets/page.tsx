@@ -149,6 +149,9 @@ export default function TargetsPage() {
       }
 
       // 2. Fetch Targets for Month & Year
+      const monthShort = periodMonth.slice(0, 3);
+      const monthIso = `${periodYear}-${String(MONTHS.indexOf(periodMonth) + 1).padStart(2, '0')}`;
+
       const { data: tData, error: tError } = await supabase
         .from('sales_targets')
         .select(`
@@ -164,12 +167,17 @@ export default function TargetsPage() {
             )
           )
         `)
-        .eq('period_month', periodMonth)
+        .in('period_month', [periodMonth, monthShort, monthIso])
         .eq('period_year', periodYear)
         .order('created_at', { ascending: false });
 
       if (!tError && tData) {
-        setTargets(tData as any);
+        // Normalize period_month display to full month name
+        const normalizedTargets = tData.map((t: any) => ({
+          ...t,
+          period_month: periodMonth,
+        }));
+        setTargets(normalizedTargets as any);
       }
 
       // 3. Fetch Regions for Coverage Management
@@ -316,19 +324,36 @@ export default function TargetsPage() {
         updated_at: new Date().toISOString(),
       };
 
+      let saveError = null;
       if (editingTarget) {
         const { error } = await supabase
           .from('sales_targets')
           .update(payload)
           .eq('id', editingTarget.id);
 
-        if (error) throw error;
+        if (error) {
+          if (error.message?.includes('varying(7)')) {
+            const fbPayload = { ...payload, period_month: periodMonth.slice(0, 3) };
+            const { error: fErr } = await supabase.from('sales_targets').update(fbPayload).eq('id', editingTarget.id);
+            if (fErr) throw fErr;
+          } else {
+            throw error;
+          }
+        }
       } else {
         const { error } = await supabase
           .from('sales_targets')
           .upsert([payload], { onConflict: 'sales_id,period_month,period_year' });
 
-        if (error) throw error;
+        if (error) {
+          if (error.message?.includes('varying(7)')) {
+            const fbPayload = { ...payload, period_month: periodMonth.slice(0, 3) };
+            const { error: fErr } = await supabase.from('sales_targets').upsert([fbPayload], { onConflict: 'sales_id,period_month,period_year' });
+            if (fErr) throw fErr;
+          } else {
+            throw error;
+          }
+        }
       }
 
       setIsModalOpen(false);
