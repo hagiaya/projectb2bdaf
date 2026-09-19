@@ -178,6 +178,13 @@ export default function DealerProgramsScreen() {
   const [beforePhotoUri, setBeforePhotoUri] = useState<string | null>(null);
   const [beforePhotoBase64, setBeforePhotoBase64] = useState<string | null>(null);
 
+  // Change Item Modal State (Ganti / Pilih Barang Display)
+  const [changeItemModalVisible, setChangeItemModalVisible] = useState(false);
+  const [activeProgramForChangeItem, setActiveProgramForChangeItem] = useState<DealerProgram | null>(null);
+  const [activeParticipantForChangeItem, setActiveParticipantForChangeItem] = useState<ParticipantRecord | null>(null);
+  const [selectedItemInModal, setSelectedItemInModal] = useState<SupportItem>(DEFAULT_SUPPORT_ITEMS[0]);
+  const [savingChangeItem, setSavingChangeItem] = useState(false);
+
   // Documentation After Modal State (Setelah Barang Tiba)
   const [afterModalVisible, setAfterModalVisible] = useState(false);
   const [activeAfterParticipant, setActiveAfterParticipant] = useState<ParticipantRecord | null>(null);
@@ -380,9 +387,16 @@ export default function DealerProgramsScreen() {
   const parseParticipantItem = (participant?: ParticipantRecord | null) => {
     if (!participant) return null;
     if (participant.selected_item_name) {
+      const matched = DEFAULT_SUPPORT_ITEMS.find(
+        (i) =>
+          i.id === participant.selected_item_id ||
+          participant.selected_item_name?.toUpperCase().includes(i.code.toUpperCase()) ||
+          participant.selected_item_name?.toUpperCase().includes(i.name.toUpperCase())
+      );
       return {
+        id: participant.selected_item_id || matched?.id || 'dlp17',
         name: participant.selected_item_name,
-        target: participant.custom_target_amount,
+        target: participant.custom_target_amount || matched?.min_purchase,
       };
     }
     if (participant.claim_notes && participant.claim_notes.includes('[PILIHAN ITEM:')) {
@@ -390,13 +404,172 @@ export default function DealerProgramsScreen() {
         /\[PILIHAN ITEM:\s*([^|\]]+)(?:\|\s*Min\.\s*Belanja:\s*Rp\s*([^\]]+))?\]/
       );
       if (match) {
+        const rawName = match[1]?.trim() || '';
+        const matched = DEFAULT_SUPPORT_ITEMS.find(
+          (i) =>
+            rawName.toUpperCase().includes(i.code.toUpperCase()) ||
+            rawName.toUpperCase().includes(i.name.toUpperCase())
+        );
         return {
-          name: match[1]?.trim() || '',
-          target: match[2] ? parseFloat(match[2].replace(/[^0-9]/g, '')) : undefined,
+          id: matched?.id || participant.selected_item_id || 'dlp17',
+          name: rawName,
+          target: match[2] ? parseFloat(match[2].replace(/[^0-9]/g, '')) : (matched?.min_purchase || undefined),
         };
       }
     }
     return null;
+  };
+
+  // Direct selection & switching of support item (Works for both Real & Demo accounts)
+  const handleSelectSupportItem = async (
+    program: DealerProgram,
+    item: SupportItem,
+    participant?: ParticipantRecord | null
+  ) => {
+    // Case 1: Participant already enrolled in this program -> Update / Switch Chosen Item
+    if (participant) {
+      const executeUpdate = async () => {
+        setSavingChangeItem(true);
+        try {
+          const itemName = `${item.code} - ${item.name}`;
+          const newTarget = item.min_purchase;
+          const currentProgress = Number(participant.current_progress_amount) || 0;
+          const isAchieved = currentProgress >= newTarget;
+
+          let newStatus = participant.status;
+          if (participant.status === 'ENROLLED' || participant.status === 'ACHIEVED') {
+            newStatus = isAchieved ? 'ACHIEVED' : 'ENROLLED';
+          }
+
+          let updatedNotes = participant.claim_notes || '';
+          const itemPattern = /\[PILIHAN ITEM:[^\]]+\]/;
+          const newItemTag = `[PILIHAN ITEM: ${itemName} | Min. Belanja: Rp ${newTarget.toLocaleString('id-ID')}]`;
+          if (itemPattern.test(updatedNotes)) {
+            updatedNotes = updatedNotes.replace(itemPattern, newItemTag);
+          } else {
+            updatedNotes = `${newItemTag}\n${updatedNotes}`.trim();
+          }
+
+          const payload: any = {
+            selected_item_id: item.id,
+            selected_item_name: itemName,
+            custom_target_amount: newTarget,
+            status: newStatus,
+            claim_notes: updatedNotes,
+          };
+
+          // If real database record in Supabase
+          if (currentDealerId && !participant.id.startsWith('demo-')) {
+            const { error } = await supabase
+              .from('dealer_program_participants')
+              .update(payload)
+              .eq('id', participant.id);
+
+            if (error) {
+              console.warn('Fallback update without selected_item columns:', error.message);
+              await supabase
+                .from('dealer_program_participants')
+                .update({
+                  status: newStatus,
+                  claim_notes: updatedNotes,
+                })
+                .eq('id', participant.id);
+            }
+          }
+
+          // Local state update (Works for both Demo and Real)
+          setMyParticipants((prev) =>
+            prev.map((p) =>
+              p.id === participant.id
+                ? {
+                    ...p,
+                    selected_item_id: item.id,
+                    selected_item_name: itemName,
+                    custom_target_amount: newTarget,
+                    status: newStatus,
+                    claim_notes: updatedNotes,
+                  }
+                : p
+            )
+          );
+
+          setChangeItemModalVisible(false);
+
+          const statusMsg = isAchieved
+            ? `🎉 Omset belanja Anda (Rp ${currentProgress.toLocaleString('id-ID')}) sudah tembus target minimal item ini! Tombol klaim telah terbuka.`
+            : `Target belanja toko disesuaikan menjadi Rp ${newTarget.toLocaleString('id-ID')} (Kurang Rp ${(newTarget - currentProgress).toLocaleString('id-ID')}).`;
+
+          const alertTitle = 'Pilihan Barang Berhasil Dipilih ✅';
+          const alertBody = `${itemName}\n\n${statusMsg}`;
+          if (Platform.OS === 'web') window.alert(`${alertTitle}\n\n${alertBody}`);
+          else Alert.alert(alertTitle, alertBody);
+        } catch (err: any) {
+          Alert.alert('Gagal Mengubah Item', err.message || 'Terjadi kesalahan.');
+        } finally {
+          setSavingChangeItem(false);
+        }
+      };
+
+      const promptMsg = `Ubah pilihan hadiah display toko Anda menjadi:\n"${item.code} - ${item.name}"?\n\nTarget minimal belanja akan disesuaikan menjadi Rp ${item.min_purchase.toLocaleString('id-ID')}.`;
+      if (Platform.OS === 'web') {
+        if (window.confirm(promptMsg)) {
+          executeUpdate();
+        }
+      } else {
+        Alert.alert('Ganti Pilihan Barang Display 🎁', promptMsg, [
+          { text: 'Batal', style: 'cancel' },
+          { text: 'Ya, Ganti Item', onPress: executeUpdate },
+        ]);
+      }
+      return;
+    }
+
+    // Case 2: Not yet enrolled in this program
+    // Check if enrolled in another program (Rule 1)
+    if (activeParticipant && activeParticipant.program_id !== program.id) {
+      const alertMsg = `Toko Anda sedang aktif pada program:\n"${activeEnrolledProgram?.title || 'Program Reward'}".\n\nSesuai ketentuan, setiap toko hanya dapat mengikuti 1 program aktif.`;
+      if (Platform.OS === 'web') window.alert(alertMsg);
+      else Alert.alert('Ketentuan 1 Program Aktif 🔒', alertMsg);
+      return;
+    }
+
+    // Open enrollment modal with this item pre-selected!
+    setProgramToEnroll(program);
+    setSelectedSupportItem(item);
+    setBeforePhotoUri(null);
+    setBeforePhotoBase64(null);
+    setPlacementNotes('');
+    setApplicationModalVisible(true);
+  };
+
+  // Helper for demo progress simulation
+  const handleSimulateDemoProgress = (participantId: string, amountToAdd: number, resetTo?: number) => {
+    setMyParticipants((prev) =>
+      prev.map((p) => {
+        if (p.id !== participantId) return p;
+        const matchedProg = programs.find((pr) => pr.id === p.program_id);
+        const effectiveTarget = p.custom_target_amount || matchedProg?.target_amount || 8000000;
+
+        let newAmount = 0;
+        if (resetTo !== undefined) {
+          newAmount = resetTo;
+        } else {
+          newAmount = Math.max(0, (p.current_progress_amount || 0) + amountToAdd);
+        }
+
+        const isAchieved = newAmount >= effectiveTarget;
+        let newStatus = p.status;
+        if (p.status === 'ENROLLED' || p.status === 'ACHIEVED') {
+          newStatus = isAchieved ? 'ACHIEVED' : 'ENROLLED';
+        }
+
+        return {
+          ...p,
+          current_progress_amount: newAmount,
+          status: newStatus,
+        };
+      })
+    );
   };
 
   // RULE 1: Only 1 active program at any time
@@ -1057,26 +1230,121 @@ export default function DealerProgramsScreen() {
                       <Text style={styles.rewardDesc}>{prog.reward_description}</Text>
                     </View>
 
-                    {/* KHUSUS PROGRAM BARANG_SUPPORT: Pilihan Katalog 10 Item & Tombol Brosur */}
+                    {/* KHUSUS PROGRAM BARANG_SUPPORT: Pilihan Interaktif 10 Item DAP */}
                     {prog.program_type === 'BARANG_SUPPORT' && (
-                      <View style={styles.supportCatalogNoticeBox}>
-                        <View style={styles.supportCatalogNoticeTop}>
+                      <View style={styles.interactiveSelectorBox}>
+                        <View style={styles.interactiveSelectorHeader}>
+                          <Feather name="layers" size={16} color="#15803d" />
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.supportCatalogNoticeTitle}>
-                              🎁 Katalog 10 Item Etalase & Display Resmi DAP
+                            <Text style={styles.interactiveSelectorTitle}>
+                              🎁 Pilihan 10 Item Display & Etalase Resmi DAP
                             </Text>
-                            <Text style={styles.supportCatalogNoticeSub}>
-                              Tersedia 10 pilihan: Kursi Toko, Rak Meja, Rak Dinding, Rak Putar, Rak Besar, Running Text LED, Rak Jumbo, Rak Island, hingga Etalase Showcase. Wajib sertakan foto BEFORE lokasi penempatan barang saat mendaftar!
+                            <Text style={styles.interactiveSelectorSub}>
+                              {isEnrolledInThisProg
+                                ? 'Ketuk salah satu barang untuk mengganti pilihan display toko Anda:'
+                                : 'Pilih salah satu barang display. Target belanja toko Anda otomatis mengikuti minimal belanja item:'}
                             </Text>
                           </View>
                         </View>
-                        <TouchableOpacity
-                          style={styles.viewPosterBtn}
-                          onPress={() => setPosterModalVisible(true)}
+
+                        {/* Horizontal Scroll of 10 DAP Display Items */}
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={styles.itemChipsScroll}
                         >
-                          <Feather name="image" size={14} color="#15803d" />
-                          <Text style={styles.viewPosterBtnText}>Lihat Poster Brosur Resmi DAP</Text>
-                        </TouchableOpacity>
+                          {(prog.support_items || DEFAULT_SUPPORT_ITEMS).map((item) => {
+                            const isCurrentChosen =
+                              chosenItem?.id === item.id ||
+                              (chosenItem?.name && chosenItem.name.toUpperCase().includes(item.code.toUpperCase()));
+
+                            return (
+                              <TouchableOpacity
+                                key={item.id}
+                                activeOpacity={0.8}
+                                style={[
+                                  styles.itemChipCard,
+                                  isCurrentChosen && styles.itemChipCardActive,
+                                ]}
+                                onPress={() => handleSelectSupportItem(prog, item, participant)}
+                              >
+                                <View style={styles.itemChipTop}>
+                                  <Text
+                                    style={[
+                                      styles.itemChipCode,
+                                      isCurrentChosen && styles.itemChipCodeActive,
+                                    ]}
+                                  >
+                                    {item.code}
+                                  </Text>
+                                  {isCurrentChosen && (
+                                    <View style={styles.itemChipActiveBadge}>
+                                      <Feather name="check" size={10} color="white" />
+                                      <Text style={styles.itemChipActiveBadgeText}>Dipilih</Text>
+                                    </View>
+                                  )}
+                                </View>
+
+                                <Text
+                                  style={[
+                                    styles.itemChipName,
+                                    isCurrentChosen && styles.itemChipNameActive,
+                                  ]}
+                                  numberOfLines={2}
+                                >
+                                  {item.name}
+                                </Text>
+
+                                <View
+                                  style={[
+                                    styles.itemChipPriceBadge,
+                                    isCurrentChosen && styles.itemChipPriceBadgeActive,
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.itemChipPriceText,
+                                      isCurrentChosen && styles.itemChipPriceTextActive,
+                                    ]}
+                                  >
+                                    Min. Rp {(item.min_purchase / 1000000).toFixed(item.min_purchase % 1000000 === 0 ? 0 : 1)} Jt
+                                  </Text>
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+
+                        {/* Action buttons row under chips */}
+                        <View style={styles.itemSelectorActionRow}>
+                          <TouchableOpacity
+                            style={styles.openItemModalBtn}
+                            onPress={() => {
+                              setActiveProgramForChangeItem(prog);
+                              setActiveParticipantForChangeItem(participant || null);
+                              const cur = (prog.support_items || DEFAULT_SUPPORT_ITEMS).find(
+                                (i) =>
+                                  i.id === chosenItem?.id ||
+                                  (chosenItem?.name && chosenItem.name.toUpperCase().includes(i.code.toUpperCase()))
+                              );
+                              setSelectedItemInModal(cur || DEFAULT_SUPPORT_ITEMS[0]);
+                              setChangeItemModalVisible(true);
+                            }}
+                          >
+                            <Feather name="grid" size={14} color="#15803d" />
+                            <Text style={styles.openItemModalBtnText}>
+                              {isEnrolledInThisProg ? 'Ganti / Buka Rincian 10 Item' : 'Lihat Rincian & Spesifikasi 10 Item'}
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={styles.openPosterMiniBtn}
+                            onPress={() => setPosterModalVisible(true)}
+                          >
+                            <Feather name="image" size={14} color="#047857" />
+                            <Text style={styles.openPosterMiniBtnText}>Poster Brosur</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     )}
 
@@ -1084,8 +1352,27 @@ export default function DealerProgramsScreen() {
                     {isEnrolledInThisProg && chosenItem?.name && (
                       <View style={styles.chosenItemBox}>
                         <View style={styles.chosenItemHeader}>
-                          <Feather name="check-circle" size={15} color="#16a34a" />
-                          <Text style={styles.chosenItemHeaderTitle}>Item Support Pilihan Toko Anda:</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                            <Feather name="check-circle" size={15} color="#16a34a" />
+                            <Text style={styles.chosenItemHeaderTitle}>Item Support Pilihan Toko Anda:</Text>
+                          </View>
+                          <TouchableOpacity
+                            style={styles.changeItemQuickBtn}
+                            onPress={() => {
+                              setActiveProgramForChangeItem(prog);
+                              setActiveParticipantForChangeItem(participant);
+                              const cur = (prog.support_items || DEFAULT_SUPPORT_ITEMS).find(
+                                (i) =>
+                                  i.id === chosenItem?.id ||
+                                  (chosenItem?.name && chosenItem.name.toUpperCase().includes(i.code.toUpperCase()))
+                              );
+                              setSelectedItemInModal(cur || DEFAULT_SUPPORT_ITEMS[0]);
+                              setChangeItemModalVisible(true);
+                            }}
+                          >
+                            <Feather name="refresh-cw" size={11} color="#15803d" />
+                            <Text style={styles.changeItemQuickBtnText}>Ganti Pilihan</Text>
+                          </TouchableOpacity>
                         </View>
                         <Text style={styles.chosenItemName}>{chosenItem.name}</Text>
                         <View style={styles.chosenItemTargetRow}>
@@ -1191,6 +1478,42 @@ export default function DealerProgramsScreen() {
                             </Text>
                           )}
                         </View>
+
+                        {/* DEMO SIMULATION BAR (UNTUK UJI COBA OMSET & TARGET) */}
+                        {(!currentDealerId || participant?.id.startsWith('demo-')) && (
+                          <View style={styles.demoSimulationBox}>
+                            <View style={styles.demoSimulationHeader}>
+                              <Feather name="sliders" size={13} color="#2563eb" />
+                              <Text style={styles.demoSimulationTitle}>Simulasi Uji Coba Demo (Ubah Omset):</Text>
+                            </View>
+                            <View style={styles.demoSimulationButtonsRow}>
+                              <TouchableOpacity
+                                style={styles.demoSimBtn}
+                                onPress={() => handleSimulateDemoProgress(participant.id, 1000000)}
+                              >
+                                <Text style={styles.demoSimBtnText}>+ Rp 1 Jt</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.demoSimBtn}
+                                onPress={() => handleSimulateDemoProgress(participant.id, 5000000)}
+                              >
+                                <Text style={styles.demoSimBtnText}>+ Rp 5 Jt</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.demoSimBtn, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}
+                                onPress={() => handleSimulateDemoProgress(participant.id, 0, effectiveTarget)}
+                              >
+                                <Text style={[styles.demoSimBtnText, { color: '#15803d' }]}>🎯 100% Target</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.demoSimBtn, { backgroundColor: '#fee2e2', borderColor: '#fca5a5' }]}
+                                onPress={() => handleSimulateDemoProgress(participant.id, 0, 0)}
+                              >
+                                <Text style={[styles.demoSimBtnText, { color: '#b91c1c' }]}>🔄 Reset 0</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        )}
 
                         {/* STATUS NOTIFICATION BADGES */}
                         {isAchieved && participant?.status === 'ENROLLED' && (
@@ -1557,6 +1880,21 @@ export default function DealerProgramsScreen() {
                         <Text style={styles.galleryBtnText}>Pilih Galeri</Text>
                       </TouchableOpacity>
                     </View>
+
+                    {/* Tombol Foto Sampel Demo */}
+                    <TouchableOpacity
+                      style={styles.demoSamplePhotoBtn}
+                      onPress={() => {
+                        setBeforePhotoUri('https://images.unsplash.com/photo-1581783342308-f792dbdd27c5?w=600');
+                        setBeforePhotoBase64(null);
+                        setPlacementNotes('Area depan kasir toko (Foto Sampel Uji Coba Demo)');
+                        if (Platform.OS === 'web') window.alert('Foto sampel toko berhasil dimuat untuk pengujian!');
+                        else Alert.alert('Foto Sampel Toko 📸', 'Foto contoh sudut toko berhasil dimuat untuk pengujian.');
+                      }}
+                    >
+                      <Feather name="zap" size={14} color="#b45309" />
+                      <Text style={styles.demoSamplePhotoBtnText}>⚡ Gunakan Foto Contoh Toko (Uji Coba Demo)</Text>
+                    </TouchableOpacity>
                   </View>
                 )}
 
@@ -1600,6 +1938,140 @@ export default function DealerProgramsScreen() {
                     <Feather name="check" size={16} color="white" />
                     <Text style={styles.confirmSelectionBtnText}>
                       {beforePhotoUri ? 'Kirim Pengajuan & Ikuti Program' : 'Wajib Ambil Foto Before'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* MODAL 1B: KATALOG & GANTI PILIHAN BARANG DISPLAY (10 PILIHAN RESMI DAP) */}
+      {/* ========================================================================= */}
+      <Modal visible={changeItemModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { maxHeight: '92%' }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={styles.modalTitle}>Pilih Barang Display & Etalase</Text>
+                <Text style={styles.modalSubtitle}>
+                  {activeParticipantForChangeItem
+                    ? 'Pilih barang display baru. Target belanja toko Anda akan otomatis disesuaikan.'
+                    : 'Pilih barang display yang ingin Anda ikuti pada Program Support DAP.'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setChangeItemModalVisible(false)}
+              >
+                <Feather name="x" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 24 }}>
+              <View style={{ gap: 10, marginTop: 6 }}>
+                {(activeProgramForChangeItem?.support_items || DEFAULT_SUPPORT_ITEMS).map((item) => {
+                  const isSelected = selectedItemInModal?.id === item.id;
+                  const chosenDetail = parseParticipantItem(activeParticipantForChangeItem);
+                  const isCurrentlyEnrolledItem =
+                    chosenDetail?.id === item.id ||
+                    (chosenDetail?.name && chosenDetail.name.toUpperCase().includes(item.code.toUpperCase()));
+
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      activeOpacity={0.85}
+                      style={[
+                        styles.supportItemCard,
+                        isSelected && styles.supportItemCardSelected,
+                        isCurrentlyEnrolledItem && { borderColor: '#15803d', borderWidth: 2 },
+                      ]}
+                      onPress={() => setSelectedItemInModal(item)}
+                    >
+                      <View
+                        style={[
+                          styles.radioCircle,
+                          isSelected && styles.radioCircleSelected,
+                        ]}
+                      >
+                        {isSelected && <View style={styles.radioDot} />}
+                      </View>
+
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.itemCodeRow}>
+                          <View style={styles.itemCodeBadge}>
+                            <Text style={styles.itemCodeBadgeText}>{item.code}</Text>
+                          </View>
+                          {item.category && (
+                            <Text style={styles.itemCategoryText}>{item.category}</Text>
+                          )}
+                          {isCurrentlyEnrolledItem && (
+                            <View style={styles.currentlyChosenBadge}>
+                              <Feather name="check" size={10} color="white" />
+                              <Text style={styles.currentlyChosenBadgeText}>Pilihan Saat Ini</Text>
+                            </View>
+                          )}
+                        </View>
+
+                        <Text style={styles.supportItemName}>{item.name}</Text>
+                        {item.dimensions && (
+                          <Text style={styles.supportItemDim}>Ukuran: {item.dimensions}</Text>
+                        )}
+                        {item.description && (
+                          <Text style={styles.supportItemDescText}>{item.description}</Text>
+                        )}
+
+                        <View style={styles.minPurchaseBadge}>
+                          <Text style={styles.minPurchaseBadgeLabel}>MIN. PEMBELIAN:</Text>
+                          <Text style={styles.minPurchaseBadgeValue}>
+                            Rp {Number(item.min_purchase).toLocaleString('id-ID')}
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={styles.selectionFooter}>
+              {selectedItemInModal && (
+                <View style={styles.selectionFooterInfo}>
+                  <Text style={styles.selectionFooterLabel}>Barang yang Dipilih:</Text>
+                  <Text style={styles.selectionFooterName} numberOfLines={1}>
+                    {selectedItemInModal.code} - {selectedItemInModal.name}
+                  </Text>
+                  <Text style={styles.selectionFooterTarget}>
+                    Target Akumulasi Belanja: Rp {Number(selectedItemInModal.min_purchase).toLocaleString('id-ID')}
+                  </Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={styles.confirmSelectionBtn}
+                onPress={() => {
+                  if (activeProgramForChangeItem && selectedItemInModal) {
+                    handleSelectSupportItem(
+                      activeProgramForChangeItem,
+                      selectedItemInModal,
+                      activeParticipantForChangeItem
+                    );
+                  }
+                }}
+                disabled={savingChangeItem || !selectedItemInModal}
+              >
+                {savingChangeItem ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <>
+                    <Feather name="check-circle" size={16} color="white" />
+                    <Text style={styles.confirmSelectionBtnText}>
+                      {activeParticipantForChangeItem
+                        ? 'Simpan & Ganti Pilihan Barang Toko'
+                        : 'Pilih Barang Ini & Ajukan Program'}
                     </Text>
                   </>
                 )}
@@ -1710,6 +2182,21 @@ export default function DealerProgramsScreen() {
                         <Text style={styles.galleryBtnText}>Pilih Galeri</Text>
                       </TouchableOpacity>
                     </View>
+
+                    {/* Tombol Foto Sampel Demo After */}
+                    <TouchableOpacity
+                      style={styles.demoSamplePhotoBtn}
+                      onPress={() => {
+                        setAfterPhotoUri('https://images.unsplash.com/photo-1555421689-491a97ff2040?w=600');
+                        setAfterPhotoBase64(null);
+                        setAfterNotes('Barang display DAP telah tiba dan selesai dirakit rapi di toko (Foto Sampel Uji Coba Demo)');
+                        if (Platform.OS === 'web') window.alert('Foto sampel rak terpasang berhasil dimuat untuk pengujian!');
+                        else Alert.alert('Foto Sampel Terpasang ✨', 'Foto contoh rak selesai dirakit berhasil dimuat untuk pengujian.');
+                      }}
+                    >
+                      <Feather name="zap" size={14} color="#b45309" />
+                      <Text style={styles.demoSamplePhotoBtnText}>⚡ Gunakan Foto Contoh Rak Terpasang (Uji Coba Demo)</Text>
+                    </TouchableOpacity>
                   </View>
                 )}
 
@@ -2126,7 +2613,153 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // Support Catalog Banner Box
+  // Support Catalog Interactive Box
+  interactiveSelectorBox: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1.5,
+    borderColor: '#bbf7d0',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
+  },
+  interactiveSelectorHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 8,
+  },
+  interactiveSelectorTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#166534',
+  },
+  interactiveSelectorSub: {
+    fontSize: 11,
+    color: '#15803d',
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  itemChipsScroll: {
+    paddingVertical: 6,
+    gap: 10,
+  },
+  itemChipCard: {
+    width: 140,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    padding: 10,
+    justifyContent: 'space-between',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  itemChipCardActive: {
+    borderColor: '#16a34a',
+    backgroundColor: '#ecfdf5',
+    borderWidth: 2,
+  },
+  itemChipTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  itemChipCode: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#334155',
+  },
+  itemChipCodeActive: {
+    color: '#15803d',
+  },
+  itemChipActiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#16a34a',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  itemChipActiveBadgeText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  itemChipName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1e293b',
+    minHeight: 28,
+    lineHeight: 14,
+  },
+  itemChipNameActive: {
+    color: '#065f46',
+    fontWeight: '700',
+  },
+  itemChipPriceBadge: {
+    marginTop: 6,
+    backgroundColor: '#fef08a',
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 5,
+    alignSelf: 'flex-start',
+  },
+  itemChipPriceBadgeActive: {
+    backgroundColor: '#16a34a',
+  },
+  itemChipPriceText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#713f12',
+  },
+  itemChipPriceTextActive: {
+    color: 'white',
+  },
+  itemSelectorActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  openItemModalBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#dcfce7',
+    borderWidth: 1,
+    borderColor: '#86efac',
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  openItemModalBtnText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#166534',
+  },
+  openPosterMiniBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  openPosterMiniBtnText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#047857',
+  },
+
   supportCatalogNoticeBox: {
     backgroundColor: '#f0fdf4',
     borderWidth: 1,
@@ -2180,8 +2813,25 @@ const styles = StyleSheet.create({
   chosenItemHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 6,
-    marginBottom: 4,
+    marginBottom: 6,
+  },
+  changeItemQuickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fef08a',
+    borderWidth: 1,
+    borderColor: '#facc15',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  changeItemQuickBtnText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#854d0e',
   },
   chosenItemHeaderTitle: {
     fontSize: 11,
@@ -2362,6 +3012,43 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748b',
     fontStyle: 'italic',
+  },
+  demoSimulationBox: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 8,
+  },
+  demoSimulationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  demoSimulationTitle: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#1d4ed8',
+  },
+  demoSimulationButtonsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  demoSimBtn: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#93c5fd',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  demoSimBtnText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#1e40af',
   },
   achievedNotice: {
     flexDirection: 'row',
@@ -3143,5 +3830,43 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  demoSamplePhotoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    paddingVertical: 9,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  demoSamplePhotoBtnText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#92400e',
+  },
+  currentlyChosenBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#15803d',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    marginLeft: 4,
+  },
+  currentlyChosenBadgeText: {
+    color: 'white',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  supportItemDescText: {
+    fontSize: 10,
+    color: '#475569',
+    lineHeight: 14,
+    marginBottom: 6,
   },
 });

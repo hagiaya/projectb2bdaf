@@ -1,15 +1,25 @@
 {
+  "cli": {
+    "version": ">= 10.0.0"
+  },
   "build": {
     "preview": {
+      "channel": "preview",
       "android": {
         "buildType": "apk"
       }
     },
     "preview2": {
+      "channel": "preview",
       "android": {
         "gradleCommand": ":app:assembleRelease"
       }
     },
-    "production": {}
+    "production": {
+      "channel": "production",
+      "android": {
+        "buildType": "apk"
+      }
+    }
   }
 }

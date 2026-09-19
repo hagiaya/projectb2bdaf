@@ -35,12 +35,41 @@ export default function SalesHome() {
   const [historyFilter, setHistoryFilter] = useState<'daily' | 'all' | 'sales' | 'visits'>('daily');
   const [historyTransactions, setHistoryTransactions] = useState<any[]>([]);
 
+  // Return Claims Notification State for Sales
+  const [returnAlerts, setReturnAlerts] = useState<any[]>([]);
+  const [returnModalVisible, setReturnModalVisible] = useState(false);
+
   // Image zoom preview
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
+    fetchReturnAlerts();
+
+    const returnSub = supabase
+      .channel('sales-return-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'returns' }, () => {
+        fetchReturnAlerts();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(returnSub);
+    };
   }, []);
+
+  const fetchReturnAlerts = async () => {
+    try {
+      const { data } = await supabase
+        .from('returns')
+        .select('id, return_number, reason, status, created_at, return_items, dealer_courier, dealer_shipping_receipt_no, replacement_shipping_receipt_no, dealers(store_name)')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (data) setReturnAlerts(data);
+    } catch (e) {
+      console.error('Fetch return alerts err:', e);
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -234,6 +263,7 @@ export default function SalesHome() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchDashboardData();
+    fetchReturnAlerts();
   };
 
   const handleCheckIn = async () => {
@@ -505,6 +535,37 @@ export default function SalesHome() {
           </View>
         </View>
       </TouchableOpacity>
+
+      {/* Return Claims Alert Banner for Sales */}
+      {returnAlerts.length > 0 && (
+        <TouchableOpacity
+          style={styles.returnAlertBanner}
+          activeOpacity={0.88}
+          onPress={() => setReturnModalVisible(true)}
+        >
+          <View style={styles.returnAlertLeft}>
+            <View style={styles.returnAlertIconCircle}>
+              <Feather name="refresh-cw" size={16} color="#b45309" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.returnAlertTitle}>Notifikasi Retur Dealer</Text>
+                {returnAlerts.filter(r => r.status !== 'COMPLETED' && r.status !== 'REJECTED' && r.status !== 'PROCESSED').length > 0 && (
+                  <View style={styles.returnActiveBadge}>
+                    <Text style={styles.returnActiveBadgeText}>
+                      {returnAlerts.filter(r => r.status !== 'COMPLETED' && r.status !== 'REJECTED' && r.status !== 'PROCESSED').length} Aktif
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.returnAlertSubtitle} numberOfLines={1}>
+                {returnAlerts[0]?.dealers?.store_name || 'Dealer'}: {returnAlerts[0]?.return_number} ({returnAlerts[0]?.status || 'Pengajuan'})
+              </Text>
+            </View>
+          </View>
+          <Feather name="chevron-right" size={18} color="#b45309" />
+        </TouchableOpacity>
+      )}
 
       {/* Attendance Section */}
       <View style={styles.section}>
@@ -1088,6 +1149,98 @@ export default function SalesHome() {
           )}
         </View>
       </Modal>
+
+      {/* MODAL NOTIFIKASI RETUR DEALER UNTUK SALES */}
+      <Modal
+        visible={returnModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReturnModalVisible(false)}
+      >
+        <View style={styles.returnModalOverlay}>
+          <View style={styles.returnModalCard}>
+            <View style={styles.returnModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={styles.returnModalIcon}>
+                  <Feather name="refresh-cw" size={18} color="#b45309" />
+                </View>
+                <View>
+                  <Text style={styles.returnModalTitle}>Pengajuan Retur Dealer</Text>
+                  <Text style={styles.returnModalSub}>Daftar klaim garansi & retur terkini</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setReturnModalVisible(false)} style={{ padding: 4 }}>
+                <Feather name="x" size={22} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 420, padding: 16 }} showsVerticalScrollIndicator={false}>
+              {returnAlerts.length === 0 ? (
+                <View style={{ alignItems: 'center', padding: 24 }}>
+                  <Text style={{ color: '#94a3b8', fontSize: 13 }}>Tidak ada pengajuan retur aktif.</Text>
+                </View>
+              ) : (
+                returnAlerts.map((ret) => (
+                  <View key={ret.id} style={styles.returnCardItem}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.returnItemNumber}>{ret.return_number}</Text>
+                        <Text style={styles.returnItemStore}>Toko: {ret.dealers?.store_name || 'Dealer B2B'}</Text>
+                      </View>
+                      <View style={[
+                        styles.returnItemBadge,
+                        {
+                          backgroundColor: ret.status === 'COMPLETED' ? '#dcfce7' : ret.status === 'REPLACEMENT_SHIPPED' ? '#ccfbf1' : '#fef3c7',
+                        }
+                      ]}>
+                        <Text style={[
+                          styles.returnItemBadgeText,
+                          {
+                            color: ret.status === 'COMPLETED' ? '#166534' : ret.status === 'REPLACEMENT_SHIPPED' ? '#115e59' : '#92400e',
+                          }
+                        ]}>
+                          {ret.status}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.returnItemReason} numberOfLines={2}>
+                      {ret.reason?.startsWith('{') ? 'Klaim Retur Barang (Multi-SKU)' : (ret.reason || 'Klaim Retur')}
+                    </Text>
+
+                    {ret.dealer_shipping_receipt_no && (
+                      <View style={styles.returnResiRow}>
+                        <Feather name="truck" size={12} color="#2563eb" />
+                        <Text style={styles.returnResiText}>
+                          Resi Dealer: {ret.dealer_courier || 'Kurir'} - {ret.dealer_shipping_receipt_no}
+                        </Text>
+                      </View>
+                    )}
+
+                    {ret.replacement_shipping_receipt_no && (
+                      <View style={[styles.returnResiRow, { backgroundColor: '#f0fdfa' }]}>
+                        <Feather name="check-circle" size={12} color="#0d9488" />
+                        <Text style={[styles.returnResiText, { color: '#0d9488' }]}>
+                          Resi Pengganti DAP: {ret.replacement_shipping_receipt_no}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ))
+              )}
+            </ScrollView>
+
+            <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: '#f1f5f9' }}>
+              <TouchableOpacity
+                onPress={() => setReturnModalVisible(false)}
+                style={styles.closeReturnModalBtn}
+              >
+                <Text style={styles.closeReturnModalBtnText}>Tutup</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -1661,5 +1814,156 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '700',
+  },
+  // Return Alert Banner & Modal Styles for Sales
+  returnAlertBanner: {
+    backgroundColor: '#fffbeb',
+    borderRadius: 16,
+    padding: 14,
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    elevation: 2,
+    shadowColor: '#b45309',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  returnAlertLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  returnAlertIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#fef3c7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  returnAlertTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#92400e',
+  },
+  returnActiveBadge: {
+    backgroundColor: '#d97706',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+  },
+  returnActiveBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: 'white',
+  },
+  returnAlertSubtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#b45309',
+    marginTop: 2,
+  },
+  returnModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'flex-end',
+  },
+  returnModalCard: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
+  },
+  returnModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  returnModalIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#fef3c7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  returnModalTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  returnModalSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+    marginTop: 1,
+  },
+  returnCardItem: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 10,
+  },
+  returnItemNumber: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#0f172a',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  returnItemStore: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+    marginTop: 2,
+  },
+  returnItemBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  returnItemBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  returnItemReason: {
+    fontSize: 12,
+    color: '#334155',
+    marginTop: 6,
+  },
+  returnResiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    backgroundColor: '#eff6ff',
+    padding: 6,
+    borderRadius: 6,
+  },
+  returnResiText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2563eb',
+  },
+  closeReturnModalBtn: {
+    backgroundColor: '#f1f5f9',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  closeReturnModalBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#475569',
   },
 });

@@ -19,9 +19,15 @@ import {
   Archive,
   History,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  ZoomIn,
+  ImageIcon,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import ProductImage from '@/components/ProductImage';
+import { getProductImageUrl, getProductImages, getPrimaryProductImage } from '@/lib/image';
 
 interface Product {
   id: string; // UUID from supabase
@@ -32,6 +38,7 @@ interface Product {
   stock: number;
   status: string;
   sort_order?: number;
+  image_url?: string | null;
   image_urls?: string[];
   categories?: { name: string }; // joined data
 }
@@ -52,6 +59,7 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState('priority'); // 'priority' | 'name_asc' | 'price_asc' | 'price_desc' | 'stock_desc' | 'newest'
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
   const ITEMS_PER_PAGE = 20;
 
   // Form State for Add / Edit Product
@@ -77,6 +85,9 @@ export default function ProductsPage() {
   const [quickRestockAmount, setQuickRestockAmount] = useState('');
   const [quickRestockNotes, setQuickRestockNotes] = useState('');
   const [isSavingStock, setIsSavingStock] = useState(false);
+
+  // Lightbox Image Preview Modal
+  const [previewModalImage, setPreviewModalImage] = useState<{ url: string; title: string; allUrls: string[] } | null>(null);
 
   const handleOpenStockMonitoring = async (product: Product) => {
     setStockMonitoringProduct(product);
@@ -211,7 +222,8 @@ export default function ProductsPage() {
     setNewPrice(product.price.toString());
     setNewStock(product.stock.toString());
     setNewSortOrder((product.sort_order ?? (index + 1)).toString());
-    setNewImageUrls(product.image_urls ? product.image_urls.join(', ') : '');
+    const existingUrls = getProductImages(product);
+    setNewImageUrls(existingUrls.join(', '));
     setIsModalOpen(true);
   };
 
@@ -222,6 +234,7 @@ export default function ProductsPage() {
     setIsSaving(true);
     const stockNum = parseInt(newStock);
     const orderNum = parseInt(newSortOrder) || 1;
+    const parsedUrls = newImageUrls ? newImageUrls.split(',').map(u => u.trim()).filter(Boolean) : [];
 
     const prodData: any = {
       name: newProductName,
@@ -231,7 +244,8 @@ export default function ProductsPage() {
       stock: stockNum,
       sort_order: orderNum,
       status: stockNum > 20 ? 'ACTIVE' : 'LOW_STOCK',
-      image_urls: newImageUrls ? newImageUrls.split(',').map(u => u.trim()).filter(Boolean) : [],
+      image_urls: parsedUrls,
+      image_url: parsedUrls[0] || null,
     };
 
     if (editingProduct) {
@@ -409,6 +423,14 @@ export default function ProductsPage() {
     }
   };
 
+  const formatRupiah = (val: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+    }).format(val || 0);
+  };
+
   // Filtering and Sorting
   const filteredProducts = products.filter((p) => {
     const catName = p.categories?.name || '';
@@ -556,144 +578,354 @@ export default function ProductsPage() {
                 <option value="newest">Urut: Terbaru Ditambahkan</option>
               </select>
             </div>
+
+            {/* View Mode Switcher */}
+            <div className="flex items-center bg-gray-200/70 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-white text-emerald-800 shadow-xs'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+                title="Tampilan Tabel"
+              >
+                <List size={15} />
+                <span className="hidden sm:inline">Tabel</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-emerald-800 shadow-xs'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+                title="Tampilan Grid Kartu"
+              >
+                <LayoutGrid size={15} />
+                <span className="hidden sm:inline">Grid</span>
+              </button>
+            </div>
           </div>
         </div>
         
-        {/* TABLE */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-white text-gray-500 text-xs uppercase tracking-wider">
-                <th className="p-4 font-semibold border-b border-gray-100 text-center w-28">Prioritas</th>
-                <th className="p-4 font-semibold border-b border-gray-100">Nama Produk</th>
-                <th className="p-4 font-semibold border-b border-gray-100">SKU</th>
-                <th className="p-4 font-semibold border-b border-gray-100">Kategori</th>
-                <th className="p-4 font-semibold border-b border-gray-100">Gambar</th>
-                <th className="p-4 font-semibold border-b border-gray-100">Harga Dealer</th>
-                <th className="p-4 font-semibold border-b border-gray-100">Stok</th>
-                <th className="p-4 font-semibold border-b border-gray-100">Status</th>
-                <th className="p-4 font-semibold border-b border-gray-100 text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="text-sm divide-y divide-gray-50">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={9} className="p-8 text-center text-gray-500 font-medium">Memuat data dari Supabase...</td>
-                </tr>
-              ) : filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="p-8 text-center text-gray-500 font-medium">Belum ada produk ditemukan.</td>
-                </tr>
-              ) : paginatedProducts.map((product, idx) => {
-                const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + idx;
-                const currentRank = product.sort_order ?? (globalIndex + 1);
+        {/* PRODUCTS VIEW: TABLE OR GRID */}
+        {viewMode === 'grid' ? (
+          <div className="p-5">
+            {isLoading ? (
+              <div className="p-12 text-center text-gray-400 font-medium">Memuat data dari Supabase...</div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="p-12 text-center text-gray-400 font-medium">Belum ada produk ditemukan.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {paginatedProducts.map((product, idx) => {
+                  const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + idx;
+                  const currentRank = product.sort_order ?? (globalIndex + 1);
+                  const images = getProductImages(product);
+                  const primaryImg = getPrimaryProductImage(product);
+                  const isLowStock = product.stock <= 20 && product.stock > 0;
+                  const isOutOfStock = product.stock === 0;
 
-                return (
-                  <tr key={product.id} className="hover:bg-emerald-50/30 transition-colors group">
-                    {/* Urutan / Prioritas */}
-                    <td className="p-4 text-center">
-                      <div className="inline-flex items-center gap-1">
-                        <span className="px-2 py-1 rounded-lg text-xs font-black bg-emerald-100/70 text-emerald-800 border border-emerald-200">
-                          #{currentRank}
-                        </span>
-                        {sortBy === 'priority' && (
-                          <div className="flex flex-col gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => handleQuickMove(globalIndex, 'up')}
-                              disabled={globalIndex === 0}
-                              className="p-0.5 hover:text-emerald-700 disabled:opacity-20 cursor-pointer"
-                              title="Naikkan Prioritas"
-                            >
-                              <ArrowUp size={12} strokeWidth={2.5} />
-                            </button>
-                            <button
-                              onClick={() => handleQuickMove(globalIndex, 'down')}
-                              disabled={globalIndex === filteredProducts.length - 1}
-                              className="p-0.5 hover:text-emerald-700 disabled:opacity-20 cursor-pointer"
-                              title="Turunkan Prioritas"
-                            >
-                              <ArrowDown size={12} strokeWidth={2.5} />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
+                  return (
+                    <div
+                      key={product.id}
+                      className="bg-white rounded-2xl border border-gray-200/80 shadow-xs hover:shadow-md transition-all flex flex-col overflow-hidden group"
+                    >
+                      {/* Product Image Box */}
+                      <div className="relative aspect-square w-full bg-slate-50 overflow-hidden border-b border-gray-100 flex items-center justify-center">
+                        <ProductImage
+                          src={primaryImg}
+                          alt={product.name}
+                          className="w-full h-full object-contain p-3 group-hover:scale-105 transition-transform duration-300"
+                        />
 
-                    <td className="p-4 font-semibold text-gray-900">{product.name}</td>
-                    <td className="p-4 text-gray-500 font-medium">{product.sku}</td>
-                    <td className="p-4">
-                      <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200/60">
-                        {product.categories?.name || '-'}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      {product.image_urls && product.image_urls.length > 0 ? (
-                        <div className="flex -space-x-2">
-                          {product.image_urls.slice(0, 3).map((url, i) => (
-                            <img key={i} src={url} alt="" className="w-8 h-8 rounded-full border-2 border-white object-cover bg-gray-100" />
-                          ))}
-                          {product.image_urls.length > 3 && (
-                            <div className="w-8 h-8 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-600">
-                              +{product.image_urls.length - 3}
+                        {/* Priority Badge */}
+                        <div className="absolute top-2.5 left-2.5 flex items-center gap-1">
+                          <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-emerald-600 text-white shadow-xs">
+                            #{currentRank}
+                          </span>
+                          {sortBy === 'priority' && (
+                            <div className="flex bg-white/90 backdrop-blur-xs rounded-md shadow-xs p-0.5 border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => handleQuickMove(globalIndex, 'up')}
+                                disabled={globalIndex === 0}
+                                className="p-1 hover:text-emerald-700 disabled:opacity-20 cursor-pointer"
+                                title="Naikkan"
+                              >
+                                <ArrowUp size={11} strokeWidth={2.5} />
+                              </button>
+                              <button
+                                onClick={() => handleQuickMove(globalIndex, 'down')}
+                                disabled={globalIndex === filteredProducts.length - 1}
+                                className="p-1 hover:text-emerald-700 disabled:opacity-20 cursor-pointer"
+                                title="Turunkan"
+                              >
+                                <ArrowDown size={11} strokeWidth={2.5} />
+                              </button>
                             </div>
                           )}
                         </div>
-                      ) : (
-                        <span className="text-xs text-gray-400">Tidak ada</span>
-                      )}
-                    </td>
-                    <td className="p-4 text-gray-900 font-bold tracking-tight">Rp {product.price.toLocaleString('id-ID')}</td>
-                    <td className="p-4">
-                      <button
-                        onClick={() => handleOpenStockMonitoring(product)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                          product.stock <= 20 
-                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300' 
-                            : 'bg-slate-50 hover:bg-emerald-50 text-slate-800 hover:text-emerald-800 border border-slate-200'
-                        }`}
-                        title="Klik untuk Pantau Mutasi & Riwayat Stok"
-                      >
-                        <Archive size={12} className={product.stock <= 20 ? 'text-amber-600' : 'text-emerald-600'} />
-                        <span>{product.stock}</span>
-                      </button>
-                    </td>
-                    <td className="p-4">
-                      <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${product.status === 'ACTIVE' ? 'bg-emerald-100/50 text-emerald-700 border border-emerald-200/50' : 'bg-red-100/50 text-red-700 border border-red-200/50'}`}>
-                        <div className={`w-1.5 h-1.5 rounded-full ${product.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                        {product.status === 'ACTIVE' ? 'Aktif' : 'Stok Menipis'}
+
+                        {/* Lightbox Trigger */}
+                        {primaryImg && (
+                          <button
+                            onClick={() => setPreviewModalImage({ url: primaryImg, title: product.name, allUrls: images })}
+                            className="absolute top-2.5 right-2.5 p-1.5 bg-white/90 hover:bg-emerald-600 hover:text-white text-gray-700 rounded-lg shadow-xs opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                            title="Perbesar Gambar"
+                          >
+                            <ZoomIn size={14} />
+                          </button>
+                        )}
+
+                        {/* Stock Status Pill */}
+                        <div className="absolute bottom-2.5 left-2.5">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shadow-xs ${
+                            isOutOfStock
+                              ? 'bg-rose-500 text-white'
+                              : isLowStock
+                              ? 'bg-amber-500 text-white'
+                              : 'bg-emerald-500 text-white'
+                          }`}>
+                            {isOutOfStock ? 'Habis' : isLowStock ? 'Menipis' : 'Stok Aman'}
+                          </span>
+                        </div>
                       </div>
-                    </td>
-                    <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => handleOpenStockMonitoring(product)}
-                          className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                          title="Pantau Riwayat Stok & Restok"
-                        >
-                          <History size={16} />
-                        </button>
-                        <button 
-                          onClick={() => handleEditClick(product, globalIndex)}
-                          className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                          title="Edit Produk & Urutan"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteProduct(product.id)}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Hapus Produk"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+
+                      {/* Card Body */}
+                      <div className="p-4 flex-1 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide truncate">
+                              {product.categories?.name || 'Umum'}
+                            </span>
+                            <span className="text-[10px] font-semibold text-gray-400">
+                              {product.sku}
+                            </span>
+                          </div>
+
+                          <h3 className="font-bold text-gray-900 text-sm line-clamp-2 mb-2 group-hover:text-emerald-700 transition-colors" title={product.name}>
+                            {product.name}
+                          </h3>
+                        </div>
+
+                        <div>
+                          <div className="flex items-baseline justify-between mb-3">
+                            <p className="text-base font-black text-emerald-700">
+                              {formatRupiah(product.price)}
+                            </p>
+                            <button
+                              onClick={() => handleOpenStockMonitoring(product)}
+                              className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                product.stock <= 20
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100'
+                                  : 'bg-slate-100 text-slate-800 hover:bg-emerald-50 hover:text-emerald-800'
+                              }`}
+                              title="Lihat / Ubah Stok"
+                            >
+                              <Archive size={11} />
+                              <span>{product.stock} pcs</span>
+                            </button>
+                          </div>
+
+                          {/* Actions Footer */}
+                          <div className="flex items-center justify-between pt-2.5 border-t border-gray-100">
+                            <button
+                              onClick={() => handleOpenStockMonitoring(product)}
+                              className="text-xs font-semibold text-slate-600 hover:text-indigo-600 flex items-center gap-1 cursor-pointer"
+                            >
+                              <History size={13} />
+                              <span>Riwayat</span>
+                            </button>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleEditClick(product, globalIndex)}
+                                className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                                title="Edit Produk"
+                              >
+                                <Edit2 size={15} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProduct(product.id)}
+                                className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                title="Hapus Produk"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </td>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* TABLE VIEW */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-white text-gray-500 text-xs uppercase tracking-wider">
+                  <th className="p-4 font-semibold border-b border-gray-100 text-center w-28">Prioritas</th>
+                  <th className="p-4 font-semibold border-b border-gray-100">Nama Produk</th>
+                  <th className="p-4 font-semibold border-b border-gray-100">SKU</th>
+                  <th className="p-4 font-semibold border-b border-gray-100">Kategori</th>
+                  <th className="p-4 font-semibold border-b border-gray-100">Gambar</th>
+                  <th className="p-4 font-semibold border-b border-gray-100">Harga Dealer</th>
+                  <th className="p-4 font-semibold border-b border-gray-100">Stok</th>
+                  <th className="p-4 font-semibold border-b border-gray-100">Status</th>
+                  <th className="p-4 font-semibold border-b border-gray-100 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="text-sm divide-y divide-gray-50">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={9} className="p-8 text-center text-gray-500 font-medium">Memuat data dari Supabase...</td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                ) : filteredProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="p-8 text-center text-gray-500 font-medium">Belum ada produk ditemukan.</td>
+                  </tr>
+                ) : paginatedProducts.map((product, idx) => {
+                  const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + idx;
+                  const currentRank = product.sort_order ?? (globalIndex + 1);
+
+                  return (
+                    <tr key={product.id} className="hover:bg-emerald-50/30 transition-colors group">
+                      {/* Urutan / Prioritas */}
+                      <td className="p-4 text-center">
+                        <div className="inline-flex items-center gap-1">
+                          <span className="px-2 py-1 rounded-lg text-xs font-black bg-emerald-100/70 text-emerald-800 border border-emerald-200">
+                            #{currentRank}
+                          </span>
+                          {sortBy === 'priority' && (
+                            <div className="flex flex-col gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => handleQuickMove(globalIndex, 'up')}
+                                disabled={globalIndex === 0}
+                                className="p-0.5 hover:text-emerald-700 disabled:opacity-20 cursor-pointer"
+                                title="Naikkan Prioritas"
+                              >
+                                <ArrowUp size={12} strokeWidth={2.5} />
+                              </button>
+                              <button
+                                onClick={() => handleQuickMove(globalIndex, 'down')}
+                                disabled={globalIndex === filteredProducts.length - 1}
+                                className="p-0.5 hover:text-emerald-700 disabled:opacity-20 cursor-pointer"
+                                title="Turunkan Prioritas"
+                              >
+                                <ArrowDown size={12} strokeWidth={2.5} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="p-4 font-semibold text-gray-900">{product.name}</td>
+                      <td className="p-4 text-gray-500 font-medium">{product.sku}</td>
+                      <td className="p-4">
+                        <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200/60">
+                          {product.categories?.name || '-'}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        {(() => {
+                          const images = getProductImages(product);
+                          const primaryImg = getPrimaryProductImage(product);
+                          const count = images.length;
+
+                          return (
+                            <div 
+                              onClick={() => {
+                                if (primaryImg) {
+                                  setPreviewModalImage({
+                                    url: primaryImg,
+                                    title: product.name,
+                                    allUrls: images
+                                  });
+                                }
+                              }}
+                              className="relative inline-flex items-center group/img cursor-pointer"
+                              title={primaryImg ? 'Klik untuk perbesar foto' : 'Belum ada gambar'}
+                            >
+                              <div className="w-12 h-12 rounded-xl border border-gray-200 bg-white overflow-hidden flex items-center justify-center p-1 shadow-2xs group-hover/img:border-emerald-500 transition-all">
+                                <ProductImage
+                                  src={primaryImg}
+                                  alt={product.name}
+                                  className="w-full h-full object-contain"
+                                />
+                              </div>
+                              {primaryImg && (
+                                <div className="absolute inset-0 bg-black/30 rounded-xl opacity-0 group-hover/img:opacity-100 flex items-center justify-center text-white transition-opacity">
+                                  <ZoomIn size={14} />
+                                </div>
+                              )}
+                              {count > 1 && (
+                                <span className="absolute -top-1.5 -right-1.5 bg-emerald-600 text-white text-[10px] font-black rounded-full w-4 h-4 flex items-center justify-center shadow-xs">
+                                  {count}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td className="p-4 font-bold text-gray-900">{formatRupiah(product.price)}</td>
+                      <td className="p-4">
+                        <button
+                          onClick={() => handleOpenStockMonitoring(product)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                            product.stock <= 20 
+                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300' 
+                              : 'bg-slate-50 hover:bg-emerald-50 text-slate-800 hover:text-emerald-800 border border-slate-200'
+                          }`}
+                          title="Klik untuk Pantau Mutasi & Riwayat Stok"
+                        >
+                          <Archive size={12} className={product.stock <= 20 ? 'text-amber-600' : 'text-emerald-600'} />
+                          <span>{product.stock}</span>
+                        </button>
+                      </td>
+                      <td className="p-4">
+                        <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${product.status === 'ACTIVE' ? 'bg-emerald-100/50 text-emerald-700 border border-emerald-200/50' : 'bg-red-100/50 text-red-700 border border-red-200/50'}`}>
+                          <div className={`w-1.5 h-1.5 rounded-full ${product.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+                          {product.status === 'ACTIVE' ? 'Aktif' : 'Stok Menipis'}
+                        </div>
+                      </td>
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => handleOpenStockMonitoring(product)}
+                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                            title="Pantau Riwayat Stok & Restok"
+                          >
+                            <History size={16} />
+                          </button>
+                          <button 
+                            onClick={() => handleEditClick(product, globalIndex)}
+                            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Produk & Urutan"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteProduct(product.id)}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Hapus Produk"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* PAGINATION */}
         <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-50/50">
@@ -836,6 +1068,50 @@ export default function ProductsPage() {
                   onChange={(e) => setNewImageUrls(e.target.value)}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium placeholder:font-normal"
                 />
+
+                {/* Pratinjau Gambar Langsung */}
+                {(() => {
+                  const previewUrls = newImageUrls
+                    .split(',')
+                    .map(u => u.trim())
+                    .filter(Boolean);
+                  
+                  if (previewUrls.length === 0) return null;
+
+                  return (
+                    <div className="mt-3 p-3 bg-slate-50 border border-slate-200/80 rounded-2xl">
+                      <p className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                        <ImageIcon size={14} className="text-emerald-600" />
+                        Pratinjau Foto Produk ({previewUrls.length}):
+                      </p>
+                      <div className="flex gap-2.5 overflow-x-auto pb-1">
+                        {previewUrls.map((url, idx) => (
+                          <div key={idx} className="relative group flex-shrink-0">
+                            <div className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 bg-white shadow-xs">
+                              <ProductImage src={url} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                            </div>
+                            {idx === 0 && (
+                              <span className="absolute -top-1.5 left-1 bg-emerald-600 text-white text-[8px] font-extrabold px-1.5 py-0.5 rounded-full shadow-xs">
+                                Utama
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = previewUrls.filter((_, i) => i !== idx);
+                                setNewImageUrls(updated.join(', '));
+                              }}
+                              className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:scale-110"
+                              title="Hapus foto ini"
+                            >
+                              <X size={11} strokeWidth={3} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="pt-4 flex justify-end gap-3 border-t border-gray-100">
@@ -917,8 +1193,8 @@ export default function ProductsPage() {
                         #{idx + 1}
                       </span>
                       <div className="w-10 h-10 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
-                        {prod.image_urls && prod.image_urls.length > 0 ? (
-                          <img src={prod.image_urls[0]} alt="" className="w-full h-full object-cover" />
+                        {getPrimaryProductImage(prod) ? (
+                          <ProductImage src={getPrimaryProductImage(prod)} alt={prod.name} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-slate-300">
                             <Package size={18} />
@@ -1006,12 +1282,21 @@ export default function ProductsPage() {
             {/* Product Quick Info Card */}
             <div className="p-6 border-b border-slate-100 bg-white">
               <div className="flex items-start justify-between gap-4">
-                <div>
-                  <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-700 mb-1 inline-block">
-                    {stockMonitoringProduct.categories?.name || 'Kategori'}
-                  </span>
-                  <h3 className="text-base font-bold text-slate-900">{stockMonitoringProduct.name}</h3>
-                  <p className="text-xs font-semibold text-emerald-700 mt-0.5">SKU: {stockMonitoringProduct.sku || '-'}</p>
+                <div className="flex items-center gap-3.5">
+                  <div className="w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex-shrink-0">
+                    <ProductImage 
+                      src={getPrimaryProductImage(stockMonitoringProduct)} 
+                      alt={stockMonitoringProduct.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div>
+                    <span className="px-2.5 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-700 mb-1 inline-block">
+                      {stockMonitoringProduct.categories?.name || 'Kategori'}
+                    </span>
+                    <h3 className="text-base font-bold text-slate-900">{stockMonitoringProduct.name}</h3>
+                    <p className="text-xs font-semibold text-emerald-700 mt-0.5">SKU: {stockMonitoringProduct.sku || '-'}</p>
+                  </div>
                 </div>
 
                 <div className="text-right">
@@ -1140,6 +1425,57 @@ export default function ProductsPage() {
                 Tutup
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL LIGHTBOX / PRATINJAU FOTO PRODUK RESOLUSI PENUH */}
+      {previewModalImage && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setPreviewModalImage(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/90">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm sm:text-base">{previewModalImage.title}</h3>
+                <p className="text-xs text-slate-500 font-medium">{previewModalImage.allUrls.length} Foto Terdaftar</p>
+              </div>
+              <button 
+                onClick={() => setPreviewModalImage(null)}
+                className="p-2 hover:bg-slate-200/70 rounded-full text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 flex-1 flex items-center justify-center bg-slate-900/5 min-h-[320px] max-h-[520px] overflow-hidden">
+              <img 
+                src={getProductImageUrl(previewModalImage.url)} 
+                alt={previewModalImage.title} 
+                className="max-h-[480px] w-auto max-w-full object-contain rounded-2xl shadow-md border border-slate-200/80"
+              />
+            </div>
+
+            {previewModalImage.allUrls.length > 1 && (
+              <div className="p-3 bg-white border-t border-slate-100 flex gap-2.5 overflow-x-auto items-center">
+                {previewModalImage.allUrls.map((url, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setPreviewModalImage({ ...previewModalImage, url })}
+                    className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 cursor-pointer ${
+                      previewModalImage.url === url 
+                        ? 'border-emerald-600 scale-105 shadow-md ring-2 ring-emerald-500/20' 
+                        : 'border-slate-200 opacity-60 hover:opacity-100'
+                    }`}
+                  >
+                    <ProductImage src={url} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

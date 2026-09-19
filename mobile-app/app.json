@@ -8,12 +8,21 @@
     "icon": "./assets/icon.png",
     "scheme": "dap",
     "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ceb088f9-ea0b-4436-903c-2e1bae5cbdc4",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "ios": {
       "icon": "./assets/icon.png"
     },
     "android": {
       "package": "com.alpsstudiowebid.dap",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#8dc54a",
         "foregroundImage": "./assets/adaptive-icon.png"
@@ -45,7 +54,8 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Aplikasi ini membutuhkan lokasi Anda untuk menetapkan alamat toko secara akurat."
         }
-      ]
+      ],
+      "expo-updates"
     ],
     "experiments": {
       "typedRoutes": true,

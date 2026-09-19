@@ -140,29 +140,21 @@ export default function PayrollPage() {
       // 2. Fetch Payrolls for current month & year
       const { data: pData, error: pError } = await supabase
         .from('sales_payrolls')
-        .select(`
-          *,
-          sales:sales_id (
-            id,
-            profile_id,
-            ktp_number,
-            is_spv,
-            base_salary,
-            profiles (full_name, phone_number),
-            regions (name),
-            spv:spv_id (
-              profiles (full_name)
-            )
-          )
-        `)
+        .select('*')
         .eq('period_month', selectedMonth)
         .eq('period_year', selectedYear)
         .order('created_at', { ascending: false });
 
       if (pError) {
         console.warn('Error fetching payrolls (table might be empty or newly created):', pError);
+        setPayrolls([]);
       } else if (pData) {
-        setPayrolls(pData as any);
+        const salesMap = new Map((sData || []).map((s: any) => [s.id, s]));
+        const enrichedPayrolls = pData.map((p: any) => ({
+          ...p,
+          sales: salesMap.get(p.sales_id) || null,
+        }));
+        setPayrolls(enrichedPayrolls as any);
       }
     } catch (err) {
       console.error('Fetch payroll data error:', err);
@@ -245,11 +237,12 @@ export default function PayrollPage() {
         }
 
         // 4. Hitung Komponen Gaji Berdasarkan Formula Resmi:
-        // A. Nilai per visit = Gaji Pokok ÷ Target Visit Bulanan
-        const valuePerVisit = targetVisits > 0 ? baseSalary / targetVisits : 0;
-        const visitAchievementPct = targetVisits > 0 ? (achievedVisits / targetVisits) * 100 : 0;
-        // Gaji Pokok visit dihitung proporsional terhadap realisasi visit
-        const earnedVisitSalary = Math.round(achievedVisits * valuePerVisit);
+        // A. Nilai per visit = Gaji Pokok ÷ Target Visit Bulanan (Hanya untuk Sales Lapangan, SPV = 0)
+        const actualBaseSalary = s.is_spv ? 0 : baseSalary;
+        const valuePerVisit = (!s.is_spv && targetVisits > 0) ? actualBaseSalary / targetVisits : 0;
+        const visitAchievementPct = (!s.is_spv && targetVisits > 0) ? (achievedVisits / targetVisits) * 100 : 0;
+        // Gaji Pokok visit dihitung proporsional terhadap realisasi visit (SPV murni Rp 0)
+        const earnedVisitSalary = s.is_spv ? 0 : Math.round(achievedVisits * valuePerVisit);
 
         // B. Insentif Penjualan Omzet
         const salesAchievementPct = targetSalesAmount > 0 ? (achievedSalesAmount / targetSalesAmount) * 100 : 0;
@@ -266,7 +259,7 @@ export default function PayrollPage() {
 
         const earnedIncentiveAmount = Math.round(achievedSalesAmount * (incentivePercentage / 100));
 
-        // C. Penjualan Langsung SPV (1% komisi dari direct sales non-coverage)
+        // C. Penjualan Langsung SPV (Komisi/Insentif dari direct sales non-coverage)
         const directCommissionPct = Number(s.direct_commission_pct || 1.0);
         const spvDirectSalesCommission = s.is_spv 
           ? Math.round(spvDirectSalesAmount * (directCommissionPct / 100)) 
@@ -301,12 +294,12 @@ export default function PayrollPage() {
           spv_id: s.spv_id || null,
           period_month: selectedMonth,
           period_year: selectedYear,
-          nominal_base_salary: baseSalary,
-          daily_visit_target: dailyVisitTarget,
-          work_days: workDays,
-          target_visits: targetVisits,
-          achieved_visits: achievedVisits,
-          visit_achievement_pct: Number(visitAchievementPct.toFixed(2)),
+          nominal_base_salary: s.is_spv ? 0 : baseSalary,
+          daily_visit_target: s.is_spv ? 0 : dailyVisitTarget,
+          work_days: s.is_spv ? 0 : workDays,
+          target_visits: s.is_spv ? 0 : targetVisits,
+          achieved_visits: s.is_spv ? 0 : achievedVisits,
+          visit_achievement_pct: s.is_spv ? 0 : Number(visitAchievementPct.toFixed(2)),
           value_per_visit: Math.round(valuePerVisit),
           earned_visit_salary: earnedVisitSalary,
           target_sales_amount: targetSalesAmount,

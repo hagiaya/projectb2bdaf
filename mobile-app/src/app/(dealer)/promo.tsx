@@ -24,27 +24,25 @@ export default function PromoScreen() {
 
   const fetchPromos = async () => {
     setIsLoading(true);
-    // You may need to import supabase if not already imported
     const { data, error } = await supabase
       .from('promos')
       .select('*')
-      .eq('status', 'ACTIVE')
       .order('created_at', { ascending: false });
 
     if (!error && data) {
-      // Map database fields to the UI interface
-      const mappedPromos: Promo[] = data.map(p => ({
+      const now = new Date().getTime();
+      // Filter out expired promos if expires_at is set
+      const activeData = data.filter(p => !p.expires_at || new Date(p.expires_at).getTime() >= now);
+
+      const mappedPromos: Promo[] = activeData.map(p => ({
         id: p.id as any,
-        title: `Diskon ${p.discount_percentage}%`, // Title fallback since it's just 'title' in DB but they have description
-        desc: p.description || p.title,
+        title: p.title || `Diskon ${p.discount_percent}%`,
+        desc: p.description || `Diskon ${p.discount_percent}% untuk seluruh pembelanjaan produk.`,
         code: p.code,
-        expire: new Date(p.end_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+        expire: p.expires_at 
+          ? new Date(p.expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+          : 'Berlaku Permanen'
       }));
-      
-      // Override title with actual title from DB
-      data.forEach((p, idx) => {
-        mappedPromos[idx].title = p.title;
-      });
 
       setPromos(mappedPromos);
     }

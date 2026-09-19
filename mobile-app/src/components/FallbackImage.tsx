@@ -25,12 +25,10 @@ export default function FallbackImage({
   resizeMode = 'cover'
 }: FallbackImageProps) {
   const [retryStage, setRetryStage] = useState<number>(0); 
-  // 0: try resolved/proxied URL
-  // 1: try direct raw encoded URL
-  // 2: fail -> fallback icon
-
-  const resolvedUrl = resolveImageUrl(uri);
-  const directUrl = uri ? (uri.includes(' ') ? uri.replace(/ /g, '%20') : uri) : null;
+  // 0: primary CDN edge proxy (wsrv.nl with webp)
+  // 1: secondary CDN proxy (images.weserv.nl)
+  // 2: direct raw URL
+  // 3: fail -> fallback icon
 
   useEffect(() => {
     setRetryStage(0);
@@ -44,7 +42,7 @@ export default function FallbackImage({
     );
   }
 
-  if (retryStage >= 2) {
+  if (retryStage >= 3) {
     return (
       <View style={[style, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' }]}>
         <Feather name={fallbackIcon} size={iconSize} color={iconColor} />
@@ -52,9 +50,7 @@ export default function FallbackImage({
     );
   }
 
-  const currentSourceUri = retryStage === 0 
-    ? (resolvedUrl || directUrl) 
-    : directUrl;
+  const currentSourceUri = resolveImageUrl(uri, retryStage);
 
   return (
     <Image 

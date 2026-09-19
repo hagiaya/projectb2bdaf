@@ -6,54 +6,66 @@ import { supabase } from '@/lib/supabase';
 import Sidebar from './Sidebar';
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+  const isLoginPage = pathname === '/login';
+  const [loading, setLoading] = useState(!isLoginPage);
 
   useEffect(() => {
-    const checkUser = async () => {
-      let { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session && pathname !== '/login') {
-        // Toleransi waktu untuk pemulihan session dari storage lokal
-        await new Promise((r) => setTimeout(r, 400));
-        const retryRes = await supabase.auth.getSession();
-        session = retryRes.data.session;
-      }
+    if (isLoginPage) {
+      setLoading(false);
+      return;
+    }
 
-      if (!session) {
-        if (pathname !== '/login') {
-          router.push('/login');
-        }
+    let isMounted = true;
+
+    // Safety timeout: Never stay in loading state longer than 1.5 seconds
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) {
         setLoading(false);
-        return;
       }
+    }, 1500);
 
-      // Verify role (bypass for Dito)
-      if (session.user.email?.toLowerCase() !== 'ditoapp@atomicmail.io') {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
+    const checkUser = async () => {
+      try {
+        let { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          await new Promise((r) => setTimeout(r, 200));
+          const retryRes = await supabase.auth.getSession();
+          session = retryRes.data.session;
+        }
 
-        if (profile?.role !== 'ADMIN') {
-          await supabase.auth.signOut();
-          if (pathname !== '/login') {
+        if (!session) {
+          if (isMounted) {
+            setLoading(false);
             router.push('/login');
           }
-        } else {
-          if (pathname === '/login') {
-            router.push('/');
+          return;
+        }
+
+        // Verify role (bypass for Dito)
+        if (session.user.email?.toLowerCase() !== 'ditoapp@atomicmail.io') {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+
+          if (profile?.role !== 'ADMIN') {
+            await supabase.auth.signOut();
+            if (isMounted) {
+              router.push('/login');
+            }
           }
         }
-      } else {
-        // Dito is always admin
-        if (pathname === '/login') {
-          router.push('/');
+      } catch (err) {
+        console.warn('Auth check warning:', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
         }
       }
-      setLoading(false);
     };
 
     checkUser();
@@ -62,7 +74,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       if (event === 'SIGNED_OUT') {
         router.push('/login');
       } else if (event === 'SIGNED_IN' && session) {
-        // Double check role (bypass for Dito)
         if (session.user.email?.toLowerCase() !== 'ditoapp@atomicmail.io') {
           const { data: profile } = await supabase
             .from('profiles')
@@ -72,31 +83,33 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
           
           if (profile?.role !== 'ADMIN') {
             await supabase.auth.signOut();
-          } else if (pathname === '/login') {
-            router.push('/');
+            router.push('/login');
           }
-        } else if (pathname === '/login') {
-          router.push('/');
         }
       }
     });
 
     return () => {
+      isMounted = false;
+      clearTimeout(safetyTimer);
       authListener.subscription.unsubscribe();
     };
-  }, [pathname, router]);
+  }, [pathname, isLoginPage, router]);
+
+  // If on login page, render login page immediately without sidebar or loading spinner
+  if (isLoginPage) {
+    return <main className="flex-1 w-full">{children}</main>;
+  }
 
   if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#8ec44a]"></div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"></div>
+          <span className="text-xs font-semibold text-slate-500">Memuat sesi Admin DAP...</span>
+        </div>
       </div>
     );
-  }
-
-  // If login page, don't render sidebar
-  if (pathname === '/login') {
-    return <main className="flex-1 w-full">{children}</main>;
   }
 
   return (

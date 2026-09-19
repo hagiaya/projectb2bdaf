@@ -96,5 +96,22 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return new NextResponse('Image not found', { status: 404 });
+  // Return clean, elegant SVG placeholder image so browser never shows broken icon
+  const svgPlaceholder = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" fill="none">
+    <rect width="400" height="400" fill="#F8FAFC"/>
+    <rect x="1" y="1" width="398" height="398" rx="16" stroke="#E2E8F0" stroke-width="2"/>
+    <g transform="translate(140, 130)" stroke="#94A3B8" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="0" y="0" width="120" height="100" rx="12"/>
+      <circle cx="35" cy="35" r="10"/>
+      <path d="M120 75 L90 45 L25 100"/>
+    </g>
+    <text x="200" y="270" text-anchor="middle" fill="#64748B" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600">Gambar Tidak Ditemukan</text>
+  </svg>`;
+
+  const fallbackHeaders = new Headers();
+  fallbackHeaders.set('Content-Type', 'image/svg+xml');
+  fallbackHeaders.set('Cache-Control', 'public, max-age=60');
+  fallbackHeaders.set('Access-Control-Allow-Origin', '*');
+
+  return new NextResponse(svgPlaceholder, { status: 200, headers: fallbackHeaders });
 }

@@ -31,6 +31,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import ProductImage from '@/components/ProductImage';
 
 interface Category {
   id: string;
@@ -718,11 +719,7 @@ function InventoryContent() {
                                   <td className="p-4">
                                     <div className="flex items-center gap-3">
                                       <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200/80 overflow-hidden flex items-center justify-center shrink-0">
-                                        {thumb ? (
-                                          <img src={thumb} alt={item.name} className="w-full h-full object-cover" />
-                                        ) : (
-                                          <Package size={20} className="text-slate-400" />
-                                        )}
+                                        <ProductImage src={thumb} alt={item.name} className="w-full h-full object-cover" />
                                       </div>
                                       <div>
                                         <p className="font-bold text-slate-900 leading-snug">{item.name}</p>
@@ -850,11 +847,7 @@ function InventoryContent() {
                         <td className="p-4">
                           <div className="flex items-center gap-3">
                             <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
-                              {thumb ? (
-                                <img src={thumb} alt={item.name} className="w-full h-full object-cover" />
-                              ) : (
-                                <Package size={20} className="text-slate-400" />
-                              )}
+                              <ProductImage src={thumb} alt={item.name} className="w-full h-full object-cover" />
                             </div>
                             <div>
                               <p className="font-bold text-slate-900 leading-snug">{item.name}</p>

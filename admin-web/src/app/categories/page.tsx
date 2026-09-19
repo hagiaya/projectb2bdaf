@@ -18,6 +18,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getProductImageUrl } from '@/lib/image';
 
 interface Category {
   id: string;
@@ -357,7 +358,7 @@ export default function CategoriesPage() {
               <div key={cat.id} className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden hover:shadow-md transition-all group">
                 <div className="h-48 bg-slate-100 relative flex items-center justify-center overflow-hidden">
                   {cat.image_url ? (
-                    <img src={cat.image_url} alt={cat.name} className="w-full h-full object-cover" />
+                    <img src={getProductImageUrl(cat.image_url)} alt={cat.name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="text-slate-400 flex flex-col items-center">
                       <ImageIcon size={44} strokeWidth={1} />
@@ -564,7 +565,7 @@ export default function CategoriesPage() {
                     </span>
                     <div className="w-10 h-10 rounded-lg bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
                       {cat.image_url ? (
-                        <img src={cat.image_url} alt="" className="w-full h-full object-cover" />
+                        <img src={getProductImageUrl(cat.image_url)} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-slate-300">
                           <Package size={18} />

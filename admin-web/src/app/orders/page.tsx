@@ -76,7 +76,7 @@ export default function OrdersPage() {
     setIsLoading(true);
     const { data, error } = await supabase
       .from('orders')
-      .select('*, dealers(store_name, address, profiles:profile_id(full_name, phone_number, email))')
+      .select('*, dealers(store_name, address, profiles:profile_id(full_name, phone_number))')
       .order('created_at', { ascending: false });
       
     if (!error && data) {
