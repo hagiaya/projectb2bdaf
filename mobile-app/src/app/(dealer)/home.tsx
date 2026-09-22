@@ -55,27 +55,106 @@ function useCountdown(targetHour: number) {
   return { h, m, s };
 }
 
-// =========================================================
-// BANNER CAROUSEL
-// =========================================================
+interface BannerItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  banner_url?: string | null;
+  code?: string;
+  discount_percent?: number;
+  color: string;
+  accent: string;
+  route: string;
+}
+
 function BannerCarousel() {
   const [active, setActive] = useState(0);
+  const [banners, setBanners] = useState<BannerItem[]>(bannerAds as any);
   const flatRef = useRef<FlatList>(null);
 
+  const fetchPromoBanners = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('promos')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        const colors = [
+          { color: '#15803d', accent: '#166534' },
+          { color: '#2563eb', accent: '#1e40af' },
+          { color: '#7c3aed', accent: '#6d28d9' },
+          { color: '#c2410c', accent: '#9a3412' },
+        ];
+
+        const promoBanners: BannerItem[] = data.map((p: any, idx: number) => {
+          const c = colors[idx % colors.length];
+          return {
+            id: p.id,
+            title: p.title || `Promo Diskon ${p.discount_percent}%`,
+            subtitle: p.description || `Gunakan kode: ${p.code} saat checkout`,
+            banner_url: p.banner_url || null,
+            code: p.code,
+            discount_percent: p.discount_percent,
+            color: c.color,
+            accent: c.accent,
+            route: '/(dealer)/promo',
+          };
+        });
+
+        // Always include Reward Program banner
+        const rewardProgramBanner: BannerItem = {
+          id: 'reward-program-banner',
+          title: 'Target Program Display & Reward DAP',
+          subtitle: 'Capai target belanja & dapatkan Etalase, Rak Display, & Cashback!',
+          banner_url: null,
+          color: '#8ec44a',
+          accent: '#4a6b22',
+          route: '/(dealer)/programs',
+        };
+
+        setBanners([promoBanners[0], rewardProgramBanner, ...promoBanners.slice(1)]);
+      }
+    } catch (e) {
+      console.warn('Fetch promo banners error:', e);
+    }
+  };
+
   useEffect(() => {
+    fetchPromoBanners();
+
+    // Live subscription for instant banner update when admin uploads JPG
+    const promoSub = supabase
+      .channel('home-promos-live-banners')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'promos' },
+        () => {
+          fetchPromoBanners();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(promoSub);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (banners.length <= 1) return;
     const timer = setInterval(() => {
-      const next = (active + 1) % bannerAds.length;
+      const next = (active + 1) % banners.length;
       flatRef.current?.scrollToOffset({ offset: next * BANNER_WIDTH, animated: true });
       setActive(next);
-    }, 4000);
+    }, 4500);
     return () => clearInterval(timer);
-  }, [active]);
+  }, [active, banners.length]);
 
   return (
     <View style={styles.bannerSection}>
       <FlatList
         ref={flatRef}
-        data={bannerAds}
+        data={banners}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
@@ -84,20 +163,55 @@ function BannerCarousel() {
           const idx = Math.round(e.nativeEvent.contentOffset.x / BANNER_WIDTH);
           setActive(idx);
         }}
-        renderItem={({ item }) => (
-          <View style={[styles.bannerCard, { backgroundColor: item.color, width: BANNER_WIDTH }]}>
-            <View style={[styles.bannerCircle, { backgroundColor: item.accent }]} />
-            <Feather name="tag" size={32} color="rgba(255,255,255,0.3)" style={{ marginBottom: 8 }} />
-            <Text style={styles.bannerTitle}>{item.title}</Text>
-            <Text style={styles.bannerSubtitle}>{item.subtitle}</Text>
-            <TouchableOpacity style={styles.bannerBtn} onPress={() => router.push(((item as any).route || '/(dealer)/promo') as any)}>
-              <Text style={styles.bannerBtnText}>Lihat Sekarang →</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        renderItem={({ item }) => {
+          if (item.banner_url) {
+            return (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={[styles.bannerCardImageWrap, { width: BANNER_WIDTH }]}
+                onPress={() => router.push(((item as any).route || '/(dealer)/promo') as any)}
+              >
+                <Image
+                  source={{ uri: item.banner_url }}
+                  style={styles.bannerImage}
+                  resizeMode="cover"
+                />
+                <View style={styles.bannerImageOverlay}>
+                  {item.code && (
+                    <View style={styles.bannerImageBadge}>
+                      <Feather name="tag" size={11} color="white" />
+                      <Text style={styles.bannerImageBadgeText}>
+                        {item.code} {item.discount_percent ? `• Diskon ${item.discount_percent}%` : ''}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.bannerImageBottomText}>
+                    <Text style={styles.bannerImageTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.bannerImageSub} numberOfLines={1}>{item.subtitle}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          }
+
+          return (
+            <View style={[styles.bannerCard, { backgroundColor: item.color, width: BANNER_WIDTH }]}>
+              <View style={[styles.bannerCircle, { backgroundColor: item.accent }]} />
+              <Feather name="tag" size={32} color="rgba(255,255,255,0.3)" style={{ marginBottom: 8 }} />
+              <Text style={styles.bannerTitle}>{item.title}</Text>
+              <Text style={styles.bannerSubtitle}>{item.subtitle}</Text>
+              <TouchableOpacity
+                style={styles.bannerBtn}
+                onPress={() => router.push(((item as any).route || '/(dealer)/promo') as any)}
+              >
+                <Text style={styles.bannerBtnText}>Lihat Sekarang →</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        }}
       />
       <View style={styles.dots}>
-        {bannerAds.map((_, i) => (
+        {banners.map((_, i) => (
           <View key={i} style={[styles.dot, active === i && styles.dotActive]} />
         ))}
       </View>
@@ -585,7 +699,50 @@ const styles = StyleSheet.create({
   buyText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
 
   bannerSection: { marginHorizontal: 16, marginTop: 20 },
-  bannerCard: { borderRadius: 16, padding: 20, overflow: 'hidden', marginRight: 0 },
+  bannerCard: { borderRadius: 16, padding: 20, overflow: 'hidden', marginRight: 0, minHeight: 140 },
+  bannerCardImageWrap: { borderRadius: 16, overflow: 'hidden', height: 148, position: 'relative', backgroundColor: '#064e3b' },
+  bannerImage: { width: '100%', height: '100%' },
+  bannerImageOverlay: {
+    position: 'absolute',
+    inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    padding: 14,
+    justifyContent: 'space-between',
+  },
+  bannerImageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#16a34a',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  bannerImageBadgeText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  bannerImageBottomText: {
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    marginHorizontal: -14,
+    marginBottom: -14,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backdropFilter: 'blur(4px)',
+  },
+  bannerImageTitle: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  bannerImageSub: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 11,
+    marginTop: 1,
+  },
   bannerCircle: { position: 'absolute', width: 180, height: 180, borderRadius: 90, right: -40, top: -40, opacity: 0.5 },
   bannerTitle: { color: 'white', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
   bannerSubtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginBottom: 14 },

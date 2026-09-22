@@ -29,9 +29,34 @@ export default function OrdersScreen() {
   const [uploadingProof, setUploadingProof] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showTransferAlert, setShowTransferAlert] = useState(false);
+  const [bankInfo, setBankInfo] = useState<{
+    bank_name: string;
+    bank_account_number: string;
+    bank_account_name: string;
+  }>({
+    bank_name: 'BCA (Bank Central Asia)',
+    bank_account_number: '829-019-8821',
+    bank_account_name: 'PT DISTRIBUSI AKSESORIS PRIMA',
+  });
 
   useEffect(() => {
     fetchOrders();
+
+    // Fetch dynamic bank settings
+    supabase
+      .from('payment_settings')
+      .select('bank_name, bank_account_number, bank_account_name')
+      .eq('id', 'default')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setBankInfo({
+            bank_name: data.bank_name || 'BCA (Bank Central Asia)',
+            bank_account_number: data.bank_account_number || '829-019-8821',
+            bank_account_name: data.bank_account_name || 'PT DISTRIBUSI AKSESORIS PRIMA',
+          });
+        }
+      });
 
     // Realtime orders subscription
     const sub = supabase
@@ -320,7 +345,7 @@ export default function OrdersScreen() {
                   {selectedOrder.payment_method === 'TRANSFER' && (
                     <View style={{ marginTop: 6 }}>
                       <Text style={{ fontSize: 12, color: '#475569' }}>
-                        Rekening Tujuan: <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>BCA 829-019-8821 a.n. PT DISTRIBUSI AKSESORIS PRIMA</Text>
+                        Rekening Tujuan: <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>{bankInfo.bank_name} {bankInfo.bank_account_number} a.n. {bankInfo.bank_account_name}</Text>
                       </Text>
                       <Text style={{ fontSize: 12, color: '#b45309', marginTop: 2 }}>
                         Kode Acak Transaksi: <Text style={{ fontWeight: 'bold' }}>+{selectedOrder.unique_code || 0}</Text>
@@ -444,8 +469,8 @@ export default function OrdersScreen() {
             <View style={styles.alertDetailsCard}>
               <View style={styles.alertDetailRow}>
                 <Text style={styles.alertDetailLabel}>Rekening Tujuan Resmi:</Text>
-                <Text style={styles.alertDetailValBold}>BCA 829-019-8821</Text>
-                <Text style={styles.alertDetailSub}>a.n. PT DISTRIBUSI AKSESORIS PRIMA</Text>
+                <Text style={styles.alertDetailValBold}>{bankInfo.bank_name} {bankInfo.bank_account_number}</Text>
+                <Text style={styles.alertDetailSub}>a.n. {bankInfo.bank_account_name}</Text>
               </View>
 
               {selectedOrder && (

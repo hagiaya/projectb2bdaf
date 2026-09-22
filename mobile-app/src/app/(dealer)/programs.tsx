@@ -150,9 +150,10 @@ interface ParticipantRecord {
   claimed_at?: string;
   selected_item_id?: string;
   selected_item_name?: string;
+  selected_item_qty?: number;
   custom_target_amount?: number;
-  photo_before_url?: string;
-  photo_after_url?: string;
+  photo_before_url?: string | null;
+  photo_after_url?: string | null;
   shipping_receipt_no?: string;
   installed_at?: string;
   applicant_name?: string;
@@ -174,6 +175,7 @@ export default function DealerProgramsScreen() {
   const [applicationModalVisible, setApplicationModalVisible] = useState(false);
   const [programToEnroll, setProgramToEnroll] = useState<DealerProgram | null>(null);
   const [selectedSupportItem, setSelectedSupportItem] = useState<SupportItem>(DEFAULT_SUPPORT_ITEMS[7]); // Default DLP17
+  const [supportItemQty, setSupportItemQty] = useState<number>(1); // Quantity stepper for enrollment
   const [placementNotes, setPlacementNotes] = useState('');
   const [beforePhotoUri, setBeforePhotoUri] = useState<string | null>(null);
   const [beforePhotoBase64, setBeforePhotoBase64] = useState<string | null>(null);
@@ -183,6 +185,7 @@ export default function DealerProgramsScreen() {
   const [activeProgramForChangeItem, setActiveProgramForChangeItem] = useState<DealerProgram | null>(null);
   const [activeParticipantForChangeItem, setActiveParticipantForChangeItem] = useState<ParticipantRecord | null>(null);
   const [selectedItemInModal, setSelectedItemInModal] = useState<SupportItem>(DEFAULT_SUPPORT_ITEMS[0]);
+  const [modalItemQty, setModalItemQty] = useState<number>(1); // Quantity stepper for change item modal
   const [savingChangeItem, setSavingChangeItem] = useState(false);
 
   // Documentation After Modal State (Setelah Barang Tiba)
@@ -386,6 +389,14 @@ export default function DealerProgramsScreen() {
   // Helper to parse participant item & photos
   const parseParticipantItem = (participant?: ParticipantRecord | null) => {
     if (!participant) return null;
+    let qty = participant.selected_item_qty || 1;
+    if (participant.claim_notes) {
+      const qtyMatch = participant.claim_notes.match(/\|\s*Qty:\s*(\d+)\s*Unit/i);
+      if (qtyMatch) {
+        qty = parseInt(qtyMatch[1], 10) || qty;
+      }
+    }
+
     if (participant.selected_item_name) {
       const matched = DEFAULT_SUPPORT_ITEMS.find(
         (i) =>
@@ -396,12 +407,13 @@ export default function DealerProgramsScreen() {
       return {
         id: participant.selected_item_id || matched?.id || 'dlp17',
         name: participant.selected_item_name,
-        target: participant.custom_target_amount || matched?.min_purchase,
+        target: participant.custom_target_amount || ((matched?.min_purchase || 8000000) * qty),
+        qty,
       };
     }
     if (participant.claim_notes && participant.claim_notes.includes('[PILIHAN ITEM:')) {
       const match = participant.claim_notes.match(
-        /\[PILIHAN ITEM:\s*([^|\]]+)(?:\|\s*Min\.\s*Belanja:\s*Rp\s*([^\]]+))?\]/
+        /\[PILIHAN ITEM:\s*([^|\]]+)(?:\|\s*(?:Qty:\s*\d+\s*Unit\s*\|)?\s*(?:Min\.\s*Belanja|Target):\s*Rp\s*([^\]]+))?/i
       );
       if (match) {
         const rawName = match[1]?.trim() || '';
@@ -413,7 +425,8 @@ export default function DealerProgramsScreen() {
         return {
           id: matched?.id || participant.selected_item_id || 'dlp17',
           name: rawName,
-          target: match[2] ? parseFloat(match[2].replace(/[^0-9]/g, '')) : (matched?.min_purchase || undefined),
+          target: match[2] ? parseFloat(match[2].replace(/[^0-9]/g, '')) : (((matched?.min_purchase || 8000000) * qty)),
+          qty,
         };
       }
     }
@@ -424,15 +437,18 @@ export default function DealerProgramsScreen() {
   const handleSelectSupportItem = async (
     program: DealerProgram,
     item: SupportItem,
-    participant?: ParticipantRecord | null
+    participant?: ParticipantRecord | null,
+    quantity: number = 1
   ) => {
+    const qty = Math.max(1, quantity || 1);
+
     // Case 1: Participant already enrolled in this program -> Update / Switch Chosen Item
     if (participant) {
       const executeUpdate = async () => {
         setSavingChangeItem(true);
         try {
           const itemName = `${item.code} - ${item.name}`;
-          const newTarget = item.min_purchase;
+          const newTarget = item.min_purchase * qty;
           const currentProgress = Number(participant.current_progress_amount) || 0;
           const isAchieved = currentProgress >= newTarget;
 
@@ -443,7 +459,7 @@ export default function DealerProgramsScreen() {
 
           let updatedNotes = participant.claim_notes || '';
           const itemPattern = /\[PILIHAN ITEM:[^\]]+\]/;
-          const newItemTag = `[PILIHAN ITEM: ${itemName} | Min. Belanja: Rp ${newTarget.toLocaleString('id-ID')}]`;
+          const newItemTag = `[PILIHAN ITEM: ${itemName} | Qty: ${qty} Unit | Min. Belanja: Rp ${newTarget.toLocaleString('id-ID')}]`;
           if (itemPattern.test(updatedNotes)) {
             updatedNotes = updatedNotes.replace(itemPattern, newItemTag);
           } else {
@@ -453,6 +469,7 @@ export default function DealerProgramsScreen() {
           const payload: any = {
             selected_item_id: item.id,
             selected_item_name: itemName,
+            selected_item_qty: qty,
             custom_target_amount: newTarget,
             status: newStatus,
             claim_notes: updatedNotes,
@@ -466,14 +483,22 @@ export default function DealerProgramsScreen() {
               .eq('id', participant.id);
 
             if (error) {
-              console.warn('Fallback update without selected_item columns:', error.message);
-              await supabase
+              console.warn('Fallback update without selected_item_qty:', error.message);
+              delete payload.selected_item_qty;
+              const retry = await supabase
                 .from('dealer_program_participants')
-                .update({
-                  status: newStatus,
-                  claim_notes: updatedNotes,
-                })
+                .update(payload)
                 .eq('id', participant.id);
+
+              if (retry.error) {
+                await supabase
+                  .from('dealer_program_participants')
+                  .update({
+                    status: newStatus,
+                    claim_notes: updatedNotes,
+                  })
+                  .eq('id', participant.id);
+              }
             }
           }
 
@@ -485,6 +510,7 @@ export default function DealerProgramsScreen() {
                     ...p,
                     selected_item_id: item.id,
                     selected_item_name: itemName,
+                    selected_item_qty: qty,
                     custom_target_amount: newTarget,
                     status: newStatus,
                     claim_notes: updatedNotes,
@@ -497,10 +523,10 @@ export default function DealerProgramsScreen() {
 
           const statusMsg = isAchieved
             ? `🎉 Omset belanja Anda (Rp ${currentProgress.toLocaleString('id-ID')}) sudah tembus target minimal item ini! Tombol klaim telah terbuka.`
-            : `Target belanja toko disesuaikan menjadi Rp ${newTarget.toLocaleString('id-ID')} (Kurang Rp ${(newTarget - currentProgress).toLocaleString('id-ID')}).`;
+            : `Target belanja toko disesuaikan menjadi Rp ${newTarget.toLocaleString('id-ID')} (${qty} Unit × Rp ${item.min_purchase.toLocaleString('id-ID')}). Kurang Rp ${(newTarget - currentProgress).toLocaleString('id-ID')}.`;
 
           const alertTitle = 'Pilihan Barang Berhasil Dipilih ✅';
-          const alertBody = `${itemName}\n\n${statusMsg}`;
+          const alertBody = `${itemName} (${qty} Unit)\n\n${statusMsg}`;
           if (Platform.OS === 'web') window.alert(`${alertTitle}\n\n${alertBody}`);
           else Alert.alert(alertTitle, alertBody);
         } catch (err: any) {
@@ -510,7 +536,7 @@ export default function DealerProgramsScreen() {
         }
       };
 
-      const promptMsg = `Ubah pilihan hadiah display toko Anda menjadi:\n"${item.code} - ${item.name}"?\n\nTarget minimal belanja akan disesuaikan menjadi Rp ${item.min_purchase.toLocaleString('id-ID')}.`;
+      const promptMsg = `Ubah pilihan hadiah display toko Anda menjadi:\n"${item.code} - ${item.name}" (${qty} Unit)?\n\nTarget minimal belanja akan disesuaikan menjadi Rp ${(item.min_purchase * qty).toLocaleString('id-ID')} (${qty} × Rp ${item.min_purchase.toLocaleString('id-ID')}).`;
       if (Platform.OS === 'web') {
         if (window.confirm(promptMsg)) {
           executeUpdate();
@@ -536,6 +562,7 @@ export default function DealerProgramsScreen() {
     // Open enrollment modal with this item pre-selected!
     setProgramToEnroll(program);
     setSelectedSupportItem(item);
+    setSupportItemQty(qty);
     setBeforePhotoUri(null);
     setBeforePhotoBase64(null);
     setPlacementNotes('');
@@ -745,16 +772,16 @@ export default function DealerProgramsScreen() {
     }
   };
 
-  // Submit Support Item Application (WITH BEFORE PHOTO)
+  // Submit Support Item Application (WITH BEFORE PHOTO & QUANTITY)
   const submitSupportItemApplication = async () => {
     if (!programToEnroll || !selectedSupportItem) return;
 
     // VALIDATION: Wajib ada foto dokumentasi before!
-    if (!beforePhotoUri) {
-      const alertMsg =
+    if (!beforePhotoUri && !beforePhotoBase64) {
+      const msg =
         'Wajib Melampirkan Foto Dokumentasi BEFORE!\n\nSilakan ambil foto lokasi / tempat di mana barang support (rak/etalase) akan diletakkan di toko Anda menggunakan tombol kamera atau galeri.';
-      if (Platform.OS === 'web') window.alert(alertMsg);
-      else Alert.alert('Foto Dokumentasi Wajib 📸', alertMsg);
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Foto Dokumentasi Wajib 📸', msg);
       return;
     }
 
@@ -775,9 +802,10 @@ export default function DealerProgramsScreen() {
       const storePhone =
         currentUserProfile?.phone_number || currentDealerProfile?.phone || '-';
 
-      const targetAmount = selectedSupportItem.min_purchase;
+      const qty = Math.max(1, supportItemQty || 1);
+      const targetAmount = selectedSupportItem.min_purchase * qty;
       const itemName = `${selectedSupportItem.code} - ${selectedSupportItem.name}`;
-      const snapshotNotes = `[PENGAJUAN PROGRAM SUPPORT DAP]\nNama: ${applicantName}\nToko: ${storeName}\nLokasi: ${storeLocation}\nKontak: ${storePhone}\nItem Pilihan: ${itemName}\nTarget Min. Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\nCatatan Penempatan: ${placementNotes.trim() || 'Sesuai foto before'}\nFoto Before: ${uploadedBeforeUrl || 'Terlampir'}`;
+      const snapshotNotes = `[PENGAJUAN PROGRAM SUPPORT DAP]\nNama: ${applicantName}\nToko: ${storeName}\nLokasi: ${storeLocation}\nKontak: ${storePhone}\nItem Pilihan: ${itemName}\nJumlah (Qty): ${qty} Unit\nTarget Min. Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\nCatatan Penempatan: ${placementNotes.trim() || 'Sesuai foto before'}\nFoto Before: ${uploadedBeforeUrl || 'Terlampir'}`;
 
       if (!currentDealerId) {
         // Fallback demo mode
@@ -789,6 +817,7 @@ export default function DealerProgramsScreen() {
           status: 'ENROLLED',
           selected_item_id: selectedSupportItem.id,
           selected_item_name: itemName,
+          selected_item_qty: qty,
           custom_target_amount: targetAmount,
           photo_before_url: uploadedBeforeUrl || beforePhotoUri,
           applicant_name: applicantName,
@@ -799,7 +828,7 @@ export default function DealerProgramsScreen() {
         };
         setMyParticipants([newRecord, ...myParticipants]);
         setApplicationModalVisible(false);
-        const msg = `Pengajuan Program Support Berhasil! 🎉\n\nItem Pilihan: ${itemName}\nTarget Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\nFoto dokumentasi lokasi penempatan telah tersimpan.`;
+        const msg = `Pengajuan Program Support Berhasil! 🎉\n\nItem Pilihan: ${itemName} (${qty} Unit)\nTarget Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\nFoto dokumentasi lokasi penempatan telah tersimpan.`;
         if (Platform.OS === 'web') window.alert(msg);
         else Alert.alert('Pengajuan Berhasil 🎉', msg);
         return;
@@ -813,6 +842,7 @@ export default function DealerProgramsScreen() {
         status: 'ENROLLED',
         selected_item_id: selectedSupportItem.id,
         selected_item_name: itemName,
+        selected_item_qty: qty,
         custom_target_amount: targetAmount,
         photo_before_url: uploadedBeforeUrl,
         applicant_name: applicantName,
@@ -823,31 +853,23 @@ export default function DealerProgramsScreen() {
       };
 
       let insertResult: any = null;
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('dealer_program_participants')
         .insert([payload])
         .select();
 
       if (error) {
-        console.warn('Fallback insert without new columns:', error.message);
-        // Fallback with standard columns
-        const fallbackPayload: any = {
-          program_id: programToEnroll.id,
-          dealer_id: currentDealerId,
-          current_progress_amount: 0,
-          status: 'ENROLLED',
-          claim_notes: snapshotNotes,
-        };
-        const { data: fbData, error: fbError } = await supabase
+        console.warn('Fallback insert without selected_item_qty:', error.message);
+        delete payload.selected_item_qty;
+        const retry = await supabase
           .from('dealer_program_participants')
-          .insert([fallbackPayload])
+          .insert([payload])
           .select();
-        if (fbError) throw fbError;
-        insertResult = fbData ? fbData[0] : null;
-      } else {
-        insertResult = data ? data[0] : null;
+        data = retry.data;
+        error = retry.error;
       }
 
+      insertResult = data && data[0] ? data[0] : null;
       if (insertResult) {
         setMyParticipants([
           ...myParticipants,
@@ -855,6 +877,7 @@ export default function DealerProgramsScreen() {
             ...insertResult,
             selected_item_id: selectedSupportItem.id,
             selected_item_name: itemName,
+            selected_item_qty: qty,
             custom_target_amount: targetAmount,
             photo_before_url: uploadedBeforeUrl || beforePhotoUri,
             claim_notes: snapshotNotes,
@@ -863,7 +886,7 @@ export default function DealerProgramsScreen() {
       }
 
       setApplicationModalVisible(false);
-      const msg = `Pengajuan Program Support Berhasil! 🎉\n\nItem Pilihan: ${itemName}\nTarget Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\n\nFoto dokumentasi lokasi toko telah tersimpan. Belanja dan capai targetnya!`;
+      const msg = `Pengajuan Program Support Berhasil! 🎉\n\nItem Pilihan: ${itemName} (${qty} Unit)\nTarget Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\n\nFoto dokumentasi lokasi toko telah tersimpan. Belanja dan capai targetnya!`;
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('Pengajuan Berhasil 🎉', msg);
     } catch (err: any) {
@@ -1328,6 +1351,7 @@ export default function DealerProgramsScreen() {
                                   (chosenItem?.name && chosenItem.name.toUpperCase().includes(i.code.toUpperCase()))
                               );
                               setSelectedItemInModal(cur || DEFAULT_SUPPORT_ITEMS[0]);
+                              setModalItemQty(chosenItem?.qty || 1);
                               setChangeItemModalVisible(true);
                             }}
                           >
@@ -1367,6 +1391,7 @@ export default function DealerProgramsScreen() {
                                   (chosenItem?.name && chosenItem.name.toUpperCase().includes(i.code.toUpperCase()))
                               );
                               setSelectedItemInModal(cur || DEFAULT_SUPPORT_ITEMS[0]);
+                              setModalItemQty(chosenItem?.qty || 1);
                               setChangeItemModalVisible(true);
                             }}
                           >
@@ -1374,7 +1399,9 @@ export default function DealerProgramsScreen() {
                             <Text style={styles.changeItemQuickBtnText}>Ganti Pilihan</Text>
                           </TouchableOpacity>
                         </View>
-                        <Text style={styles.chosenItemName}>{chosenItem.name}</Text>
+                        <Text style={styles.chosenItemName}>
+                          {chosenItem.name} {chosenItem.qty && chosenItem.qty > 1 ? `(${chosenItem.qty} Unit)` : ''}
+                        </Text>
                         <View style={styles.chosenItemTargetRow}>
                           <Text style={styles.chosenItemTargetLabel}>Target Khusus Item Ini:</Text>
                           <Text style={styles.chosenItemTargetValue}>
@@ -1753,55 +1780,119 @@ export default function DealerProgramsScreen() {
                   Target akumulasi belanja toko Anda akan mengikuti minimal pembelian item yang Anda pilih:
                 </Text>
 
-                {/* 10 Items List */}
-                <View style={{ gap: 8, marginTop: 8 }}>
+                {/* 10 Items List - Product Cards with Quantity */}
+                <View style={{ gap: 10, marginTop: 8 }}>
                   {(programToEnroll?.support_items && programToEnroll.support_items.length > 0
                     ? programToEnroll.support_items
                     : DEFAULT_SUPPORT_ITEMS
                   ).map((item) => {
                     const isSelected = selectedSupportItem?.id === item.id;
+                    const itemQty = isSelected ? supportItemQty : 1;
                     return (
-                      <TouchableOpacity
+                      <View
                         key={item.id}
-                        activeOpacity={0.85}
                         style={[
-                          styles.supportItemCard,
-                          isSelected && styles.supportItemCardSelected,
+                          styles.productCardSupport,
+                          isSelected && styles.productCardSupportSelected,
                         ]}
-                        onPress={() => setSelectedSupportItem(item)}
                       >
-                        <View
-                          style={[
-                            styles.radioCircle,
-                            isSelected && styles.radioCircleSelected,
-                          ]}
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          onPress={() => setSelectedSupportItem(item)}
+                          style={styles.productCardHeaderRow}
                         >
-                          {isSelected && <View style={styles.radioDot} />}
-                        </View>
+                          {/* Product Icon Thumbnail */}
+                          <View style={[styles.productThumbBox, isSelected && styles.productThumbBoxSelected]}>
+                            <Feather
+                              name={item.category?.includes('Lantai') ? 'layers' : item.category?.includes('Meja') ? 'box' : item.category?.includes('Digital') ? 'tv' : 'grid'}
+                              size={22}
+                              color={isSelected ? '#15803d' : '#0284c7'}
+                            />
+                          </View>
 
-                        <View style={{ flex: 1 }}>
-                          <View style={styles.itemCodeRow}>
-                            <View style={styles.itemCodeBadge}>
-                              <Text style={styles.itemCodeBadgeText}>{item.code}</Text>
+                          <View style={{ flex: 1, marginLeft: 10 }}>
+                            <View style={styles.itemCodeRow}>
+                              <View style={styles.itemCodeBadge}>
+                                <Text style={styles.itemCodeBadgeText}>{item.code}</Text>
+                              </View>
+                              {item.category && (
+                                <Text style={styles.itemCategoryText}>{item.category}</Text>
+                              )}
                             </View>
-                            {item.category && (
-                              <Text style={styles.itemCategoryText}>{item.category}</Text>
+                            <Text style={styles.productCardTitle}>{item.name}</Text>
+                            {item.dimensions && (
+                              <Text style={styles.productCardSpecs}>📐 {item.dimensions}</Text>
                             )}
                           </View>
 
-                          <Text style={styles.supportItemName}>{item.name}</Text>
-                          {item.dimensions && (
-                            <Text style={styles.supportItemDim}>Ukuran: {item.dimensions}</Text>
-                          )}
+                          {/* Radio Indicator */}
+                          <View
+                            style={[
+                              styles.radioCircle,
+                              isSelected && styles.radioCircleSelected,
+                            ]}
+                          >
+                            {isSelected && <View style={styles.radioDot} />}
+                          </View>
+                        </TouchableOpacity>
 
-                          <View style={styles.minPurchaseBadge}>
-                            <Text style={styles.minPurchaseBadgeLabel}>MIN. PEMBELIAN:</Text>
-                            <Text style={styles.minPurchaseBadgeValue}>
+                        {item.description && (
+                          <Text style={styles.productCardDesc}>{item.description}</Text>
+                        )}
+
+                        {/* Bottom Bar: Unit Price & Quantity Stepper */}
+                        <View style={styles.productCardBottomBar}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.pricePerUnitLabel}>MIN. BELANJA / UNIT:</Text>
+                            <Text style={styles.pricePerUnitValue}>
                               Rp {Number(item.min_purchase).toLocaleString('id-ID')}
                             </Text>
                           </View>
+
+                          {/* Stepper (- / +) */}
+                          <View style={styles.stepperContainer}>
+                            <TouchableOpacity
+                              style={[styles.stepperBtn, (!isSelected || supportItemQty <= 1) && styles.stepperBtnDisabled]}
+                              onPress={() => {
+                                if (!isSelected) setSelectedSupportItem(item);
+                                setSupportItemQty((prev) => Math.max(1, prev - 1));
+                              }}
+                              disabled={isSelected && supportItemQty <= 1}
+                            >
+                              <Feather name="minus" size={14} color={isSelected && supportItemQty <= 1 ? '#cbd5e1' : '#0f172a'} />
+                            </TouchableOpacity>
+
+                            <View style={styles.stepperQtyBox}>
+                              <Text style={styles.stepperQtyText}>{itemQty}</Text>
+                              <Text style={styles.stepperQtyUnit}>Unit</Text>
+                            </View>
+
+                            <TouchableOpacity
+                              style={styles.stepperBtn}
+                              onPress={() => {
+                                if (!isSelected) {
+                                  setSelectedSupportItem(item);
+                                  setSupportItemQty(2);
+                                } else {
+                                  setSupportItemQty((prev) => prev + 1);
+                                }
+                              }}
+                            >
+                              <Feather name="plus" size={14} color="#0f172a" />
+                            </TouchableOpacity>
+                          </View>
                         </View>
-                      </TouchableOpacity>
+
+                        {/* Multiplier Target Summary */}
+                        {isSelected && (
+                          <View style={styles.subtotalBanner}>
+                            <Feather name="trending-up" size={13} color="#15803d" />
+                            <Text style={styles.subtotalBannerText}>
+                              Target: <Text style={{ fontWeight: 'bold' }}>{supportItemQty} Unit × Rp {item.min_purchase.toLocaleString('id-ID')}</Text> = <Text style={{ fontWeight: 'bold', color: '#15803d' }}>Rp {(supportItemQty * item.min_purchase).toLocaleString('id-ID')}</Text>
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                     );
                   })}
                 </View>
@@ -1916,10 +2007,10 @@ export default function DealerProgramsScreen() {
               <View style={styles.selectionFooterInfo}>
                 <Text style={styles.selectionFooterLabel}>Item Pilihan:</Text>
                 <Text style={styles.selectionFooterName} numberOfLines={1}>
-                  {selectedSupportItem?.code} - {selectedSupportItem?.name}
+                  {selectedSupportItem?.code} - {selectedSupportItem?.name} ({supportItemQty} Unit)
                 </Text>
                 <Text style={styles.selectionFooterTarget}>
-                  Target Belanja: Rp {Number(selectedSupportItem?.min_purchase || 0).toLocaleString('id-ID')}
+                  Target Belanja: Rp {Number((selectedSupportItem?.min_purchase || 0) * supportItemQty).toLocaleString('id-ID')}
                 </Text>
               </View>
 
@@ -1978,59 +2069,117 @@ export default function DealerProgramsScreen() {
                   const isCurrentlyEnrolledItem =
                     chosenDetail?.id === item.id ||
                     (chosenDetail?.name && chosenDetail.name.toUpperCase().includes(item.code.toUpperCase()));
+                  const itemQty = isSelected ? modalItemQty : 1;
 
                   return (
-                    <TouchableOpacity
+                    <View
                       key={item.id}
-                      activeOpacity={0.85}
                       style={[
-                        styles.supportItemCard,
-                        isSelected && styles.supportItemCardSelected,
+                        styles.productCardSupport,
+                        isSelected && styles.productCardSupportSelected,
                         isCurrentlyEnrolledItem && { borderColor: '#15803d', borderWidth: 2 },
                       ]}
-                      onPress={() => setSelectedItemInModal(item)}
                     >
-                      <View
-                        style={[
-                          styles.radioCircle,
-                          isSelected && styles.radioCircleSelected,
-                        ]}
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => setSelectedItemInModal(item)}
+                        style={styles.productCardHeaderRow}
                       >
-                        {isSelected && <View style={styles.radioDot} />}
-                      </View>
+                        <View style={[styles.productThumbBox, isSelected && styles.productThumbBoxSelected]}>
+                          <Feather
+                            name={item.category?.includes('Lantai') ? 'layers' : item.category?.includes('Meja') ? 'box' : item.category?.includes('Digital') ? 'tv' : 'grid'}
+                            size={22}
+                            color={isSelected ? '#15803d' : '#0284c7'}
+                          />
+                        </View>
 
-                      <View style={{ flex: 1 }}>
-                        <View style={styles.itemCodeRow}>
-                          <View style={styles.itemCodeBadge}>
-                            <Text style={styles.itemCodeBadgeText}>{item.code}</Text>
-                          </View>
-                          {item.category && (
-                            <Text style={styles.itemCategoryText}>{item.category}</Text>
-                          )}
-                          {isCurrentlyEnrolledItem && (
-                            <View style={styles.currentlyChosenBadge}>
-                              <Feather name="check" size={10} color="white" />
-                              <Text style={styles.currentlyChosenBadgeText}>Pilihan Saat Ini</Text>
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <View style={styles.itemCodeRow}>
+                            <View style={styles.itemCodeBadge}>
+                              <Text style={styles.itemCodeBadgeText}>{item.code}</Text>
                             </View>
+                            {item.category && (
+                              <Text style={styles.itemCategoryText}>{item.category}</Text>
+                            )}
+                            {isCurrentlyEnrolledItem && (
+                              <View style={styles.currentlyChosenBadge}>
+                                <Feather name="check" size={10} color="white" />
+                                <Text style={styles.currentlyChosenBadgeText}>Pilihan Saat Ini</Text>
+                              </View>
+                            )}
+                          </View>
+
+                          <Text style={styles.productCardTitle}>{item.name}</Text>
+                          {item.dimensions && (
+                            <Text style={styles.productCardSpecs}>📐 {item.dimensions}</Text>
                           )}
                         </View>
 
-                        <Text style={styles.supportItemName}>{item.name}</Text>
-                        {item.dimensions && (
-                          <Text style={styles.supportItemDim}>Ukuran: {item.dimensions}</Text>
-                        )}
-                        {item.description && (
-                          <Text style={styles.supportItemDescText}>{item.description}</Text>
-                        )}
+                        <View
+                          style={[
+                            styles.radioCircle,
+                            isSelected && styles.radioCircleSelected,
+                          ]}
+                        >
+                          {isSelected && <View style={styles.radioDot} />}
+                        </View>
+                      </TouchableOpacity>
 
-                        <View style={styles.minPurchaseBadge}>
-                          <Text style={styles.minPurchaseBadgeLabel}>MIN. PEMBELIAN:</Text>
-                          <Text style={styles.minPurchaseBadgeValue}>
+                      {item.description && (
+                        <Text style={styles.productCardDesc}>{item.description}</Text>
+                      )}
+
+                      <View style={styles.productCardBottomBar}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.pricePerUnitLabel}>MIN. BELANJA / UNIT:</Text>
+                          <Text style={styles.pricePerUnitValue}>
                             Rp {Number(item.min_purchase).toLocaleString('id-ID')}
                           </Text>
                         </View>
+
+                        {/* Stepper (- / +) */}
+                        <View style={styles.stepperContainer}>
+                          <TouchableOpacity
+                            style={[styles.stepperBtn, (!isSelected || modalItemQty <= 1) && styles.stepperBtnDisabled]}
+                            onPress={() => {
+                              if (!isSelected) setSelectedItemInModal(item);
+                              setModalItemQty((prev) => Math.max(1, prev - 1));
+                            }}
+                            disabled={isSelected && modalItemQty <= 1}
+                          >
+                            <Feather name="minus" size={14} color={isSelected && modalItemQty <= 1 ? '#cbd5e1' : '#0f172a'} />
+                          </TouchableOpacity>
+
+                          <View style={styles.stepperQtyBox}>
+                            <Text style={styles.stepperQtyText}>{itemQty}</Text>
+                            <Text style={styles.stepperQtyUnit}>Unit</Text>
+                          </View>
+
+                          <TouchableOpacity
+                            style={styles.stepperBtn}
+                            onPress={() => {
+                              if (!isSelected) {
+                                setSelectedItemInModal(item);
+                                setModalItemQty(2);
+                              } else {
+                                setModalItemQty((prev) => prev + 1);
+                              }
+                            }}
+                          >
+                            <Feather name="plus" size={14} color="#0f172a" />
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                    </TouchableOpacity>
+
+                      {isSelected && (
+                        <View style={styles.subtotalBanner}>
+                          <Feather name="trending-up" size={13} color="#15803d" />
+                          <Text style={styles.subtotalBannerText}>
+                            Target: <Text style={{ fontWeight: 'bold' }}>{modalItemQty} Unit × Rp {item.min_purchase.toLocaleString('id-ID')}</Text> = <Text style={{ fontWeight: 'bold', color: '#15803d' }}>Rp {(modalItemQty * item.min_purchase).toLocaleString('id-ID')}</Text>
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   );
                 })}
               </View>
@@ -2042,10 +2191,10 @@ export default function DealerProgramsScreen() {
                 <View style={styles.selectionFooterInfo}>
                   <Text style={styles.selectionFooterLabel}>Barang yang Dipilih:</Text>
                   <Text style={styles.selectionFooterName} numberOfLines={1}>
-                    {selectedItemInModal.code} - {selectedItemInModal.name}
+                    {selectedItemInModal.code} - {selectedItemInModal.name} ({modalItemQty} Unit)
                   </Text>
                   <Text style={styles.selectionFooterTarget}>
-                    Target Akumulasi Belanja: Rp {Number(selectedItemInModal.min_purchase).toLocaleString('id-ID')}
+                    Target Akumulasi Belanja: Rp {Number(selectedItemInModal.min_purchase * modalItemQty).toLocaleString('id-ID')}
                   </Text>
                 </View>
               )}
@@ -2057,7 +2206,8 @@ export default function DealerProgramsScreen() {
                     handleSelectSupportItem(
                       activeProgramForChangeItem,
                       selectedItemInModal,
-                      activeParticipantForChangeItem
+                      activeParticipantForChangeItem,
+                      modalItemQty
                     );
                   }
                 }}
@@ -3426,6 +3576,134 @@ const styles = StyleSheet.create({
   supportItemCardSelected: {
     backgroundColor: '#f0fdf4',
     borderColor: '#16a34a',
+  },
+
+  // Product Card for Support Items with Quantity Stepper
+  productCardSupport: {
+    backgroundColor: 'white',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  productCardSupportSelected: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#16a34a',
+    borderWidth: 2,
+  },
+  productCardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  productThumbBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#f0f9ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  productThumbBoxSelected: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#86efac',
+  },
+  productCardTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    marginTop: 2,
+  },
+  productCardSpecs: {
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  productCardDesc: {
+    fontSize: 11,
+    color: '#64748b',
+    lineHeight: 16,
+    marginTop: 6,
+    paddingHorizontal: 2,
+  },
+  productCardBottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  pricePerUnitLabel: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#64748b',
+    letterSpacing: 0.5,
+  },
+  pricePerUnitValue: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#b45309',
+    marginTop: 1,
+  },
+  stepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    overflow: 'hidden',
+  },
+  stepperBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f1f5f9',
+  },
+  stepperBtnDisabled: {
+    opacity: 0.35,
+  },
+  stepperQtyBox: {
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 46,
+  },
+  stepperQtyText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    lineHeight: 15,
+  },
+  stepperQtyUnit: {
+    fontSize: 9,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  subtotalBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  subtotalBannerText: {
+    fontSize: 11,
+    color: '#166534',
+    flex: 1,
   },
   radioCircle: {
     width: 20,

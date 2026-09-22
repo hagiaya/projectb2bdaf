@@ -52,37 +52,96 @@ export default function OrdersPage() {
   const [isLoadingItems, setIsLoadingItems] = useState(false);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  const [newOrderAlert, setNewOrderAlert] = useState<{ number: string; total: number } | null>(null);
+  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
 
   useEffect(() => {
     fetchData();
 
+    // 1. Setup Supabase Realtime Channel
     const ordersSub = supabase
-      .channel('public:orders-live')
+      .channel('admin-orders-pipeline-live')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders' },
-        () => {
+        (payload: any) => {
+          setLastSyncTime(new Date());
+          if (payload.eventType === 'INSERT') {
+            const newOrd = payload.new;
+            setNewOrderAlert({
+              number: newOrd.order_number || 'Pesanan Baru',
+              total: Number(newOrd.final_amount || newOrd.total_amount || 0),
+            });
+            // Auto dismiss alert after 6 seconds
+            setTimeout(() => setNewOrderAlert(null), 6000);
+          }
           fetchData();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        setIsRealtimeConnected(status === 'SUBSCRIBED');
+      });
+
+    // 2. Safety interval polling (sync every 25s in case WebSocket drops)
+    const pollInterval = setInterval(() => {
+      fetchData(true);
+    }, 25000);
 
     return () => {
       supabase.removeChannel(ordersSub);
+      clearInterval(pollInterval);
     };
   }, []);
 
-  const fetchData = async () => {
-    setIsLoading(true);
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*, dealers(store_name, address, profiles:profile_id(full_name, phone_number))')
-      .order('created_at', { ascending: false });
-      
-    if (!error && data) {
-      setOrders(data as any);
+  const fetchData = async (isBackground = false) => {
+    if (!isBackground) setIsLoading(true);
+    setFetchError(null);
+
+    try {
+      // Tier 1: Query with joined dealers and profiles
+      let { data, error } = await supabase
+        .from('orders')
+        .select('*, dealers(store_name, address, profiles:profile_id(full_name, phone_number))')
+        .order('created_at', { ascending: false });
+
+      // Tier 2: Fallback if profiles relation causes schema mismatch
+      if (error) {
+        console.warn('Tier 1 query failed, trying Tier 2 (dealers without nested profiles):', error.message);
+        const fb1 = await supabase
+          .from('orders')
+          .select('*, dealers(store_name, address)')
+          .order('created_at', { ascending: false });
+        data = fb1.data;
+        error = fb1.error;
+      }
+
+      // Tier 3: Fallback if dealers relation causes mismatch
+      if (error) {
+        console.warn('Tier 2 query failed, trying Tier 3 (raw orders table):', error.message);
+        const fb2 = await supabase
+          .from('orders')
+          .select('*')
+          .order('created_at', { ascending: false });
+        data = fb2.data;
+        error = fb2.error;
+      }
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        setOrders(data as any);
+        setLastSyncTime(new Date());
+      }
+    } catch (err: any) {
+      console.error('Fetch orders critical error:', err);
+      setFetchError(err.message || 'Gagal memuat pesanan dari Supabase');
+    } finally {
+      if (!isBackground) setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleOpenDetail = async (order: Order) => {
@@ -174,6 +233,48 @@ export default function OrdersPage() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
+      {/* Real-time Order Alert Toast */}
+      {newOrderAlert && (
+        <div className="mb-6 p-4 bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-500/30 flex items-center justify-between animate-bounce">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-white/20 rounded-xl">
+              <ShoppingCart size={20} />
+            </div>
+            <div>
+              <p className="font-bold text-sm">Pesanan Baru Masuk Real-Time!</p>
+              <p className="text-xs text-emerald-100">
+                Nomor: <span className="font-mono font-bold">{newOrderAlert.number}</span> • Total: Rp {newOrderAlert.total.toLocaleString('id-ID')}
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setNewOrderAlert(null)}
+            className="text-white/80 hover:text-white p-1 rounded-lg"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* Error Alert if Database Connection Issue */}
+      {fetchError && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between text-amber-900">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="text-amber-600 shrink-0" size={20} />
+            <div>
+              <p className="font-bold text-sm">Kendala Sinkronisasi Data Pesanan</p>
+              <p className="text-xs text-amber-700 mt-0.5">{fetchError}</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => fetchData()} 
+            className="px-3 py-1.5 bg-amber-600 text-white text-xs font-bold rounded-xl hover:bg-amber-700 transition-colors"
+          >
+            Coba Lagi
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div>
@@ -183,16 +284,27 @@ export default function OrdersPage() {
             </div>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Manajemen Order & Pipeline</h1>
           </div>
-          <p className="text-sm text-slate-500 font-medium">
-            Alur 4 Tahap: <span className="font-semibold text-slate-700">Pesan ➔ Pengemasan ➔ Pengiriman ➔ COD Bayar / Selesai</span>. Real-time Supabase.
-          </p>
+          <div className="flex flex-wrap items-center gap-2.5 text-sm text-slate-500 font-medium">
+            <span>Alur: <span className="font-semibold text-slate-700">Pesan ➔ Pengemasan ➔ Pengiriman ➔ COD Bayar / Selesai</span></span>
+            <span className="text-slate-300">•</span>
+            {/* Live Indicator */}
+            <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 border border-emerald-200/80 rounded-full text-xs font-bold text-emerald-700">
+              <span className={`w-2 h-2 rounded-full ${isRealtimeConnected ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-400'}`}></span>
+              <span>{isRealtimeConnected ? 'Real-time Live' : 'Terhubung'}</span>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              (Update: {lastSyncTime.toLocaleTimeString('id-ID')})
+            </span>
+          </div>
         </div>
-        <button 
-          onClick={fetchData} 
-          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 shadow-sm transition-all"
-        >
-          <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} /> Refresh Data
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => fetchData()} 
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 shadow-sm transition-all"
+          >
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} /> Refresh Data
+          </button>
+        </div>
       </div>
 
       {/* 4 Pipeline Stage Stepper Tabs */}

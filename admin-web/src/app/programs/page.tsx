@@ -159,6 +159,7 @@ interface Participant {
   approved_at?: string;
   selected_item_id?: string;
   selected_item_name?: string;
+  selected_item_qty?: number;
   custom_target_amount?: number;
   dealers?: {
     id: string;
@@ -978,7 +979,9 @@ export default function ProgramsPage() {
 
                   // Detect chosen item from claim_notes or selected_item_name
                   let chosenItemLabel = part.selected_item_name || '';
-                  if (!chosenItemLabel && part.claim_notes && part.claim_notes.includes('[PILIHAN ITEM:')) {
+                  if (part.selected_item_qty && part.selected_item_qty > 1) {
+                    chosenItemLabel = `${chosenItemLabel} (${part.selected_item_qty} Unit)`;
+                  } else if (!chosenItemLabel && part.claim_notes && part.claim_notes.includes('[PILIHAN ITEM:')) {
                     const match = part.claim_notes.match(/\[PILIHAN ITEM:\s*([^\]]+)\]/);
                     if (match) chosenItemLabel = match[1];
                   }
@@ -1497,8 +1500,9 @@ export default function ProgramsPage() {
                 {selectedParticipant.selected_item_name || selectedParticipant.claim_notes?.includes('[PILIHAN ITEM:') ? (
                   <div className="mt-2 p-2.5 bg-amber-100 border border-amber-300 rounded-lg text-amber-950 text-xs font-black">
                     🎁 HADIAH PILIHAN TOKO:{' '}
-                    {selectedParticipant.selected_item_name ||
-                      selectedParticipant.claim_notes?.match(/\[PILIHAN ITEM:\s*([^\]]+)\]/)?.[1]}
+                    {selectedParticipant.selected_item_name 
+                      ? `${selectedParticipant.selected_item_name}${selectedParticipant.selected_item_qty && selectedParticipant.selected_item_qty > 1 ? ` (${selectedParticipant.selected_item_qty} Unit)` : ''}`
+                      : selectedParticipant.claim_notes?.match(/\[PILIHAN ITEM:\s*([^\]]+)\]/)?.[1]}
                   </div>
                 ) : null}
 

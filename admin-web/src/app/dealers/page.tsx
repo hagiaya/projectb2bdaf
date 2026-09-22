@@ -92,6 +92,14 @@ interface Profile {
 
 interface PaymentSettings {
   id: string;
+  // CBD (Cash Before Delivery / Transfer Bank Manual)
+  bank_name?: string;
+  bank_account_number?: string;
+  bank_account_name?: string;
+  cbd_enabled?: boolean;
+  cbd_term_label?: string;
+  cbd_instructions?: string;
+  // COD (Cash On Delivery)
   cod_enabled: boolean;
   cod_term_days: number;
   cod_term_label: string;
@@ -168,9 +176,15 @@ export default function DealersPage() {
   });
   const [specialDealerNotesInput, setSpecialDealerNotesInput] = useState('');
 
-  // COD Settings State
+  // Payment & Bank CBD / COD Settings State
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>({
     id: 'default',
+    bank_name: 'BCA (Bank Central Asia)',
+    bank_account_number: '829-019-8821',
+    bank_account_name: 'PT DISTRIBUSI AKSESORIS PRIMA',
+    cbd_enabled: true,
+    cbd_term_label: 'Transfer Bank Manual (CBD - Cash Before Delivery)',
+    cbd_instructions: 'Transfer ke rekening resmi perusahaan + 3 digit kode unik acak sebelum pesanan diproses dan dikirimkan.',
     cod_enabled: true,
     cod_term_days: 0,
     cod_term_label: 'Bayar Saat Terima Barang (H+0)',
@@ -413,28 +427,52 @@ export default function DealersPage() {
     alert(`Pengaturan toko "${selectedDealerCredit.store_name}" berhasil disimpan! ${isSpecialDealerInput ? '⭐ Status: Dealer Khusus (' + specialTierInput + ')' : '⚪ Status: Dealer Reguler'}. Termin Kredit: ${termDays} Hari.`);
   };
 
-  // Save COD Settings Handler
+  // Save Payment & COD Settings Handler
   const handleSaveCodSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingCodSettings(true);
 
     try {
-      const { error } = await supabase
+      const payload: any = {
+        id: 'default',
+        bank_name: paymentSettings.bank_name || 'BCA (Bank Central Asia)',
+        bank_account_number: paymentSettings.bank_account_number || '829-019-8821',
+        bank_account_name: paymentSettings.bank_account_name || 'PT DISTRIBUSI AKSESORIS PRIMA',
+        cbd_enabled: paymentSettings.cbd_enabled ?? true,
+        cbd_term_label: paymentSettings.cbd_term_label || 'Transfer Bank Manual (CBD - Cash Before Delivery)',
+        cbd_instructions: paymentSettings.cbd_instructions || '',
+        cod_enabled: paymentSettings.cod_enabled,
+        cod_term_days: paymentSettings.cod_term_days,
+        cod_term_label: paymentSettings.cod_term_label,
+        cod_max_amount: paymentSettings.cod_max_amount,
+        cod_policy_terms: paymentSettings.cod_policy_terms,
+        updated_at: new Date().toISOString(),
+      };
+
+      let { error } = await supabase
         .from('payment_settings')
-        .upsert({
-          id: 'default',
-          cod_enabled: paymentSettings.cod_enabled,
-          cod_term_days: paymentSettings.cod_term_days,
-          cod_term_label: paymentSettings.cod_term_label,
-          cod_max_amount: paymentSettings.cod_max_amount,
-          cod_policy_terms: paymentSettings.cod_policy_terms,
-          updated_at: new Date().toISOString(),
-        });
+        .upsert(payload);
+
+      if (error && (error.message?.includes('bank_') || error.message?.includes('cbd_'))) {
+        console.warn('Retrying payment_settings upsert without bank columns pending migration...');
+        delete payload.bank_name;
+        delete payload.bank_account_number;
+        delete payload.bank_account_name;
+        delete payload.cbd_enabled;
+        delete payload.cbd_term_label;
+        delete payload.cbd_instructions;
+        const retry = await supabase.from('payment_settings').upsert(payload);
+        error = retry.error;
+        if (!error) {
+          alert("Pengaturan COD berhasil disimpan!\n\nCatatan: Kolom rekening bank CBD belum ada di database Supabase Anda. Jalankan skrip SQL 'update_promo_and_payment_bank.sql' di Supabase SQL Editor.");
+          return;
+        }
+      }
 
       if (error) throw error;
-      alert("Pengaturan Kebijakan & Termin COD berhasil disimpan ke database!");
+      alert("Pengaturan Pembayaran, Rekening Bank (CBD), dan Termin COD berhasil disimpan ke database!");
     } catch (err: any) {
-      alert("Gagal menyimpan pengaturan COD: " + (err.message || 'Pastikan file setup_cod_and_credit_limit.sql sudah dijalankan di Supabase.'));
+      alert("Gagal menyimpan pengaturan: " + (err.message || 'Pastikan skrip SQL update_promo_and_payment_bank.sql sudah dijalankan di Supabase.'));
     } finally {
       setIsSavingCodSettings(false);
     }
@@ -663,8 +701,8 @@ export default function DealersPage() {
               : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
           }`}
         >
-          <Truck size={16} />
-          Pengaturan Termin COD Perusahaan
+          <CreditCard size={16} />
+          Pengaturan Bank (CBD) & COD
         </button>
 
         <button
@@ -926,116 +964,235 @@ export default function DealersPage() {
       )}
 
       {/* ======================================================== */}
-      {/* TAB 2: PENGATURAN TERMIN COD PERUSAHAAN                   */}
+      {/* TAB 2: PENGATURAN PEMBAYARAN BANK (CBD) & TERMIN COD     */}
       {/* ======================================================== */}
       {activeTab === 'cod_settings' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 md:p-8 max-w-4xl">
-          <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
-            <div className="p-3 bg-amber-100 text-amber-800 rounded-xl">
-              <Truck size={24} />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">Ketentuan & Pengaturan Termin Pembayaran COD</h2>
-              <p className="text-xs text-slate-500">Tentukan kebijakan pembayaran Cash on Delivery (COD) yang berlaku bagi dealer saat checkout.</p>
-            </div>
-          </div>
-
+        <div className="space-y-6 max-w-4xl">
           <form onSubmit={handleSaveCodSettings} className="space-y-6">
-            {/* 1. Toggle Status COD */}
-            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
-              <div>
-                <p className="text-sm font-bold text-slate-900">Aktifkan Metode Pembayaran COD</p>
-                <p className="text-xs text-slate-500 mt-0.5">Jika dinonaktifkan, dealer tidak dapat memilih metode COD saat checkout.</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={paymentSettings.cod_enabled}
-                  onChange={(e) => setPaymentSettings({ ...paymentSettings, cod_enabled: e.target.checked })}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-              </label>
-            </div>
-
-            {/* 2. Pilihan Termin COD & Jatuh Tempo */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  LABEL TERMIN PEMBAYARAN COD <span className="text-red-500">*</span>
-                </label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="Contoh: Bayar Saat Terima Barang (H+0)"
-                  value={paymentSettings.cod_term_label}
-                  onChange={(e) => setPaymentSettings({ ...paymentSettings, cod_term_label: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">Label ini akan tampil di layar pemilihan metode pembayaran mobile app.</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  JATUH TEMPO HARI (TENOR COD) <span className="text-red-500">*</span>
-                </label>
-                <div className="flex items-center gap-2">
-                  <select 
-                    value={paymentSettings.cod_term_days}
-                    onChange={(e) => setPaymentSettings({ ...paymentSettings, cod_term_days: parseInt(e.target.value, 10) })}
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none cursor-pointer"
-                  >
-                    <option value={0}>0 Hari (Langsung Bayar Saat Barang Tiba)</option>
-                    <option value={1}>1 Hari (Tempo 24 Jam)</option>
-                    <option value={3}>3 Hari (Tempo 3 Hari Kerja)</option>
-                    <option value={7}>7 Hari (Tempo 1 Minggu)</option>
-                  </select>
+            {/* KARTU 1: REKENING BANK & CBD (CASH BEFORE DELIVERY) */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 md:p-8">
+              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
+                <div className="p-3 bg-blue-100 text-blue-800 rounded-xl">
+                  <CreditCard size={24} />
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">Waktu batas toleransi pelunasan setelah kurir menyerahkan pesanan.</p>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">Rekening Resmi & Transfer Bank Manual (CBD)</h2>
+                  <p className="text-xs text-slate-500">
+                    Konfigurasi nomor rekening dan instruksi Cash Before Delivery (CBD) yang ditampilkan kepada dealer di checkout mobile app.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                {/* 1. Toggle Status CBD */}
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Aktifkan Metode Transfer Bank Manual (CBD)</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Dealer mentransfer pembayaran lunas sebelum pesanan dikirimkan.</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={paymentSettings.cbd_enabled ?? true}
+                      onChange={(e) => setPaymentSettings({ ...paymentSettings, cbd_enabled: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                {/* 2. Informasi Bank & Rekening */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      NAMA BANK <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="Contoh: BCA (Bank Central Asia)"
+                      value={paymentSettings.bank_name || ''}
+                      onChange={(e) => setPaymentSettings({ ...paymentSettings, bank_name: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">Nama bank penerima transfer resmi perusahaan.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      NOMOR REKENING <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="Contoh: 829-019-8821"
+                      value={paymentSettings.bank_account_number || ''}
+                      onChange={(e) => setPaymentSettings({ ...paymentSettings, bank_account_number: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">Nomor rekening tujuan transfer yang dapat disalin dealer.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      ATAS NAMA REKENING (BENEFICIARY) <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="Contoh: PT DISTRIBUSI AKSESORIS PRIMA"
+                      value={paymentSettings.bank_account_name || ''}
+                      onChange={(e) => setPaymentSettings({ ...paymentSettings, bank_account_name: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">Nama resmi pemegang rekening perusahaan.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      LABEL TERMIN CBD DI APLIKASI
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder="Contoh: Transfer Bank Manual (CBD - Cash Before Delivery)"
+                      value={paymentSettings.cbd_term_label || ''}
+                      onChange={(e) => setPaymentSettings({ ...paymentSettings, cbd_term_label: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">Nama metode pembayaran pada pilihan checkout mobile app.</p>
+                  </div>
+                </div>
+
+                {/* 3. Instruksi Transfer CBD */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    PETUNJUK & INSTRUKSI TRANSFER CBD
+                  </label>
+                  <textarea 
+                    rows={3}
+                    placeholder="Instruksi transfer yang ditampilkan kepada dealer..."
+                    value={paymentSettings.cbd_instructions || ''}
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, cbd_instructions: e.target.value })}
+                    className="w-full p-4 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 leading-relaxed focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Instruksi langkah transfer dan panduan konfirmasi pembayaran.</p>
+                </div>
               </div>
             </div>
 
-            {/* 3. Batas Maksimal Order COD */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                BATAS MAKSIMAL NOMINAL PESANAN COD (LIMIT COD)
-              </label>
-              <div className="relative max-w-md">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">Rp</span>
-                <input 
-                  type="number" 
-                  min="0"
-                  step="100000"
-                  value={paymentSettings.cod_max_amount}
-                  onChange={(e) => setPaymentSettings({ ...paymentSettings, cod_max_amount: parseFloat(e.target.value) || 0 })}
-                  className="w-full pl-12 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
-                />
+            {/* KARTU 2: PENGATURAN TERMIN COD (CASH ON DELIVERY) */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 md:p-8">
+              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
+                <div className="p-3 bg-amber-100 text-amber-800 rounded-xl">
+                  <Truck size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">Ketentuan & Pengaturan Termin Pembayaran COD</h2>
+                  <p className="text-xs text-slate-500">Tentukan kebijakan pembayaran Cash on Delivery (COD) yang berlaku bagi dealer saat checkout.</p>
+                </div>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">Pesanan di atas nominal ini tidak dapat menggunakan COD (wajib Transfer Bank atau Kredit).</p>
+
+              <div className="space-y-5">
+                {/* 1. Toggle Status COD */}
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Aktifkan Metode Pembayaran COD</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Jika dinonaktifkan, dealer tidak dapat memilih metode COD saat checkout.</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={paymentSettings.cod_enabled}
+                      onChange={(e) => setPaymentSettings({ ...paymentSettings, cod_enabled: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+
+                {/* 2. Pilihan Termin COD & Jatuh Tempo */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      LABEL TERMIN PEMBAYARAN COD <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="Contoh: Bayar Saat Terima Barang (H+0)"
+                      value={paymentSettings.cod_term_label}
+                      onChange={(e) => setPaymentSettings({ ...paymentSettings, cod_term_label: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">Label ini akan tampil di layar pemilihan metode pembayaran mobile app.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                      JATUH TEMPO HARI (TENOR COD) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <select 
+                        value={paymentSettings.cod_term_days}
+                        onChange={(e) => setPaymentSettings({ ...paymentSettings, cod_term_days: parseInt(e.target.value, 10) })}
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none cursor-pointer"
+                      >
+                        <option value={0}>0 Hari (Langsung Bayar Saat Barang Tiba)</option>
+                        <option value={1}>1 Hari (Tempo 24 Jam)</option>
+                        <option value={3}>3 Hari (Tempo 3 Hari Kerja)</option>
+                        <option value={7}>7 Hari (Tempo 1 Minggu)</option>
+                      </select>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">Waktu batas toleransi pelunasan setelah kurir menyerahkan pesanan.</p>
+                  </div>
+                </div>
+
+                {/* 3. Batas Maksimal Order COD */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    BATAS MAKSIMAL NOMINAL PESANAN COD (LIMIT COD)
+                  </label>
+                  <div className="relative max-w-md">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">Rp</span>
+                    <input 
+                      type="number" 
+                      min="0"
+                      step="100000"
+                      value={paymentSettings.cod_max_amount}
+                      onChange={(e) => setPaymentSettings({ ...paymentSettings, cod_max_amount: parseFloat(e.target.value) || 0 })}
+                      className="w-full pl-12 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">Pesanan di atas nominal ini tidak dapat menggunakan COD (wajib Transfer Bank atau Kredit).</p>
+                </div>
+
+                {/* 4. Teks Kebijakan & Ketentuan Tertulis COD */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    KETENTUAN & KEBIJAKAN TERTULIS COD PERUSAHAAN <span className="text-red-500">*</span>
+                  </label>
+                  <textarea 
+                    rows={5}
+                    required
+                    value={paymentSettings.cod_policy_terms}
+                    onChange={(e) => setPaymentSettings({ ...paymentSettings, cod_policy_terms: e.target.value })}
+                    className="w-full p-4 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 leading-relaxed focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Teks ini akan ditampilkan secara transparan di popup dan kotak rincian checkout mobile app.</p>
+                </div>
+              </div>
             </div>
 
-            {/* 4. Teks Kebijakan & Ketentuan Tertulis COD */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                KETENTUAN & KEBIJAKAN TERTULIS COD PERUSAHAAN <span className="text-red-500">*</span>
-              </label>
-              <textarea 
-                rows={6}
-                required
-                value={paymentSettings.cod_policy_terms}
-                onChange={(e) => setPaymentSettings({ ...paymentSettings, cod_policy_terms: e.target.value })}
-                className="w-full p-4 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 leading-relaxed focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
-              />
-              <p className="text-[11px] text-slate-400 mt-1">Teks ini akan ditampilkan secara transparan di popup dan kotak rincian checkout mobile app.</p>
-            </div>
-
-            <div className="pt-4 border-t border-slate-100 flex justify-end">
+            {/* TOMBOL SIMPAN */}
+            <div className="flex justify-end pt-2">
               <button
                 type="submit"
                 disabled={isSavingCodSettings}
-                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/35 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                <Check size={16} /> {isSavingCodSettings ? 'Menyimpan...' : 'Simpan Pengaturan COD'}
+                <Check size={18} /> {isSavingCodSettings ? 'Menyimpan Pengaturan...' : 'Simpan Semua Pengaturan Pembayaran (CBD & COD)'}
               </button>
             </div>
           </form>

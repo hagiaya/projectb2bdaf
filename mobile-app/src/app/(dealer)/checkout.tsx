@@ -19,20 +19,33 @@ export default function CheckoutScreen() {
   // 3-digit random unique code for transfer verification (e.g. 100 - 999)
   const [uniqueCode, setUniqueCode] = useState(() => Math.floor(100 + Math.random() * 900));
 
-  // COD Company Settings
-  const [codSettings, setCodSettings] = useState<{
+  // Payment (CBD Bank & COD) Company Settings
+  const [paymentSettings, setPaymentSettings] = useState<{
+    bank_name?: string;
+    bank_account_number?: string;
+    bank_account_name?: string;
+    cbd_enabled?: boolean;
+    cbd_term_label?: string;
+    cbd_instructions?: string;
     cod_enabled: boolean;
     cod_term_days: number;
     cod_term_label: string;
     cod_max_amount: number;
     cod_policy_terms: string;
   }>({
+    bank_name: 'BCA (Bank Central Asia)',
+    bank_account_number: '829-019-8821',
+    bank_account_name: 'PT DISTRIBUSI AKSESORIS PRIMA',
+    cbd_enabled: true,
+    cbd_term_label: 'Transfer Bank Manual (CBD - Cash Before Delivery)',
+    cbd_instructions: 'Transfer ke rekening resmi perusahaan + 3 digit kode unik sebelum pesanan diproses dan dikirim.',
     cod_enabled: true,
     cod_term_days: 0,
     cod_term_label: 'Bayar Saat Terima Barang (H+0)',
     cod_max_amount: 10000000,
     cod_policy_terms: 'Pembayaran diserahkan kepada kurir pengantar saat barang tiba di toko.',
   });
+  const codSettings = paymentSettings; // backward-compatibility alias
 
   // Proof of Transfer state
   const [proofUri, setProofUri] = useState<string | null>(null);
@@ -55,7 +68,10 @@ export default function CheckoutScreen() {
         .maybeSingle();
 
       if (!error && data) {
-        setCodSettings(data);
+        setPaymentSettings(prev => ({
+          ...prev,
+          ...data,
+        }));
       }
     } catch (e) {
       console.warn("Fetch payment_settings error:", e);
@@ -378,24 +394,33 @@ export default function CheckoutScreen() {
           <Text style={styles.sectionTitle}>Pilih Metode Pembayaran</Text>
           
           <View style={styles.paymentMethodsGrid}>
-            {/* OPSI 1: TRANSFER MANUAL */}
+            {/* OPSI 1: TRANSFER MANUAL (CBD) */}
             <TouchableOpacity
               style={[
                 styles.methodCard,
                 paymentMethod === 'TRANSFER' && styles.methodCardActive,
+                paymentSettings.cbd_enabled === false && { opacity: 0.5 },
               ]}
-              onPress={() => setPaymentMethod('TRANSFER')}
+              onPress={() => (paymentSettings.cbd_enabled ?? true) && setPaymentMethod('TRANSFER')}
+              disabled={paymentSettings.cbd_enabled === false}
             >
               <View style={styles.methodHeader}>
                 <View style={[styles.radioCircle, paymentMethod === 'TRANSFER' && styles.radioCircleActive]}>
                   {paymentMethod === 'TRANSFER' && <View style={styles.radioDot} />}
                 </View>
                 <Feather name="credit-card" size={20} color={paymentMethod === 'TRANSFER' ? '#16a34a' : '#64748b'} />
-                <Text style={[styles.methodTitle, paymentMethod === 'TRANSFER' && styles.methodTitleActive]}>
-                  Transfer Bank Manual
-                </Text>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: 4 }}>
+                  <Text style={[styles.methodTitle, paymentMethod === 'TRANSFER' && styles.methodTitleActive]}>
+                    {paymentSettings.cbd_term_label || 'Transfer Bank Manual (CBD)'}
+                  </Text>
+                  <View style={[styles.termBadge, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}>
+                    <Text style={[styles.termBadgeText, { color: '#1d4ed8' }]}>CBD</Text>
+                  </View>
+                </View>
               </View>
-              <Text style={styles.methodSub}>Transfer ke rekening resmi perusahaan + 3 kode unik acak</Text>
+              <Text style={styles.methodSub}>
+                {paymentSettings.cbd_instructions || 'Transfer ke rekening resmi perusahaan + 3 kode unik acak'}
+              </Text>
             </TouchableOpacity>
 
             {/* OPSI 2: COD (BAYAR DI TEMPAT DENGAN PENGATURAN TERMIN) */}
@@ -488,9 +513,9 @@ export default function CheckoutScreen() {
               <View style={styles.bankCard}>
                 <Feather name="briefcase" size={20} color="#8ec44a" />
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.bankName}>BCA (Bank Central Asia)</Text>
-                  <Text style={styles.bankNumber}>829-019-8821</Text>
-                  <Text style={styles.bankHolder}>a.n. PT DISTRIBUSI AKSESORIS PRIMA</Text>
+                  <Text style={styles.bankName}>{paymentSettings.bank_name || 'BCA (Bank Central Asia)'}</Text>
+                  <Text style={styles.bankNumber}>{paymentSettings.bank_account_number || '829-019-8821'}</Text>
+                  <Text style={styles.bankHolder}>a.n. {paymentSettings.bank_account_name || 'PT DISTRIBUSI AKSESORIS PRIMA'}</Text>
                 </View>
               </View>
 
@@ -708,7 +733,7 @@ export default function CheckoutScreen() {
                 <View style={styles.transferAlertItem}>
                   <Text style={styles.transferAlertBullet}>1.</Text>
                   <Text style={styles.transferAlertText}>
-                    <Text style={{ fontWeight: 'bold' }}>Rekening Resmi Perusahaan:</Text> Transfer hanya ke <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>BCA 829-019-8821</Text> a.n. <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>PT DISTRIBUSI AKSESORIS PRIMA</Text>.
+                    <Text style={{ fontWeight: 'bold' }}>Rekening Resmi Perusahaan:</Text> Transfer hanya ke <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>{paymentSettings.bank_name || 'BCA'} {paymentSettings.bank_account_number || '829-019-8821'}</Text> a.n. <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>{paymentSettings.bank_account_name || 'PT DISTRIBUSI AKSESORIS PRIMA'}</Text>.
                   </Text>
                 </View>
                 <View style={styles.transferAlertItem}>
@@ -743,9 +768,9 @@ export default function CheckoutScreen() {
                   <View style={styles.transferBankRow}>
                     <Feather name="briefcase" size={18} color="#0284c7" />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.bankName}>BCA (Bank Central Asia)</Text>
-                      <Text style={styles.bankNumber}>829-019-8821</Text>
-                      <Text style={styles.bankHolder}>a.n. PT DISTRIBUSI AKSESORIS PRIMA</Text>
+                      <Text style={styles.bankName}>{paymentSettings.bank_name || 'BCA (Bank Central Asia)'}</Text>
+                      <Text style={styles.bankNumber}>{paymentSettings.bank_account_number || '829-019-8821'}</Text>
+                      <Text style={styles.bankHolder}>a.n. {paymentSettings.bank_account_name || 'PT DISTRIBUSI AKSESORIS PRIMA'}</Text>
                     </View>
                   </View>
 

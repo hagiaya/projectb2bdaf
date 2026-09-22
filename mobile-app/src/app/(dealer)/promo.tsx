@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Modal, ActivityIndicator, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 
 interface Promo {
-  id: number;
+  id: number | string;
   title: string;
   desc: string;
   code: string;
   expire: string;
+  banner_url?: string | null;
 }
 
 export default function PromoScreen() {
@@ -35,10 +36,11 @@ export default function PromoScreen() {
       const activeData = data.filter(p => !p.expires_at || new Date(p.expires_at).getTime() >= now);
 
       const mappedPromos: Promo[] = activeData.map(p => ({
-        id: p.id as any,
+        id: p.id,
         title: p.title || `Diskon ${p.discount_percent}%`,
         desc: p.description || `Diskon ${p.discount_percent}% untuk seluruh pembelanjaan produk.`,
         code: p.code,
+        banner_url: p.banner_url || null,
         expire: p.expires_at 
           ? new Date(p.expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
           : 'Berlaku Permanen'
@@ -95,29 +97,36 @@ export default function PromoScreen() {
             const isApplied = appliedCode === promo.code;
             return (
               <View key={promo.id} style={[styles.card, isApplied && styles.cardApplied]}>
-                <View style={styles.badge}><Feather name="percent" size={20} color="white" /></View>
-                <View style={{ marginLeft: 60 }}>
-                  <Text style={styles.title}>{promo.title}</Text>
-                  <Text style={styles.desc}>{promo.desc}</Text>
-                  <View style={styles.footer}>
-                    <View>
-                      <Text style={styles.codeLabel}>Kode Voucher:</Text>
-                      <Text style={styles.code}>{promo.code}</Text>
-                    </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={styles.expireLabel}>Berakhir:</Text>
-                      <Text style={styles.expire}>{promo.expire}</Text>
-                    </View>
+                {promo.banner_url && (
+                  <View style={styles.cardBannerWrap}>
+                    <Image source={{ uri: promo.banner_url }} style={styles.cardBannerImg} resizeMode="cover" />
                   </View>
-                  <TouchableOpacity 
-                    style={[styles.useBtn, isApplied && styles.useBtnDisabled]} 
-                    onPress={() => handleUsePromo(promo)}
-                    disabled={isApplied}
-                  >
-                    <Text style={styles.useBtnText}>
-                      {isApplied ? '✓ Voucher Terpakai' : 'Gunakan Promo'}
-                    </Text>
-                  </TouchableOpacity>
+                )}
+                <View style={styles.cardBody}>
+                  <View style={styles.badge}><Feather name="percent" size={18} color="white" /></View>
+                  <View style={{ marginLeft: 50, flex: 1 }}>
+                    <Text style={styles.title}>{promo.title}</Text>
+                    <Text style={styles.desc}>{promo.desc}</Text>
+                    <View style={styles.footer}>
+                      <View>
+                        <Text style={styles.codeLabel}>Kode Voucher:</Text>
+                        <Text style={styles.code}>{promo.code}</Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={styles.expireLabel}>Berakhir:</Text>
+                        <Text style={styles.expire}>{promo.expire}</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity 
+                      style={[styles.useBtn, isApplied && styles.useBtnDisabled]} 
+                      onPress={() => handleUsePromo(promo)}
+                      disabled={isApplied}
+                    >
+                      <Text style={styles.useBtnText}>
+                        {isApplied ? '✓ Voucher Terpakai' : 'Gunakan Promo'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             );
@@ -160,9 +169,12 @@ const styles = StyleSheet.create({
   list: { padding: 16, gap: 16 },
   activeBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#f0f7e6', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#86efac' },
   activeText: { fontSize: 13, color: '#4a6b22' },
-  card: { backgroundColor: 'white', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#f0f7e6', shadowColor: '#8ec44a', shadowOpacity: 0.05, elevation: 2, position: 'relative', overflow: 'hidden' },
+  card: { backgroundColor: 'white', borderRadius: 16, borderWidth: 1, borderColor: '#f0f7e6', shadowColor: '#8ec44a', shadowOpacity: 0.05, elevation: 2, overflow: 'hidden' },
+  cardBannerWrap: { width: '100%', height: 130, backgroundColor: '#f1f5f9' },
+  cardBannerImg: { width: '100%', height: '100%' },
+  cardBody: { padding: 16, position: 'relative' },
   cardApplied: { borderColor: '#8ec44a', borderWidth: 2 },
-  badge: { position: 'absolute', top: -10, left: -10, width: 60, height: 60, backgroundColor: '#eab308', borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
+  badge: { position: 'absolute', top: 12, left: 12, width: 44, height: 44, backgroundColor: '#eab308', borderRadius: 22, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
   title: { fontSize: 16, fontWeight: 'bold', color: '#4a6b22', marginBottom: 4 },
   desc: { fontSize: 12, color: '#64748b', marginBottom: 16, lineHeight: 18 },
   footer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16, backgroundColor: '#f6fbf0', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#dcf0c3' },
