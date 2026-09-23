@@ -314,7 +314,6 @@ export default function DealerHome() {
 
   // derived lists (Membagi produk yang diacak ke berbagai section agar tidak sama)
   const bestSellerProducts = products.slice(0, 4);
-  const flashSaleProducts = products.slice(4, 9);
   const recentlyViewed = products.slice(9, 14);
 
   const storeName = dealer?.store_name || 'Toko Anda';
