@@ -20,6 +20,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../lib/supabase';
+import { useSafeBottom } from '../../hooks/useSafeBottom';
 
 interface ReturnItemSKU {
   product_id?: string;
@@ -81,6 +82,7 @@ interface ProductOption {
 }
 
 export default function ReturnsScreen() {
+  const safeBottom = useSafeBottom();
   const [returns, setReturns] = useState<ReturnTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -768,7 +770,7 @@ export default function ReturnsScreen() {
         </View>
       ) : filteredReturns.length === 0 ? (
         <ScrollView 
-          contentContainerStyle={styles.emptyContainer}
+          contentContainerStyle={[styles.emptyContainer, { paddingBottom: safeBottom }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchReturns(); }} colors={['#8ec44a']} />}
         >
           <View style={styles.emptyCard}>
@@ -809,7 +811,7 @@ export default function ReturnsScreen() {
         </ScrollView>
       ) : (
         <ScrollView 
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: safeBottom }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchReturns(); }} colors={['#8ec44a']} />}
         >
           {/* Action Quick Banner */}

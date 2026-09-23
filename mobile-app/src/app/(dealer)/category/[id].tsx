@@ -224,7 +224,23 @@ export default function CategoryProductsScreen() {
                   </View>
 
                   {/* HARGA */}
-                  <Text style={styles.productPrice}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
+                  {product.promo_price && product.promo_price < product.price ? (
+                    <View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                        <Text style={[styles.productPrice, { color: '#f59e0b' }]}>
+                          Rp {Number(product.promo_price).toLocaleString('id-ID')}
+                        </Text>
+                        <View style={styles.promoBadge}>
+                          <Text style={styles.promoBadgeText}>{product.promo_label || 'PROMO'}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.originalPrice}>
+                        Rp {Number(product.price).toLocaleString('id-ID')}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.productPrice}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
+                  )}
 
                   {/* FOOTER & BUTTON */}
                   <View style={styles.cardFooter}>
@@ -311,7 +327,23 @@ export default function CategoryProductsScreen() {
                   {/* HARGA, STOK & BUTTON KERANJANG */}
                   <View style={styles.listFooter}>
                     <View>
-                      <Text style={styles.productPriceList}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
+                      {product.promo_price && product.promo_price < product.price ? (
+                        <View>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 1 }}>
+                            <Text style={[styles.productPriceList, { color: '#f59e0b' }]}>
+                              Rp {Number(product.promo_price).toLocaleString('id-ID')}
+                            </Text>
+                            <View style={styles.promoBadge}>
+                              <Text style={styles.promoBadgeText}>{product.promo_label || 'PROMO'}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.originalPrice}>
+                            Rp {Number(product.price).toLocaleString('id-ID')}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.productPriceList}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
+                      )}
                       <Text style={[styles.stockTextList, isHabis && { color: '#ef4444' }]}>
                         {isHabis ? 'Stok Habis' : `Stok: ${product.stock}`}
                       </Text>
@@ -498,7 +530,7 @@ const styles = StyleSheet.create({
     borderRadius: 6 
   },
   categoryTagText: { color: 'white', fontSize: 9, fontWeight: 'bold' },
-  newBadge: { alignSelf: 'flex-start', backgroundColor: '#3b82f6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
+  newBadge: { alignSelf: 'flex-start', backgroundColor: '#ef4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
   newBadgeText: { color: 'white', fontSize: 9, fontWeight: 'bold' },
 
   cardDetails: { padding: 10 },
@@ -594,7 +626,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   newBadgeList: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#ef4444',
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
@@ -657,6 +689,28 @@ const styles = StyleSheet.create({
 
   // Empty state
   emptyState: { alignItems: 'center', padding: 40 },
-  emptyText: { marginTop: 12, color: '#64748b', fontSize: 14 }
+  emptyText: { marginTop: 12, color: '#64748b', fontSize: 14 },
+
+  // Promo styles
+  promoBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    backgroundColor: '#dc2626',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    zIndex: 10,
+  },
+  promoBadgeText: {
+    color: 'white',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  originalPrice: {
+    fontSize: 10,
+    color: '#94a3b8',
+    textDecorationLine: 'line-through',
+  },
 });
 

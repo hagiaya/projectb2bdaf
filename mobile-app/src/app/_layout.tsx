@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { CartProvider } from '../context/CartContext';
 import { WishlistProvider } from '../context/WishlistContext';
 import { View, ActivityIndicator } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AutoUpdateBanner from '../components/AutoUpdateBanner';
 
 export default function RootLayout() {
@@ -30,11 +31,13 @@ export default function RootLayout() {
   }
 
   return (
-    <WishlistProvider>
-      <CartProvider>
-        <AutoUpdateBanner />
-        <Stack screenOptions={{ headerShown: false }} />
-      </CartProvider>
-    </WishlistProvider>
+    <SafeAreaProvider>
+      <WishlistProvider>
+        <CartProvider>
+          <AutoUpdateBanner />
+          <Stack screenOptions={{ headerShown: false }} />
+        </CartProvider>
+      </WishlistProvider>
+    </SafeAreaProvider>
   );
 }

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Modal, Act
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
+import { useSafeBottom } from '../../hooks/useSafeBottom';
 
 interface Promo {
   id: number | string;
@@ -14,6 +15,7 @@ interface Promo {
 }
 
 export default function PromoScreen() {
+  const safeBottom = useSafeBottom();
   const [appliedCode, setAppliedCode] = useState<string | null>(null);
   const [selectedPromo, setSelectedPromo] = useState<Promo | null>(null);
   const [promos, setPromos] = useState<Promo[]>([]);
@@ -77,7 +79,7 @@ export default function PromoScreen() {
         <View style={{ width: 32 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.list}>
+      <ScrollView contentContainerStyle={[styles.list, { paddingBottom: safeBottom }]}>
         {appliedCode && (
           <View style={styles.activeBanner}>
             <Feather name="check-circle" size={20} color="#8ec44a" />

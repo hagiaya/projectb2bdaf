@@ -6,8 +6,10 @@ import { useWishlist } from '../../context/WishlistContext';
 import { useCart } from '../../context/CartContext';
 import { supabase } from '../../lib/supabase';
 import FallbackImage from '../../components/FallbackImage';
+import { useSafeBottom } from '../../hooks/useSafeBottom';
 
 export default function WishlistScreen() {
+  const safeBottom = useSafeBottom();
   const { items: wishlistItems, removeFromWishlist } = useWishlist();
   const { addToCart } = useCart();
   const [realItems, setRealItems] = React.useState<any[]>([]);
@@ -45,7 +47,7 @@ export default function WishlistScreen() {
         <View style={{ width: 32 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.list}>
+      <ScrollView contentContainerStyle={[styles.list, { paddingBottom: safeBottom }]}>
         {wishlistItems.map((item) => {
           const realItem = realItems.find(r => r.id === item.id) || item;
           const isHabis = realItem.stock === 0;
@@ -158,6 +160,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
   },
-  newBadge: { alignSelf: 'flex-start', backgroundColor: '#3b82f6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
+  newBadge: { alignSelf: 'flex-start', backgroundColor: '#ef4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
   newBadgeText: { color: 'white', fontSize: 8, fontWeight: 'bold' }
 });

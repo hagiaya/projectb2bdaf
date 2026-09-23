@@ -135,3 +135,12 @@ WITH CHECK (bucket_id = 'promo-banners');
 DROP POLICY IF EXISTS "Admin Update Promo Banners" ON storage.objects;
 CREATE POLICY "Admin Update Promo Banners" ON storage.objects FOR UPDATE 
 USING (bucket_id = 'promo-banners');
+
+-- 7. FITUR PENERIMAAN BARANG DI ALUR MANAJEMEN ORDER & PIPELINE
+ALTER TABLE IF EXISTS public.orders
+ADD COLUMN IF NOT EXISTS received_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS receiver_name VARCHAR(150),
+ADD COLUMN IF NOT EXISTS receiving_notes TEXT,
+ADD COLUMN IF NOT EXISTS receiving_proof_url TEXT,
+ADD COLUMN IF NOT EXISTS receiving_status VARCHAR(50) DEFAULT 'PENDING';
+

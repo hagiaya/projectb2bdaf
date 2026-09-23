@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, ActivityIndicator, TextInput } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
@@ -198,7 +198,20 @@ export default function ProductDetailScreen() {
           <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(Math.max(1, quantity - 1))} disabled={product.stock === 0}>
             <Feather name="minus" size={20} color="#64748b" />
           </TouchableOpacity>
-          <Text style={styles.qtyText}>{quantity}</Text>
+          <TextInput
+            style={[styles.qtyText, { padding: 0, margin: 0, textAlign: 'center', minWidth: 40 }]}
+            value={String(quantity)}
+            keyboardType="numeric"
+            editable={product.stock > 0}
+            onChangeText={(val) => {
+              if (val === '') {
+                setQuantity(1);
+                return;
+              }
+              const num = parseInt(val.replace(/[^0-9]/g, ''), 10);
+              if (!isNaN(num)) setQuantity(Math.max(1, num));
+            }}
+          />
           <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(quantity + 1)} disabled={product.stock === 0}>
             <Feather name="plus" size={20} color="#64748b" />
           </TouchableOpacity>
@@ -283,7 +296,7 @@ const styles = StyleSheet.create({
   dotInactive: { backgroundColor: 'rgba(255,255,255,0.7)' },
   noImageContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   noImageText: { color: '#94a3b8', marginTop: 12, fontWeight: '600' },
-  newBadge: { alignSelf: 'flex-start', backgroundColor: '#3b82f6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginBottom: 8 },
+  newBadge: { alignSelf: 'flex-start', backgroundColor: '#ef4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginBottom: 8 },
   newBadgeText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
 
   detailsSection: {

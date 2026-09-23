@@ -6,12 +6,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
 import FallbackImage from '../../components/FallbackImage';
 import { useCart } from '../../context/CartContext';
+import { useSafeBottom } from '../../hooks/useSafeBottom';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 44) / 2; // 2 Sisi / 2 Column Grid
 const VIEW_MODE_STORAGE_KEY = 'CATEGORY_VIEW_MODE';
 
 export default function CatalogScreen() {
+  const safeBottom = useSafeBottom();
   const [searchQuery, setSearchQuery] = useState('');
   const [categories, setCategories] = useState<{id: string, name: string, image_url?: string}[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,7 +126,7 @@ export default function CatalogScreen() {
       </View>
 
       {/* DAFTAR KATEGORI (GRID / LIST) */}
-      <ScrollView contentContainerStyle={styles.categoryList} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.categoryList, { paddingBottom: safeBottom }]} showsVerticalScrollIndicator={false}>
         {loading ? (
           <ActivityIndicator size="large" color="#8ec44a" style={{ marginTop: 40 }} />
         ) : viewMode === 'grid' ? (

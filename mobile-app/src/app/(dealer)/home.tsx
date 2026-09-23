@@ -8,6 +8,7 @@ import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import FallbackImage from '../../components/FallbackImage';
 import { useCart } from '../../context/CartContext';
+import { useSafeBottom } from '../../hooks/useSafeBottom';
 
 const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 32;
@@ -18,7 +19,6 @@ const BANNER_WIDTH = width - 32;
 
 const bannerAds = [
   { id: '1', title: 'Promo Akhir Tahun', subtitle: 'Diskon hingga 30% untuk semua produk', color: '#8ec44a', accent: '#4a6b22', route: '/(dealer)/promo' },
-  { id: '2', title: 'Target Program Reward', subtitle: 'Capai omset & dapatkan Trip Bangkok, Etalase, & Cashback!', color: '#2563eb', accent: '#1e40af', route: '/(dealer)/programs' },
   { id: '3', title: 'Gratis Ongkir', subtitle: 'Untuk pembelian minimal Rp 500.000', color: '#7eb33a', accent: '#166534', route: '/(dealer)/promo' },
 ];
 
@@ -26,7 +26,6 @@ const bannerAds = [
 const menuItems = [
   { name: 'Katalog', route: '/(dealer)/catalog', icon: 'grid' },
   { name: 'Pesanan', route: '/(dealer)/orders', icon: 'shopping-bag' },
-  { name: 'Program', route: '/(dealer)/programs', icon: 'award' },
   { name: 'Promo', route: '/(dealer)/promo', icon: 'gift' },
   { name: 'Retur', route: '/(dealer)/returns', icon: 'refresh-ccw' },
   { name: 'Wishlist', route: '/(dealer)/wishlist', icon: 'heart' },
@@ -225,9 +224,11 @@ function BannerCarousel() {
 export default function DealerHome() {
   const countdown = useCountdown(23);
   const { cartCount, addToCart } = useCart();
+  const safeBottom = useSafeBottom();
 
   // States
   const [products, setProducts] = useState<any[]>([]);
+  const [flashSaleProducts, setFlashSaleProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Real Profile States
@@ -272,6 +273,7 @@ export default function DealerHome() {
         return (a.name || '').localeCompare(b.name || '');
       });
       setProducts(sorted);
+      setFlashSaleProducts(sorted.filter(p => p.is_flash_sale));
     }
     setLoading(false);
   };
@@ -319,7 +321,11 @@ export default function DealerHome() {
   const initial = storeName.substring(0, 2).toUpperCase();
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: safeBottom }}
+    >
       {/* HEADER */}
       <View style={styles.header}>
         <View>
@@ -452,12 +458,66 @@ export default function DealerHome() {
       {/* BANNER ADS */}
       <BannerCarousel />
 
-      {/* FLASH SALE - Dinonaktifkan sementara sampai diatur oleh admin */}
-      {/* 
-      <View style={styles.section}>
-         ... (Flash Sale Section Hidden) ...
-      </View> 
-      */}
+      {/* FLASH SALE */}
+      {flashSaleProducts.length > 0 && (
+        <View style={[styles.section, { backgroundColor: '#fee2e2', padding: 16, marginHorizontal: 0 }]}>
+          <View style={styles.sectionHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Feather name="zap" size={20} color="#ef4444" />
+              <Text style={[styles.sectionTitle, { color: '#ef4444' }]}>Flash Sale</Text>
+            </View>
+            <View style={{ backgroundColor: '#ef4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
+              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 12 }}>{String(hours).padStart(2, '0')} : {String(minutes).padStart(2, '0')} : {String(seconds).padStart(2, '0')}</Text>
+            </View>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
+            {flashSaleProducts.map((item) => {
+              const isHabis = item.stock === 0;
+              return (
+                <TouchableOpacity 
+                  key={`flash-${item.id}`} 
+                  style={[styles.flashCard, isHabis && { opacity: 0.6 }]}
+                  onPress={() => router.push(`/(dealer)/product/${item.id}`)}
+                  disabled={isHabis}
+                >
+                  <View style={{ width: 120, height: 120, borderRadius: 8, overflow: 'hidden', backgroundColor: '#f1f5f9', alignSelf: 'center' }}>
+                    {item.image_urls && item.image_urls.length > 0 ? (
+                      <FallbackImage uri={item.image_urls[0]} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                    ) : item.image_url ? (
+                      <FallbackImage uri={item.image_url} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                    ) : (
+                      <Feather name="package" size={32} color="#94a3b8" style={{ alignSelf: 'center', marginTop: 44 }} />
+                    )}
+                    {isHabis && (
+                      <View style={styles.habisOverlay}>
+                        <Text style={styles.habisText}>HABIS</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.productName, { marginTop: 8 }]} numberOfLines={2}>{item.name}</Text>
+                  
+                  <View style={{ marginTop: 4 }}>
+                    <Text style={{ fontSize: 10, color: '#94a3b8', textDecorationLine: 'line-through' }}>
+                      Rp {item.price.toLocaleString('id-ID')}
+                    </Text>
+                    <Text style={[styles.productPrice, { color: '#ef4444', fontSize: 14 }]}>
+                      Rp {item.flash_sale_price ? Number(item.flash_sale_price).toLocaleString('id-ID') : item.price.toLocaleString('id-ID')}
+                    </Text>
+                  </View>
+                  
+                  <TouchableOpacity 
+                    style={[styles.buyBtn, { backgroundColor: '#ef4444', marginTop: 8 }, isHabis && { backgroundColor: '#fca5a5' }]}
+                    onPress={() => addToCart(item, 1)}
+                    disabled={isHabis}
+                  >
+                    <Text style={styles.buyText}>{isHabis ? 'Habis' : '+ Keranjang'}</Text>
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       {/* BARU DILIHAT */}
       <View style={styles.section}>
@@ -602,6 +662,24 @@ export default function DealerHome() {
                   <Text style={styles.profileInfoText}>{dealer?.address || 'Tidak ada info'}</Text>
                 </View>
               </View>
+
+              {dealer?.is_credit_eligible && (
+                <View style={[styles.profileInfoList, { backgroundColor: '#f5f3ff', marginBottom: 20 }]}>
+                  <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#6d28d9', marginBottom: 8 }}>Info Kredit / Tempo B2B</Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 12, color: '#475569' }}>Plafon Total:</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#1e293b' }}>Rp {Number(dealer.credit_limit || 0).toLocaleString('id-ID')}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 12, color: '#475569' }}>Kredit Terpakai:</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#ef4444' }}>Rp {Number(dealer.outstanding_balance || 0).toLocaleString('id-ID')}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#ede9fe', paddingTop: 4, marginTop: 2 }}>
+                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#16a34a' }}>Sisa Plafon (Tersedia):</Text>
+                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#16a34a' }}>Rp {Math.max(0, Number(dealer.credit_limit || 0) - Number(dealer.outstanding_balance || 0)).toLocaleString('id-ID')}</Text>
+                  </View>
+                </View>
+              )}
 
               <TouchableOpacity 
                 style={styles.logoutBtn} 
@@ -875,6 +953,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
   },
-  newBadge: { alignSelf: 'flex-start', backgroundColor: '#3b82f6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
+  newBadge: { alignSelf: 'flex-start', backgroundColor: '#ef4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
   newBadgeText: { color: 'white', fontSize: 9, fontWeight: 'bold' }
 });

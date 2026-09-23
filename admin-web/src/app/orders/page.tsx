@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, ShoppingCart, Filter, Eye, Check, X, Clock, 
   Package, Truck, DollarSign, CreditCard, ChevronRight,
-  AlertCircle, CheckCircle2, User, MapPin, Phone, RefreshCw, ZoomIn
+  AlertCircle, CheckCircle2, User, MapPin, Phone, RefreshCw, ZoomIn,
+  PackageCheck, FileText, UploadCloud, Calendar, CheckSquare
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -32,6 +33,11 @@ interface Order {
   unique_code?: number;
   payment_proof_url?: string;
   payment_status?: string;
+  received_at?: string;
+  receiver_name?: string;
+  receiving_notes?: string;
+  receiving_proof_url?: string;
+  receiving_status?: string;
   created_at: string;
   dealers?: {
     store_name: string;
@@ -44,7 +50,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [stageFilter, setStageFilter] = useState<'ALL' | 'PENDING' | 'PACKING' | 'SHIPPED' | 'COMPLETED' | 'CANCELLED'>('ALL');
+  const [stageFilter, setStageFilter] = useState<'ALL' | 'PENDING' | 'PACKING' | 'SHIPPED' | 'RECEIVED' | 'COMPLETED' | 'CANCELLED'>('ALL');
   
   // Detail Modal
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -56,6 +62,14 @@ export default function OrdersPage() {
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [newOrderAlert, setNewOrderAlert] = useState<{ number: string; total: number } | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
+
+  // Receiving Modal State
+  const [receivingOrder, setReceivingOrder] = useState<Order | null>(null);
+  const [receiverName, setReceiverName] = useState('');
+  const [receivingNotes, setReceivingNotes] = useState('');
+  const [receivingProofFile, setReceivingProofFile] = useState<File | null>(null);
+  const [receivingProofPreview, setReceivingProofPreview] = useState<string | null>(null);
+  const [isSubmittingReceiving, setIsSubmittingReceiving] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -167,6 +181,16 @@ export default function OrdersPage() {
       updatePayload.payment_status = newPaymentStatus;
     }
 
+    const orderToUpdate = orders.find(o => o.id === id);
+    if (newStatus === 'RECEIVED' && orderToUpdate?.payment_method === 'KREDIT') {
+      const { data: dData } = await supabase.from('dealers').select('credit_term_days').eq('id', orderToUpdate.dealer_id).single();
+      if (dData?.credit_term_days) {
+         const dueDate = new Date();
+         dueDate.setDate(dueDate.getDate() + dData.credit_term_days);
+         updatePayload.payment_due_date = dueDate.toISOString();
+      }
+    }
+
     const { error } = await supabase.from('orders').update(updatePayload).eq('id', id);
     setIsUpdating(false);
 
@@ -177,6 +201,108 @@ export default function OrdersPage() {
       }
     } else {
       alert("Gagal mengubah status: " + error.message);
+    }
+  };
+
+  const handleOpenReceivingModal = (order: Order) => {
+    setReceivingOrder(order);
+    setReceiverName(order.receiver_name || order.dealers?.profiles?.full_name || order.dealers?.store_name || '');
+    setReceivingNotes(order.receiving_notes || 'Barang telah diterima dalam kondisi lengkap dan baik.');
+    setReceivingProofFile(null);
+    setReceivingProofPreview(order.receiving_proof_url || null);
+  };
+
+  const handleProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setReceivingProofFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setReceivingProofPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmitReceiving = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!receivingOrder) return;
+    setIsSubmittingReceiving(true);
+
+    try {
+      let finalProofUrl = receivingProofPreview?.startsWith('http') ? receivingProofPreview : (receivingOrder.receiving_proof_url || null);
+
+      if (receivingProofFile) {
+        const fileExt = receivingProofFile.name.split('.').pop() || 'jpg';
+        const filePath = `receiving/${receivingOrder.id}_${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('promo-banners')
+          .upload(filePath, receivingProofFile, { upsert: true });
+
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('promo-banners')
+            .getPublicUrl(filePath);
+          finalProofUrl = publicUrl;
+        } else {
+          console.warn('Storage upload error, using local/data url fallback:', uploadError);
+          // If storage fails, we can still use the data url preview if reasonable size or null
+          if (receivingProofPreview && receivingProofPreview.length < 50000) {
+            finalProofUrl = receivingProofPreview;
+          }
+        }
+      }
+
+      const updatePayload: any = {
+        status: 'RECEIVED',
+        received_at: new Date().toISOString(),
+        receiver_name: receiverName.trim() || receivingOrder.dealers?.store_name || 'Penerima Toko',
+        receiving_notes: receivingNotes.trim() || 'Barang telah diterima lengkap dan baik',
+        receiving_proof_url: finalProofUrl,
+        receiving_status: 'RECEIVED',
+      };
+
+      if (receivingOrder.payment_method === 'KREDIT') {
+        const { data: dData } = await supabase.from('dealers').select('credit_term_days').eq('id', receivingOrder.dealer_id).single();
+        if (dData?.credit_term_days) {
+           const dueDate = new Date();
+           dueDate.setDate(dueDate.getDate() + dData.credit_term_days);
+           updatePayload.payment_due_date = dueDate.toISOString();
+        }
+      }
+
+      let { error } = await supabase
+        .from('orders')
+        .update(updatePayload)
+        .eq('id', receivingOrder.id);
+
+      // Graceful fallback if database columns have not been migrated yet
+      if (error && error.message?.includes('column')) {
+        console.warn('Receiving columns might not exist yet, updating status only:', error.message);
+        const fbRes = await supabase
+          .from('orders')
+          .update({ status: 'RECEIVED' })
+          .eq('id', receivingOrder.id);
+        error = fbRes.error;
+      }
+
+      if (error) {
+        throw error;
+      }
+
+      // Update state locally
+      setOrders(prev => prev.map(o => o.id === receivingOrder.id ? { ...o, ...updatePayload } : o));
+      if (selectedOrder && selectedOrder.id === receivingOrder.id) {
+        setSelectedOrder(prev => prev ? { ...prev, ...updatePayload } : null);
+      }
+
+      setReceivingOrder(null);
+      alert('Konfirmasi penerimaan barang berhasil disimpan! Status pesanan kini: 4. Penerimaan (Diterima)');
+    } catch (err: any) {
+      console.error('Failed to submit receiving:', err);
+      alert('Gagal mengonfirmasi penerimaan: ' + (err.message || 'Terjadi kesalahan'));
+    } finally {
+      setIsSubmittingReceiving(false);
     }
   };
 
@@ -195,6 +321,8 @@ export default function OrdersPage() {
       matchesStage = order.status === 'PACKING' || order.status === 'PROCESSING';
     } else if (stageFilter === 'SHIPPED') {
       matchesStage = order.status === 'SHIPPED';
+    } else if (stageFilter === 'RECEIVED') {
+      matchesStage = order.status === 'RECEIVED';
     } else if (stageFilter === 'COMPLETED') {
       matchesStage = order.status === 'COMPLETED';
     } else if (stageFilter === 'CANCELLED') {
@@ -213,8 +341,10 @@ export default function OrdersPage() {
         return { label: '2. Pengemasan', color: 'bg-blue-50 text-blue-700 border-blue-200', icon: Package };
       case 'SHIPPED':
         return { label: '3. Pengiriman', color: 'bg-indigo-50 text-indigo-700 border-indigo-200', icon: Truck };
+      case 'RECEIVED':
+        return { label: '4. Penerimaan (Diterima)', color: 'bg-teal-50 text-teal-700 border-teal-200', icon: PackageCheck };
       case 'COMPLETED':
-        return { label: '4. Selesai / COD Bayar', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle2 };
+        return { label: '5. Selesai / COD Bayar', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle2 };
       case 'CANCELLED':
         return { label: 'Dibatalkan', color: 'bg-rose-50 text-rose-700 border-rose-200', icon: X };
       default:
@@ -226,6 +356,7 @@ export default function OrdersPage() {
     if (stage === 'PENDING') return orders.filter(o => o.status === 'PENDING').length;
     if (stage === 'PACKING') return orders.filter(o => o.status === 'PACKING' || o.status === 'PROCESSING').length;
     if (stage === 'SHIPPED') return orders.filter(o => o.status === 'SHIPPED').length;
+    if (stage === 'RECEIVED') return orders.filter(o => o.status === 'RECEIVED').length;
     if (stage === 'COMPLETED') return orders.filter(o => o.status === 'COMPLETED').length;
     if (stage === 'CANCELLED') return orders.filter(o => o.status === 'CANCELLED').length;
     return orders.length;
@@ -285,7 +416,7 @@ export default function OrdersPage() {
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Manajemen Order & Pipeline</h1>
           </div>
           <div className="flex flex-wrap items-center gap-2.5 text-sm text-slate-500 font-medium">
-            <span>Alur: <span className="font-semibold text-slate-700">Pesan ➔ Pengemasan ➔ Pengiriman ➔ COD Bayar / Selesai</span></span>
+            <span>Alur: <span className="font-semibold text-slate-700">Pesan ➔ Pengemasan ➔ Pengiriman ➔ Penerimaan ➔ COD Bayar / Selesai</span></span>
             <span className="text-slate-300">•</span>
             {/* Live Indicator */}
             <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 border border-emerald-200/80 rounded-full text-xs font-bold text-emerald-700">
@@ -307,14 +438,15 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {/* 4 Pipeline Stage Stepper Tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+      {/* 5 Pipeline Stage Stepper Tabs + All + Cancelled */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-6">
         {[
           { key: 'ALL', label: 'Semua Order', desc: 'Total pesanan', icon: ShoppingCart },
           { key: 'PENDING', label: '1. Pesan', desc: 'Menunggu konfirmasi', icon: Clock },
           { key: 'PACKING', label: '2. Pengemasan', desc: 'Sedang disiapkan', icon: Package },
           { key: 'SHIPPED', label: '3. Pengiriman', desc: 'Dalam perjalanan', icon: Truck },
-          { key: 'COMPLETED', label: '4. COD Bayar', desc: 'Selesai / Lunas', icon: CheckCircle2 },
+          { key: 'RECEIVED', label: '4. Penerimaan', desc: 'Barang telah sampai', icon: PackageCheck },
+          { key: 'COMPLETED', label: '5. COD Bayar', desc: 'Selesai / Lunas', icon: CheckCircle2 },
           { key: 'CANCELLED', label: 'Batal', desc: 'Pesanan batal', icon: X },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -500,6 +632,15 @@ export default function OrdersPage() {
                           )}
                           {order.status === 'SHIPPED' && (
                             <button 
+                              onClick={() => handleOpenReceivingModal(order)}
+                              className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1"
+                              title="Catat Konfirmasi Penerimaan Barang"
+                            >
+                              <PackageCheck size={13} /> Terima
+                            </button>
+                          )}
+                          {order.status === 'RECEIVED' && (
+                            <button 
                               onClick={() => handleUpdateStatus(order.id, 'COMPLETED', 'paid')}
                               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1"
                               title="Selesaikan & Konfirmasi Bayar / COD Lunas"
@@ -574,6 +715,81 @@ export default function OrdersPage() {
                     {selectedOrder.dealers?.address || 'Alamat tidak dicantumkan'}
                   </p>
                 </div>
+              </div>
+
+              {/* FITUR PENERIMAAN BARANG (Goods Receipt Info) */}
+              <div className="border border-teal-200 bg-teal-50/40 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <PackageCheck size={16} className="text-teal-600" /> Tahap 4: Konfirmasi Penerimaan Barang
+                  </p>
+                  <button
+                    onClick={() => handleOpenReceivingModal(selectedOrder)}
+                    className="text-xs font-bold text-teal-700 bg-white hover:bg-teal-100 border border-teal-200 px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1 shadow-xs"
+                  >
+                    <CheckSquare size={13} /> {selectedOrder.status === 'RECEIVED' || selectedOrder.status === 'COMPLETED' ? 'Edit Data Penerimaan' : 'Input Penerimaan'}
+                  </button>
+                </div>
+
+                {selectedOrder.status === 'RECEIVED' || selectedOrder.status === 'COMPLETED' || selectedOrder.receiver_name ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-white/80 p-3.5 rounded-xl border border-teal-100">
+                    <div>
+                      <span className="text-slate-400 font-semibold block mb-0.5">Nama Penerima Barang:</span>
+                      <span className="font-bold text-slate-800 text-sm">{selectedOrder.receiver_name || selectedOrder.dealers?.store_name || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-semibold block mb-0.5">Waktu Konfirmasi Diterima:</span>
+                      <span className="font-bold text-teal-800">
+                        {selectedOrder.received_at ? new Date(selectedOrder.received_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Telah Diterima'}
+                      </span>
+                    </div>
+                    <div className="sm:col-span-2 pt-2 border-t border-teal-50">
+                      <span className="text-slate-400 font-semibold block mb-1">Catatan Kondisi Barang:</span>
+                      <p className="text-slate-700 font-medium italic bg-teal-50/50 p-2 rounded-lg">
+                        {selectedOrder.receiving_notes || 'Barang telah diterima dalam kondisi lengkap dan baik.'}
+                      </p>
+                    </div>
+
+                    {selectedOrder.receiving_proof_url && (
+                      <div className="sm:col-span-2 flex items-center gap-3 pt-2">
+                        <div 
+                          onClick={() => setZoomImage(selectedOrder.receiving_proof_url || null)}
+                          className="w-16 h-16 rounded-xl overflow-hidden border border-teal-200 cursor-pointer shadow-xs bg-white shrink-0 group relative"
+                        >
+                          <img 
+                            src={selectedOrder.receiving_proof_url} 
+                            alt="Bukti Penerimaan" 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                          />
+                          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                            <ZoomIn size={14} />
+                          </div>
+                        </div>
+                        <div>
+                          <p className="font-bold text-teal-800">Foto Surat Jalan / Tanda Terima Terlampir</p>
+                          <button
+                            onClick={() => setZoomImage(selectedOrder.receiving_proof_url || null)}
+                            className="text-teal-600 underline text-[11px] hover:text-teal-700"
+                          >
+                            Klik untuk memperbesar foto
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-white/70 rounded-xl border border-teal-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                    <p className="text-xs text-teal-700">
+                      Barang belum dikonfirmasi sampai/diterima oleh pihak toko dealer.
+                    </p>
+                    <button
+                      onClick={() => handleOpenReceivingModal(selectedOrder)}
+                      className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs shrink-0"
+                    >
+                      Konfirmasi Terima
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Payment Info & Proof */}
@@ -705,7 +921,8 @@ export default function OrdersPage() {
                   <option value="PENDING">1. Pesan (Pending)</option>
                   <option value="PACKING">2. Pengemasan (Packing)</option>
                   <option value="SHIPPED">3. Pengiriman (Shipped)</option>
-                  <option value="COMPLETED">4. Selesai / COD Bayar (Completed)</option>
+                  <option value="RECEIVED">4. Penerimaan (Received)</option>
+                  <option value="COMPLETED">5. Selesai / COD Bayar (Completed)</option>
                   <option value="CANCELLED">Dibatalkan (Cancelled)</option>
                 </select>
               </div>
@@ -732,6 +949,115 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {/* MODAL INPUT / KONFIRMASI PENERIMAAN BARANG */}
+      {receivingOrder && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-teal-50/60">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-teal-100 text-teal-700 rounded-xl">
+                  <PackageCheck size={22} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Konfirmasi Penerimaan Barang</h3>
+                  <p className="text-xs text-slate-500 font-medium">Order #{receivingOrder.order_number}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setReceivingOrder(null)}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-white rounded-full transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitReceiving} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nama Penerima Barang (PIC / Pemilik Toko) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={receiverName}
+                  onChange={(e) => setReceiverName(e.target.value)}
+                  placeholder="Contoh: Budi Santoso (Pemilik Toko)"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Catatan Kondisi Barang Saat Diterima
+                </label>
+                <textarea
+                  rows={3}
+                  value={receivingNotes}
+                  onChange={(e) => setReceivingNotes(e.target.value)}
+                  placeholder="Contoh: Barang diterima lengkap 10 dus, kondisi segel aman."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Foto Surat Jalan / Bukti Tanda Terima (Opsional)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleProofFileChange}
+                    className="text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer"
+                  />
+                </div>
+                {receivingProofPreview && (
+                  <div className="mt-3 relative w-24 h-24 rounded-xl overflow-hidden border border-teal-200">
+                    <img src={receivingProofPreview} alt="Preview Bukti" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReceivingProofFile(null);
+                        setReceivingProofPreview(null);
+                      }}
+                      className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-full hover:bg-rose-700"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setReceivingOrder(null)}
+                  disabled={isSubmittingReceiving}
+                  className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReceiving}
+                  className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-teal-600/20 flex items-center gap-1.5"
+                >
+                  {isSubmittingReceiving ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" /> Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} strokeWidth={2.5} /> Konfirmasi Diterima
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Bukti Transfer Zoom Modal */}
       {zoomImage && (
         <div 
@@ -747,11 +1073,11 @@ export default function OrdersPage() {
             </button>
             <img 
               src={zoomImage} 
-              alt="Bukti Transfer Penuh" 
+              alt="Bukti Penuh" 
               className="max-h-[80vh] w-auto object-contain rounded-xl" 
             />
             <p className="text-center text-xs text-slate-500 mt-2 font-medium">
-              Bukti Transfer / Struk Pembayaran Pesanan
+              Bukti Pembayaran / Surat Jalan Penerimaan Pesanan
             </p>
           </div>
         </div>
@@ -759,3 +1085,4 @@ export default function OrdersPage() {
     </div>
   );
 }
+

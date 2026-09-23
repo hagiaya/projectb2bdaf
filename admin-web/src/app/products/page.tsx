@@ -23,7 +23,8 @@ import {
   ZoomIn,
   ImageIcon,
   LayoutGrid,
-  List
+  List,
+  Tag
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ProductImage from '@/components/ProductImage';
@@ -41,6 +42,8 @@ interface Product {
   image_url?: string | null;
   image_urls?: string[];
   categories?: { name: string }; // joined data
+  promo_price?: number | null;
+  promo_label?: string | null;
 }
 
 interface Category {
@@ -67,9 +70,13 @@ export default function ProductsPage() {
   const [newSku, setNewSku] = useState('');
   const [newCategoryId, setNewCategoryId] = useState('');
   const [newPrice, setNewPrice] = useState('');
+  const [newPromoPrice, setNewPromoPrice] = useState('');
+  const [newPromoLabel, setNewPromoLabel] = useState('');
   const [newStock, setNewStock] = useState('');
   const [newSortOrder, setNewSortOrder] = useState('1');
   const [newImageUrls, setNewImageUrls] = useState(''); // comma separated for now
+  const [newIsFlashSale, setNewIsFlashSale] = useState(false);
+  const [newFlashSalePrice, setNewFlashSalePrice] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   // Quick Reorder Modal
@@ -209,9 +216,13 @@ export default function ProductsPage() {
     setNewProductName('');
     setNewSku('');
     setNewPrice('');
+    setNewPromoPrice('');
+    setNewPromoLabel('');
     setNewStock('');
     setNewSortOrder('1');
     setNewImageUrls('');
+    setNewIsFlashSale(false);
+    setNewFlashSalePrice('');
   };
 
   const handleEditClick = (product: Product, index: number) => {
@@ -220,10 +231,14 @@ export default function ProductsPage() {
     setNewSku(product.sku || '');
     setNewCategoryId(product.category_id || categories[0]?.id || '');
     setNewPrice(product.price.toString());
+    setNewPromoPrice(product.promo_price != null ? product.promo_price.toString() : '');
+    setNewPromoLabel(product.promo_label || '');
     setNewStock(product.stock.toString());
     setNewSortOrder((product.sort_order ?? (index + 1)).toString());
     const existingUrls = getProductImages(product);
     setNewImageUrls(existingUrls.join(', '));
+    setNewIsFlashSale(product.is_flash_sale || false);
+    setNewFlashSalePrice(product.flash_sale_price != null ? product.flash_sale_price.toString() : '');
     setIsModalOpen(true);
   };
 
@@ -241,11 +256,15 @@ export default function ProductsPage() {
       sku: newSku,
       category_id: newCategoryId,
       price: parseFloat(newPrice),
+      promo_price: newPromoPrice ? parseFloat(newPromoPrice) : null,
+      promo_label: newPromoLabel ? newPromoLabel.trim() : null,
       stock: stockNum,
       sort_order: orderNum,
       status: stockNum > 20 ? 'ACTIVE' : 'LOW_STOCK',
       image_urls: parsedUrls,
       image_url: parsedUrls[0] || null,
+      is_flash_sale: newIsFlashSale,
+      flash_sale_price: newFlashSalePrice ? parseFloat(newFlashSalePrice) : null,
     };
 
     if (editingProduct) {
@@ -712,9 +731,25 @@ export default function ProductsPage() {
 
                         <div>
                           <div className="flex items-baseline justify-between mb-3">
-                            <p className="text-base font-black text-emerald-700">
-                              {formatRupiah(product.price)}
-                            </p>
+                            <div>
+                              {product.promo_price && product.promo_price < product.price ? (
+                                <div className="flex flex-col">
+                                  <div className="flex items-center gap-1.5 mb-0.5">
+                                    <p className="text-base font-black text-amber-600">
+                                      {formatRupiah(product.promo_price)}
+                                    </p>
+                                    <span className="text-[9px] font-bold bg-amber-500 text-white px-1.5 py-0.5 rounded-full">
+                                      {product.promo_label || 'PROMO'}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-400 line-through">{formatRupiah(product.price)}</p>
+                                </div>
+                              ) : (
+                                <p className="text-base font-black text-emerald-700">
+                                  {formatRupiah(product.price)}
+                                </p>
+                              )}
+                            </div>
                             <button
                               onClick={() => handleOpenStockMonitoring(product)}
                               className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
@@ -1035,6 +1070,86 @@ export default function ProductsPage() {
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold text-gray-900"
                   />
                 </div>
+              </div>
+
+              {/* INPUT URUTAN PRIORITAS */}
+              <div className="bg-amber-50/80 p-3.5 rounded-xl border border-amber-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Tag size={14} className="text-amber-600" />
+                  <label className="block text-xs font-bold text-amber-900 uppercase tracking-wide">
+                    Harga Promo (Opsional)
+                  </label>
+                  {newPromoPrice && parseFloat(newPromoPrice) > 0 && newPrice && parseFloat(newPrice) > 0 && parseFloat(newPromoPrice) < parseFloat(newPrice) && (
+                    <span className="ml-auto text-xs font-bold text-white bg-amber-500 px-2 py-0.5 rounded-full">
+                      Hemat {Math.round((1 - parseFloat(newPromoPrice) / parseFloat(newPrice)) * 100)}%
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-amber-700 mb-1">HARGA SETELAH PROMO</label>
+                    <div className="relative">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-600 font-bold text-xs">Rp</div>
+                      <input
+                        type="number"
+                        placeholder="0 (kosongkan = tidak ada promo)"
+                        value={newPromoPrice}
+                        onChange={(e) => setNewPromoPrice(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2.5 border border-amber-300 rounded-xl text-sm focus:ring-4 focus:ring-amber-400/20 focus:border-amber-500 outline-none transition-all font-bold text-amber-900 bg-white placeholder:font-normal placeholder:text-amber-300"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-amber-700 mb-1">LABEL PROMO (contoh: "Flash Sale")</label>
+                    <input
+                      type="text"
+                      placeholder="Promo Spesial, Flash Sale..."
+                      value={newPromoLabel}
+                      onChange={(e) => setNewPromoLabel(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-amber-300 rounded-xl text-sm focus:ring-4 focus:ring-amber-400/20 focus:border-amber-500 outline-none transition-all font-medium text-amber-900 bg-white placeholder:font-normal placeholder:text-amber-300"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-amber-700 mt-1.5">
+                  💡 Jika diisi, harga promo akan tampil di aplikasi dealer dengan badge khusus & harga normal dicoret.
+                </p>
+              </div>
+
+              {/* FLASH SALE INPUTS */}
+              <div className="bg-red-50/80 p-3.5 rounded-xl border border-red-200 mt-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Tag size={14} className="text-red-600" />
+                  <label className="block text-xs font-bold text-red-900 uppercase tracking-wide">
+                    Flash Sale (Eksklusif)
+                  </label>
+                </div>
+                
+                <label className="flex items-center gap-3 cursor-pointer mb-3">
+                  <input
+                    type="checkbox"
+                    checked={newIsFlashSale}
+                    onChange={(e) => setNewIsFlashSale(e.target.checked)}
+                    className="w-5 h-5 text-red-600 rounded border-red-300 focus:ring-red-500"
+                  />
+                  <span className="text-sm font-medium text-red-900">Aktifkan produk ini untuk Flash Sale</span>
+                </label>
+
+                {newIsFlashSale && (
+                  <div>
+                    <label className="block text-[10px] font-semibold text-red-700 mb-1">HARGA FLASH SALE SPESIAL</label>
+                    <div className="relative">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-red-600 font-bold text-xs">Rp</div>
+                      <input
+                        type="number"
+                        placeholder="Harga super murah khusus flash sale..."
+                        value={newFlashSalePrice}
+                        onChange={(e) => setNewFlashSalePrice(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2.5 border border-red-300 rounded-xl text-sm focus:ring-4 focus:ring-red-400/20 focus:border-red-500 outline-none transition-all font-bold text-red-900 bg-white"
+                        required={newIsFlashSale}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* INPUT URUTAN PRIORITAS */}

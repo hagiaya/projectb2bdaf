@@ -172,6 +172,7 @@ export default function SalesOrdersScreen() {
       if (selectedStatus === 'PENDING' && o.status !== 'PENDING') return false;
       if (selectedStatus === 'PACKING' && o.status !== 'PACKING' && o.status !== 'PROCESSING') return false;
       if (selectedStatus === 'SHIPPED' && o.status !== 'SHIPPED') return false;
+      if (selectedStatus === 'RECEIVED' && o.status !== 'RECEIVED') return false;
       if (selectedStatus === 'COMPLETED' && o.status !== 'COMPLETED') return false;
       if (selectedStatus === 'CANCELLED' && o.status !== 'CANCELLED') return false;
     }
@@ -217,9 +218,17 @@ export default function SalesOrdersScreen() {
           border: '#e9d5ff',
           icon: 'truck',
         };
+      case 'RECEIVED':
+        return {
+          label: '4. Penerimaan (Diterima)',
+          bg: '#ccfbf1',
+          color: '#0f766e',
+          border: '#99f6e4',
+          icon: 'check-square',
+        };
       case 'COMPLETED':
         return {
-          label: '4. COD Bayar / Selesai',
+          label: '5. Selesai / Lunas',
           bg: '#dcfce7',
           color: '#15803d',
           border: '#bbf7d0',
@@ -286,13 +295,15 @@ export default function SalesOrdersScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#f8fafc', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Feather 
-              name={(item.payment_method || '').toUpperCase() === 'COD' ? 'dollar-sign' : 'credit-card'} 
+              name={(item.payment_method || '').toUpperCase() === 'COD' ? 'dollar-sign' : (item.payment_method || '').toUpperCase() === 'KREDIT' ? 'award' : 'credit-card'} 
               size={13} 
-              color={(item.payment_method || '').toUpperCase() === 'COD' ? '#d97706' : '#0284c7'} 
+              color={(item.payment_method || '').toUpperCase() === 'COD' ? '#d97706' : (item.payment_method || '').toUpperCase() === 'KREDIT' ? '#6d28d9' : '#0284c7'} 
             />
-            <Text style={{ fontSize: 12, fontWeight: '700', color: (item.payment_method || '').toUpperCase() === 'COD' ? '#b45309' : '#0369a1' }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: (item.payment_method || '').toUpperCase() === 'COD' ? '#b45309' : (item.payment_method || '').toUpperCase() === 'KREDIT' ? '#5b21b6' : '#0369a1' }}>
               {(item.payment_method || '').toUpperCase() === 'COD' 
                 ? 'COD (Bayar di Tempat)' 
+                : (item.payment_method || '').toUpperCase() === 'KREDIT'
+                ? 'Kredit / Tempo (TOP)'
                 : `Transfer (+${item.unique_code || 0})`}
             </Text>
           </View>
@@ -457,7 +468,8 @@ export default function SalesOrdersScreen() {
             { key: 'PENDING', label: '1. Pesan' },
             { key: 'PACKING', label: '2. Pengemasan' },
             { key: 'SHIPPED', label: '3. Pengiriman' },
-            { key: 'COMPLETED', label: '4. COD Bayar' },
+            { key: 'RECEIVED', label: '4. Penerimaan' },
+            { key: 'COMPLETED', label: '5. Selesai' },
             { key: 'CANCELLED', label: 'Batal' },
           ].map((st) => (
             <TouchableOpacity
@@ -639,6 +651,8 @@ export default function SalesOrdersScreen() {
                       <Text style={[styles.modalInfoValue, { fontWeight: '700' }]}>
                         {(selectedOrder.payment_method || '').toUpperCase() === 'COD' 
                           ? 'COD (Bayar di Tempat)' 
+                          : (selectedOrder.payment_method || '').toUpperCase() === 'KREDIT'
+                          ? 'Kredit / Tempo (TOP)'
                           : 'Transfer Bank Manual'}
                       </Text>
                     </View>
@@ -674,6 +688,8 @@ export default function SalesOrdersScreen() {
                         <Text style={{ fontSize: 12, color: '#64748b' }}>
                           {(selectedOrder.payment_method || '').toUpperCase() === 'COD'
                             ? 'Pembayaran akan diserahkan secara tunai saat barang diterima.'
+                            : (selectedOrder.payment_method || '').toUpperCase() === 'KREDIT'
+                            ? 'Fasilitas tempo aktif. Tidak memerlukan bukti transfer saat ini.'
                             : 'Dealer belum mengunggah foto struk transfer.'}
                         </Text>
                       </View>

@@ -126,6 +126,7 @@ export default function Dashboard() {
       case 'PACKING':
       case 'PROCESSING': return 'bg-blue-50 text-blue-700 border-blue-200';
       case 'SHIPPED': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'RECEIVED': return 'bg-teal-50 text-teal-700 border-teal-200';
       case 'COMPLETED': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
       default: return 'bg-slate-50 text-slate-700 border-slate-200';
     }

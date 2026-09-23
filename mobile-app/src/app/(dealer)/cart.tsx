@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useCart } from '../../context/CartContext';
@@ -7,8 +7,10 @@ import FallbackImage from '../../components/FallbackImage';
 import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '../../lib/supabase';
 import { useState } from 'react';
+import { useSafeBottom } from '../../hooks/useSafeBottom';
 
 export default function CartScreen() {
+  const safeBottom = useSafeBottom();
   const { items, removeFromCart, updateQuantity, cartTotal, clearCart } = useCart();
   const [loading, setLoading] = useState(false);
 
@@ -117,7 +119,19 @@ export default function CartScreen() {
                       >
                         <Feather name="minus" size={16} color="#64748b" />
                       </TouchableOpacity>
-                      <Text style={styles.qtyText}>{item.quantity}</Text>
+                      <TextInput
+                        style={[styles.qtyText, { padding: 0, margin: 0, textAlign: 'center', minWidth: 35 }]}
+                        value={String(item.quantity)}
+                        keyboardType="numeric"
+                        onChangeText={(val) => {
+                          if (val === '') {
+                            updateQuantity(item.id, 0);
+                            return;
+                          }
+                          const num = parseInt(val.replace(/[^0-9]/g, ''), 10);
+                          if (!isNaN(num)) updateQuantity(item.id, num);
+                        }}
+                      />
                       <TouchableOpacity 
                         style={styles.qtyBtn} 
                         onPress={() => updateQuantity(item.id, item.quantity + 1)}
@@ -145,7 +159,7 @@ export default function CartScreen() {
           </ScrollView>
 
           {/* BOTTOM TOTAL BAR */}
-          <View style={styles.bottomBar}>
+          <View style={[styles.bottomBar, { paddingBottom: safeBottom }]}>
             <View style={styles.totalInfo}>
               <Text style={styles.totalLabel}>Total Harga</Text>
               <Text style={styles.totalAmount}>Rp {cartTotal.toLocaleString('id-ID')}</Text>

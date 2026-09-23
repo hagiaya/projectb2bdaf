@@ -18,7 +18,8 @@ import {
   ArrowLeftRight, 
   Award, 
   Target, 
-  AlertTriangle 
+  AlertTriangle,
+  CreditCard
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -36,6 +37,7 @@ const menuItems = [
   { name: 'Manajemen Order', href: '/orders', icon: ShoppingCart },
   { name: 'Manajemen Retur', href: '/returns', icon: ArrowLeftRight, badgeKey: 'returns' },
   { name: 'Promo & Diskon', href: '/promo', icon: Gift },
+  { name: 'Pengaturan Pembayaran', href: '/payment', icon: CreditCard },
   { name: 'Laporan', href: '/reports', icon: FileText },
   { name: 'Pengguna & Role', href: '/users', icon: Settings },
 ];

@@ -7,8 +7,10 @@ import { supabase } from '../../lib/supabase';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
+import { useSafeBottom } from '../../hooks/useSafeBottom';
 
 export default function CheckoutScreen() {
+  const safeBottom = useSafeBottom();
   const { items, cartTotal, clearCart } = useCart();
   const [loading, setLoading] = useState(false);
   const [dealerData, setDealerData] = useState<any>(null);
@@ -659,7 +661,7 @@ export default function CheckoutScreen() {
       </ScrollView>
 
       {/* BOTTOM BUTTON */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: safeBottom }]}>
         <TouchableOpacity 
           style={[styles.payBtn, loading && styles.payBtnDisabled]} 
           onPress={handlePromptConfirmation} 
