@@ -26,10 +26,10 @@ const bannerAds = [
 const menuItems = [
   { name: 'Katalog', route: '/(dealer)/catalog', icon: 'grid' },
   { name: 'Pesanan', route: '/(dealer)/orders', icon: 'shopping-bag' },
+  { name: 'Program', route: '/(dealer)/programs', icon: 'award' },
   { name: 'Promo', route: '/(dealer)/promo', icon: 'gift' },
   { name: 'Retur', route: '/(dealer)/returns', icon: 'refresh-ccw' },
   { name: 'Wishlist', route: '/(dealer)/wishlist', icon: 'heart' },
-  { name: 'Histori', route: '/(dealer)/orders', icon: 'clock' },
 ];
 
 // =========================================================
@@ -323,7 +323,7 @@ export default function DealerHome() {
     <ScrollView
       style={styles.container}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ paddingBottom: safeBottom }}
+      contentContainerStyle={{ paddingBottom: safeBottom + 20 }}
     >
       {/* HEADER */}
       <View style={styles.header}>
