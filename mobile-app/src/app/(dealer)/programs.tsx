@@ -267,6 +267,7 @@ export default function DealerProgramsScreen() {
         .from('dealer_programs')
         .select('*')
         .eq('status', 'ACTIVE')
+        .neq('program_type', 'CASHBACK')
         .order('created_at', { ascending: false });
 
       let loadedPrograms: DealerProgram[] = [];
@@ -310,20 +311,6 @@ export default function DealerProgramsScreen() {
             banner_url: 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600',
             start_date: '2026-09-01',
             end_date: '2027-02-28',
-            status: 'ACTIVE',
-          },
-          {
-            id: '33333333-3333-3333-3333-333333333333',
-            title: 'Program Super Cashback Loyalty 5%',
-            program_type: 'CASHBACK',
-            description:
-              'Program akselerasi keuntungan dealer! Capai target belanja minimum Rp 40 Juta dan dapatkan cashback tunai 5% langsung cair ke rekening atau dipotongkan pada nota berikutnya.',
-            target_amount: 40000000,
-            reward_description:
-              'Cashback Tunai 5% (Senilai Rp 2.000.000) langsung ditransfer ke rekening bank pemilik toko',
-            banner_url: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600',
-            start_date: '2026-09-01',
-            end_date: '2026-10-31',
             status: 'ACTIVE',
           },
         ];
