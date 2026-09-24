@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  FlatList, Dimensions, Modal, Alert, Image
+  FlatList, Dimensions, Modal, Alert, Image, Linking
 } from 'react-native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -9,6 +9,8 @@ import { supabase } from '../../lib/supabase';
 import FallbackImage from '../../components/FallbackImage';
 import { useCart } from '../../context/CartContext';
 import { useSafeBottom } from '../../hooks/useSafeBottom';
+
+const WA_NUMBER = '628114981666'; // 08114981666 → format internasional
 
 const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 32;
@@ -392,6 +394,21 @@ export default function DealerHome() {
               <Text style={styles.menuText}>{item.name}</Text>
             </TouchableOpacity>
           ))}
+          {/* Tombol Pengaduan / WA */}
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => {
+              const msg = encodeURIComponent('Halo, saya dealer dan ingin menyampaikan pengaduan/keluhan:');
+              Linking.openURL(`https://wa.me/${WA_NUMBER}?text=${msg}`).catch(() =>
+                Alert.alert('Gagal', 'Tidak dapat membuka WhatsApp. Pastikan WhatsApp terinstall.')
+              );
+            }}
+          >
+            <View style={[styles.menuIcon, { backgroundColor: '#dcfce7' }]}>
+              <Feather name="message-circle" size={22} color="#16a34a" />
+            </View>
+            <Text style={styles.menuText}>Pengaduan</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -572,9 +589,34 @@ export default function DealerHome() {
         <Feather name="package" size={22} color="#8ec44a" />
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.trackTitle}>Lacak Pesanan Anda</Text>
-          <Text style={styles.trackSubtitle}>INV-20231024-001 • Dalam Pengiriman</Text>
+          <Text style={styles.trackSubtitle}>Klik untuk melihat status pengiriman</Text>
         </View>
         <Feather name="chevron-right" size={20} color="#8ec44a" />
+      </TouchableOpacity>
+
+      {/* BANNER PENGADUAN / KOMPLAIN WA */}
+      <TouchableOpacity
+        style={styles.complaintBanner}
+        activeOpacity={0.85}
+        onPress={() => {
+          const msg = encodeURIComponent(
+            'Halo Tim Support, saya dealer dan ingin menyampaikan pengaduan / laporan:'
+          );
+          Linking.openURL(`https://wa.me/${WA_NUMBER}?text=${msg}`).catch(() =>
+            Alert.alert('Gagal', 'Tidak dapat membuka WhatsApp.')
+          );
+        }}
+      >
+        <View style={styles.complaintIconWrap}>
+          <Feather name="message-circle" size={22} color="white" />
+        </View>
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={styles.complaintTitle}>Ada Pengaduan / Komplain?</Text>
+          <Text style={styles.complaintSubtitle}>Hubungi tim kami langsung via WhatsApp</Text>
+        </View>
+        <View style={styles.complaintWABadge}>
+          <Feather name="external-link" size={14} color="white" />
+        </View>
       </TouchableOpacity>
 
       <View style={{ height: 32 }} />
@@ -953,5 +995,49 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
   },
   newBadge: { alignSelf: 'flex-start', backgroundColor: '#ef4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
-  newBadgeText: { color: 'white', fontSize: 9, fontWeight: 'bold' }
+  newBadgeText: { color: 'white', fontSize: 9, fontWeight: 'bold' },
+
+  // Complaint / WA Banner
+  complaintBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#16a34a',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#16a34a',
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  complaintIconWrap: {
+    width: 44,
+    height: 44,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  complaintTitle: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  complaintSubtitle: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  complaintWABadge: {
+    width: 32,
+    height: 32,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  buyBtn: { paddingVertical: 7, borderRadius: 8, alignItems: 'center' },
 });
+

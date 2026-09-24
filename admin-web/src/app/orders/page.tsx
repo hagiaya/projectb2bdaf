@@ -5,9 +5,12 @@ import {
   Search, ShoppingCart, Filter, Eye, Check, X, Clock, 
   Package, Truck, DollarSign, CreditCard, ChevronRight,
   AlertCircle, CheckCircle2, User, MapPin, Phone, RefreshCw, ZoomIn,
-  PackageCheck, FileText, UploadCloud, Calendar, CheckSquare
+  PackageCheck, FileText, UploadCloud, Calendar, CheckSquare, Download, FileSpreadsheet
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface OrderItem {
   id: string;
@@ -362,6 +365,81 @@ export default function OrdersPage() {
     return orders.length;
   };
 
+  // ─── EXPORT EXCEL ──────────────────────────────────────────────
+  const handleExportExcel = () => {
+    const rows = filteredOrders.map((o, idx) => ({
+      'No': idx + 1,
+      'Nomor Order': o.order_number,
+      'Tanggal': new Date(o.created_at).toLocaleString('id-ID'),
+      'Toko Dealer': o.dealers?.store_name || '-',
+      'Nama PIC': o.dealers?.profiles?.full_name || '-',
+      'Telepon': o.dealers?.profiles?.phone_number || '-',
+      'Metode Bayar': o.payment_method || '-',
+      'Total (Rp)': Number(o.total_amount || 0),
+      'Status': o.status,
+      'Status Pembayaran': o.payment_status || '-',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    // Auto-width columns
+    const colWidths = Object.keys(rows[0] || {}).map(key => ({
+      wch: Math.max(key.length, ...rows.map(r => String((r as any)[key] || '').length)) + 2
+    }));
+    ws['!cols'] = colWidths;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data Order');
+    const fileName = `Data_Order_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+
+  // ─── EXPORT PDF ────────────────────────────────────────────────
+  const handleExportPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+    // Header
+    doc.setFillColor(22, 163, 74); // emerald-600
+    doc.rect(0, 0, 297, 22, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('LAPORAN DATA ORDER', 14, 14);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}  |  Total: ${filteredOrders.length} order`, 297 - 14, 14, { align: 'right' });
+
+    const tableData = filteredOrders.map((o, idx) => [
+      idx + 1,
+      o.order_number,
+      new Date(o.created_at).toLocaleDateString('id-ID'),
+      o.dealers?.store_name || '-',
+      o.dealers?.profiles?.full_name || '-',
+      o.payment_method || '-',
+      `Rp ${Number(o.total_amount || 0).toLocaleString('id-ID')}`,
+      o.status,
+      o.payment_status || '-',
+    ]);
+
+    autoTable(doc, {
+      startY: 26,
+      head: [['No', 'Nomor Order', 'Tanggal', 'Toko Dealer', 'PIC', 'Metode Bayar', 'Total', 'Status', 'Status Bayar']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+      alternateRowStyles: { fillColor: [240, 247, 230] },
+      columnStyles: {
+        0: { cellWidth: 8, halign: 'center' },
+        6: { halign: 'right' },
+        7: { halign: 'center' },
+        8: { halign: 'center' },
+      },
+      margin: { left: 14, right: 14 },
+    });
+
+    doc.save(`Data_Order_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
       {/* Real-time Order Alert Toast */}
@@ -434,6 +512,22 @@ export default function OrdersPage() {
             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 shadow-sm transition-all"
           >
             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} /> Refresh Data
+          </button>
+          {/* Export Excel */}
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm transition-all"
+            title="Ekspor ke Excel (.xlsx)"
+          >
+            <FileSpreadsheet size={16} /> Ekspor Excel
+          </button>
+          {/* Export PDF */}
+          <button
+            onClick={handleExportPDF}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-sm transition-all"
+            title="Ekspor ke PDF"
+          >
+            <Download size={16} /> Ekspor PDF
           </button>
         </div>
       </div>
