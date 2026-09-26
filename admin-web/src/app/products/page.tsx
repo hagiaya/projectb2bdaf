@@ -44,6 +44,7 @@ interface Product {
   categories?: { name: string }; // joined data
   promo_price?: number | null;
   promo_label?: string | null;
+  is_new?: boolean;
 }
 
 interface Category {
@@ -77,6 +78,7 @@ export default function ProductsPage() {
   const [newImageUrls, setNewImageUrls] = useState(''); // comma separated for now
   const [newIsFlashSale, setNewIsFlashSale] = useState(false);
   const [newFlashSalePrice, setNewFlashSalePrice] = useState('');
+  const [newIsNewProduct, setNewIsNewProduct] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Quick Reorder Modal
@@ -223,6 +225,7 @@ export default function ProductsPage() {
     setNewImageUrls('');
     setNewIsFlashSale(false);
     setNewFlashSalePrice('');
+    setNewIsNewProduct(false);
   };
 
   const handleEditClick = (product: Product, index: number) => {
@@ -239,6 +242,7 @@ export default function ProductsPage() {
     setNewImageUrls(existingUrls.join(', '));
     setNewIsFlashSale(product.is_flash_sale || false);
     setNewFlashSalePrice(product.flash_sale_price != null ? product.flash_sale_price.toString() : '');
+    setNewIsNewProduct(product.is_new || false);
     setIsModalOpen(true);
   };
 
@@ -265,6 +269,7 @@ export default function ProductsPage() {
       image_url: parsedUrls[0] || null,
       is_flash_sale: newIsFlashSale,
       flash_sale_price: newFlashSalePrice ? parseFloat(newFlashSalePrice) : null,
+      is_new: newIsNewProduct,
     };
 
     if (editingProduct) {
@@ -275,8 +280,9 @@ export default function ProductsPage() {
         .select('*, categories(name)');
 
       // Fallback if sort_order doesn't exist yet
-      if (error && (error.message?.includes('sort_order') || error.code === '42703')) {
+      if (error && (error.message?.includes('sort_order') || error.message?.includes('is_new') || error.code === '42703')) {
         delete prodData.sort_order;
+        delete prodData.is_new;
         const fallback = await supabase
           .from('products')
           .update(prodData)
@@ -300,8 +306,9 @@ export default function ProductsPage() {
         .select('*, categories(name)');
 
       // Fallback if sort_order doesn't exist yet
-      if (error && (error.message?.includes('sort_order') || error.code === '42703')) {
+      if (error && (error.message?.includes('sort_order') || error.message?.includes('is_new') || error.code === '42703')) {
         delete prodData.sort_order;
+        delete prodData.is_new;
         const fallback = await supabase
           .from('products')
           .insert([prodData])
@@ -860,7 +867,14 @@ export default function ProductsPage() {
                         </div>
                       </td>
 
-                      <td className="p-4 font-semibold text-gray-900">{product.name}</td>
+                      <td className="p-4">
+                        <div className="font-semibold text-gray-900 mb-0.5 flex items-center gap-2">
+                          {product.name}
+                          {product.is_new && (
+                            <span className="bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm">NEW</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-4 text-gray-500 font-medium">{product.sku}</td>
                       <td className="p-4">
                         <span className="px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200/60">
@@ -1172,6 +1186,22 @@ export default function ProductsPage() {
                 <p className="text-[11px] text-emerald-700 mt-1">
                   Produk dengan nomor urutan terkecil akan tampil paling awal di katalog kategori & beranda mobile.
                 </p>
+              </div>
+
+              {/* LABEL BARANG BARU */}
+              <div className="bg-blue-50/80 p-3.5 rounded-xl border border-blue-200 mt-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newIsNewProduct}
+                    onChange={(e) => setNewIsNewProduct(e.target.checked)}
+                    className="w-5 h-5 text-blue-600 rounded border-blue-300 focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="text-sm font-bold text-blue-900 block">Tandai sebagai Barang Baru (NEW)</span>
+                    <span className="text-[10px] font-medium text-blue-700">Produk ini akan mendapatkan badge "NEW" di aplikasi pelanggan</span>
+                  </div>
+                </label>
               </div>
 
               <div>

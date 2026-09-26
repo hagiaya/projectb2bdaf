@@ -440,6 +440,86 @@ export default function OrdersPage() {
     doc.save(`Data_Order_${new Date().toISOString().slice(0,10)}.pdf`);
   };
 
+  // ─── GENERATE INVOICE PDF ──────────────────────────────────────────────
+  const handleGenerateInvoicePDF = (order: Order, items: OrderItem[]) => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    // Header
+    doc.setFillColor(22, 163, 74); // emerald-600
+    doc.rect(0, 0, 210, 22, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`INVOICE / ORDER DETAIL - ${order.order_number}`, 14, 14);
+
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(10);
+    
+    // Store Info
+    doc.setFont('helvetica', 'bold');
+    doc.text('Informasi Toko:', 14, 32);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Nama Toko: ${order.dealers?.store_name || '-'}`, 14, 38);
+    doc.text(`PIC: ${order.dealers?.profiles?.full_name || '-'}`, 14, 44);
+    doc.text(`Telepon: ${order.dealers?.profiles?.phone_number || '-'}`, 14, 50);
+    
+    // Order Info
+    doc.setFont('helvetica', 'bold');
+    doc.text('Informasi Order:', 110, 32);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Tanggal: ${new Date(order.created_at).toLocaleString('id-ID')}`, 110, 38);
+    doc.text(`Status: ${order.status}`, 110, 44);
+    doc.text(`Metode Pembayaran: ${order.payment_method || '-'}`, 110, 50);
+
+    // Shipping Address
+    doc.setFont('helvetica', 'bold');
+    doc.text('Alamat Pengiriman:', 14, 60);
+    doc.setFont('helvetica', 'normal');
+    const splitAddress = doc.splitTextToSize(order.dealers?.address || '-', 180);
+    doc.text(splitAddress, 14, 66);
+
+    let startY = 70 + (splitAddress.length * 5);
+
+    const tableData = items.map((item, idx) => [
+      idx + 1,
+      item.products?.name || 'Produk',
+      item.products?.sku || '-',
+      `${item.quantity}`,
+      `Rp ${Number(item.unit_price || 0).toLocaleString('id-ID')}`,
+      `Rp ${Number(item.total_price || 0).toLocaleString('id-ID')}`
+    ]);
+
+    autoTable(doc, {
+      startY: startY,
+      head: [['No', 'Nama Produk', 'SKU', 'Qty', 'Harga Satuan', 'Total']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+      bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center' },
+        3: { cellWidth: 15, halign: 'center' },
+        4: { halign: 'right' },
+        5: { halign: 'right' },
+      }
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Total Keseluruhan:', 130, finalY);
+    doc.text(`Rp ${Number(order.total_amount || 0).toLocaleString('id-ID')}`, 196, finalY, { align: 'right' });
+
+    if (order.unique_code) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.text(`Termasuk Kode Unik: Rp ${order.unique_code}`, 196, finalY + 6, { align: 'right' });
+    }
+
+    doc.save(`Invoice_${order.order_number}.pdf`);
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
       {/* Real-time Order Alert Toast */}
@@ -779,12 +859,22 @@ export default function OrdersPage() {
                   Dibuat pada: {new Date(selectedOrder.created_at).toLocaleString('id-ID')}
                 </p>
               </div>
-              <button 
-                onClick={() => setSelectedOrder(null)}
-                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
-              >
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleGenerateInvoicePDF(selectedOrder, orderItems)}
+                  disabled={isLoadingItems}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                  title="Unduh Invoice PDF"
+                >
+                  <FileText size={14} /> Cetak Invoice
+                </button>
+                <button 
+                  onClick={() => setSelectedOrder(null)}
+                  className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             {/* Modal Content */}

@@ -168,7 +168,7 @@ export default function CategoryProductsScreen() {
           <View style={styles.gridContainer}>
             {filteredProducts.map((product) => {
               const isHabis = product.stock === 0;
-              const hasNewTag = Boolean((product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW')));
+              const hasNewTag = Boolean(product.is_new || (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW')));
               const displaySku = product.sku ? product.sku.replace(/NEW/gi, '').trim() : (product.name || 'Produk');
               return (
               <TouchableOpacity 
@@ -264,7 +264,7 @@ export default function CategoryProductsScreen() {
           <View style={styles.listContainer}>
             {filteredProducts.map((product) => {
               const isHabis = product.stock === 0;
-              const hasNewTag = Boolean((product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW')));
+              const hasNewTag = Boolean(product.is_new || (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW')));
               const displaySku = product.sku ? product.sku.replace(/NEW/gi, '').trim() : (product.name || 'Produk');
               return (
               <TouchableOpacity 

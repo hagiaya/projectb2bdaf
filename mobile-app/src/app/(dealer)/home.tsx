@@ -344,6 +344,19 @@ export default function DealerHome() {
             {unreadCount > 0 && <View style={styles.notifBadge} />}
           </TouchableOpacity>
 
+          {/* PENGADUAN WA */}
+          <TouchableOpacity 
+            style={[styles.iconBtn, { backgroundColor: 'transparent' }]} 
+            onPress={() => {
+              const msg = encodeURIComponent('Halo Tim Support, saya dealer dan ingin menyampaikan pengaduan / laporan:');
+              Linking.openURL(`https://wa.me/${WA_NUMBER}?text=${msg}`).catch(() =>
+                Alert.alert('Gagal', 'Tidak dapat membuka WhatsApp.')
+              );
+            }}
+          >
+            <Feather name="message-circle" size={20} color="white" />
+          </TouchableOpacity>
+
           {/* KERANJANG */}
           <TouchableOpacity style={[styles.iconBtn, { backgroundColor: 'transparent' }]} onPress={() => router.push('/(dealer)/cart' as any)}>
             <Feather name="shopping-cart" size={20} color="white" />
@@ -426,7 +439,7 @@ export default function DealerHome() {
           ) : (
             bestSellerProducts.map((item) => {
               const isHabis = item.stock === 0;
-              const hasNewTag = (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
+              const hasNewTag = item.is_new || (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
               const displaySku = item.sku ? item.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
               return (
               <TouchableOpacity 
@@ -549,7 +562,7 @@ export default function DealerHome() {
           ) : (
             recentlyViewed.map((item) => {
               const isHabis = item.stock === 0;
-              const hasNewTag = (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
+              const hasNewTag = item.is_new || (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
               const displaySku = item.sku ? item.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
               return (
               <View 

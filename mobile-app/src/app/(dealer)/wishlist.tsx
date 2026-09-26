@@ -51,7 +51,7 @@ export default function WishlistScreen() {
         {wishlistItems.map((item) => {
           const realItem = realItems.find(r => r.id === item.id) || item;
           const isHabis = realItem.stock === 0;
-          const hasNewTag = (realItem.sku && realItem.sku.toUpperCase().includes('NEW')) || (realItem.name && realItem.name.toUpperCase().includes('NEW'));
+          const hasNewTag = realItem.is_new || (realItem.sku && realItem.sku.toUpperCase().includes('NEW')) || (realItem.name && realItem.name.toUpperCase().includes('NEW'));
           const displaySku = realItem.sku ? realItem.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
           const displayPrice = realItem.price || 0;
           
