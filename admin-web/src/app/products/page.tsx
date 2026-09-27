@@ -65,6 +65,7 @@ export default function ProductsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Semua Kategori');
+  const [selectedLabelFilter, setSelectedLabelFilter] = useState('Semua Label');
   const [sortBy, setSortBy] = useState('priority'); // 'priority' | 'name_asc' | 'price_asc' | 'price_desc' | 'stock_desc' | 'newest'
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -604,7 +605,13 @@ export default function ProductsPage() {
     const matchesCategory = selectedCategoryFilter === 'Semua Kategori' || catName === selectedCategoryFilter;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
       (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesCategory && matchesSearch;
+      
+    let matchesLabel = true;
+    if (selectedLabelFilter === 'New') matchesLabel = !!p.is_new;
+    if (selectedLabelFilter === 'Coming Soon') matchesLabel = !!p.is_coming_soon;
+    if (selectedLabelFilter === 'Flash Sale') matchesLabel = !!p.is_flash_sale;
+
+    return matchesCategory && matchesSearch && matchesLabel;
   }).sort((a, b) => {
     switch (sortBy) {
       case 'priority': {
@@ -726,6 +733,21 @@ export default function ProductsPage() {
                 {categories.map((cat) => (
                   <option key={cat.id} value={cat.name}>{cat.name}</option>
                 ))}
+              </select>
+            </div>
+
+            {/* Filter Label */}
+            <div className="relative">
+              <Tag className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+              <select 
+                value={selectedLabelFilter}
+                onChange={(e) => { setSelectedLabelFilter(e.target.value); setCurrentPage(1); }}
+                className="pl-9 pr-8 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm bg-white font-medium text-gray-700 transition-all appearance-none cursor-pointer"
+              >
+                <option>Semua Label</option>
+                <option value="New">New</option>
+                <option value="Coming Soon">Coming Soon</option>
+                <option value="Flash Sale">Flash Sale</option>
               </select>
             </div>
 
@@ -1013,6 +1035,9 @@ export default function ProductsPage() {
                           {product.name}
                           {product.is_new && (
                             <span className="bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm">NEW</span>
+                          )}
+                          {product.is_coming_soon && (
+                            <span className="bg-purple-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm">COMING SOON</span>
                           )}
                         </div>
                       </td>
