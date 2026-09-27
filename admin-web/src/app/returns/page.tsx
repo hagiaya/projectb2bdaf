@@ -173,7 +173,7 @@ export default function ReturnsPage() {
     try {
       const { data, error } = await supabase
         .from('returns')
-        .select('*, dealers(store_name, phone, address), orders(order_number)')
+        .select('*, dealers(store_name, address), orders(order_number)')
         .order('created_at', { ascending: false });
 
       if (!error && data) {

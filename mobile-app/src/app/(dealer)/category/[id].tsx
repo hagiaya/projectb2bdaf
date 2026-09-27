@@ -6,6 +6,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../../lib/supabase';
 import FallbackImage from '../../../components/FallbackImage';
 import { useCart } from '../../../context/CartContext';
+import NewBadge from '../../../components/NewBadge';
+import ComingSoonBadge from '../../../components/ComingSoonBadge';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 44) / 2; // 2 Sisi / 2 Column Grid
@@ -57,7 +59,7 @@ export default function CategoryProductsScreen() {
       let query = supabase
         .from('products')
         .select('*, categories(name)')
-        .eq('status', 'ACTIVE');
+        .in('status', ['ACTIVE', 'LOW_STOCK']);
 
       if (id !== 'all') {
         query = query.eq('category_id', id);
@@ -71,7 +73,7 @@ export default function CategoryProductsScreen() {
         let fbQuery = supabase
           .from('products')
           .select('*, categories(name)')
-          .eq('status', 'ACTIVE');
+          .in('status', ['ACTIVE', 'LOW_STOCK']);
         if (id !== 'all') {
           fbQuery = fbQuery.eq('category_id', id);
         }
@@ -167,9 +169,10 @@ export default function CategoryProductsScreen() {
           /* ========== MODE GRID (2 SISI) ========== */
           <View style={styles.gridContainer}>
             {filteredProducts.map((product) => {
-              const isHabis = product.stock === 0;
+              const isHabis = product.stock === 0 || product.status === 'LOW_STOCK';
               const hasNewTag = Boolean(product.is_new || (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW')));
-              const displaySku = product.sku ? product.sku.replace(/NEW/gi, '').trim() : (product.name || 'Produk');
+              const isComingSoon = Boolean(product.is_coming_soon || (product.sku && product.sku.toUpperCase().includes('COMING')) || (product.name && product.name.toUpperCase().includes('COMING')));
+              const displaySku = product.sku ? product.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : (product.name || 'Produk');
               return (
               <TouchableOpacity 
                 key={product.id} 
@@ -207,10 +210,11 @@ export default function CategoryProductsScreen() {
 
                 {/* DETAILS */}
                 <View style={styles.cardDetails}>
-                  {(!isHabis && hasNewTag) && (
-                    <View style={styles.newBadge}>
-                      <Text style={styles.newBadgeText}>NEW</Text>
-                    </View>
+                  {(!isHabis && isComingSoon) && (
+                    <ComingSoonBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
+                  )}
+                  {(!isHabis && hasNewTag && !isComingSoon) && (
+                    <NewBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
                   )}
                   <Text style={styles.productName} numberOfLines={2}>{displaySku}</Text>
                   
@@ -245,14 +249,14 @@ export default function CategoryProductsScreen() {
                   {/* FOOTER & BUTTON */}
                   <View style={styles.cardFooter}>
                     <Text style={[styles.stockText, isHabis && { color: '#ef4444' }]}>
-                      {isHabis ? 'Stok Habis' : `Stok: ${product.stock}`}
+                      {isComingSoon ? 'Segera' : isHabis ? 'Stok Habis' : `Stok: ${product.stock}`}
                     </Text>
                     <TouchableOpacity 
-                      style={[styles.addCartBtn, isHabis && { backgroundColor: '#cbd5e1' }]} 
+                      style={[styles.addCartBtn, (isHabis || isComingSoon) && { backgroundColor: '#cbd5e1' }]} 
                       onPress={() => addToCart(product)}
-                      disabled={isHabis}
+                      disabled={isHabis || isComingSoon}
                     >
-                      <Feather name="plus" size={16} color="white" />
+                      <Feather name={isComingSoon ? "clock" : "plus"} size={16} color="white" />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -263,9 +267,10 @@ export default function CategoryProductsScreen() {
           /* ========== MODE LIST (DAFTAR 1 SISI HORIZONTAL) ========== */
           <View style={styles.listContainer}>
             {filteredProducts.map((product) => {
-              const isHabis = product.stock === 0;
+              const isHabis = product.stock === 0 || product.status === 'LOW_STOCK';
               const hasNewTag = Boolean(product.is_new || (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW')));
-              const displaySku = product.sku ? product.sku.replace(/NEW/gi, '').trim() : (product.name || 'Produk');
+              const isComingSoon = Boolean(product.is_coming_soon || (product.sku && product.sku.toUpperCase().includes('COMING')) || (product.name && product.name.toUpperCase().includes('COMING')));
+              const displaySku = product.sku ? product.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : (product.name || 'Produk');
               return (
               <TouchableOpacity 
                 key={product.id} 
@@ -306,10 +311,11 @@ export default function CategoryProductsScreen() {
                       <View style={styles.categoryTagList}>
                         <Text style={styles.categoryTagListText}>{product.categories?.name || categoryName || 'Lainnya'}</Text>
                       </View>
-                      {(!isHabis && hasNewTag) && (
-                        <View style={styles.newBadgeList}>
-                          <Text style={styles.newBadgeListText}>NEW</Text>
-                        </View>
+                      {(!isHabis && isComingSoon) && (
+                        <ComingSoonBadge style={styles.newBadgeList} textStyle={styles.newBadgeListText} />
+                      )}
+                      {(!isHabis && hasNewTag && !isComingSoon) && (
+                        <NewBadge style={styles.newBadgeList} textStyle={styles.newBadgeListText} />
                       )}
                     </View>
                     <Text style={styles.productNameList} numberOfLines={2}>{displaySku}</Text>
@@ -345,18 +351,18 @@ export default function CategoryProductsScreen() {
                         <Text style={styles.productPriceList}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
                       )}
                       <Text style={[styles.stockTextList, isHabis && { color: '#ef4444' }]}>
-                        {isHabis ? 'Stok Habis' : `Stok: ${product.stock}`}
+                        {isComingSoon ? 'Segera' : isHabis ? 'Stok Habis' : `Stok: ${product.stock}`}
                       </Text>
                     </View>
 
                     <TouchableOpacity 
-                      style={[styles.addCartBtnList, isHabis && styles.addCartBtnDisabled]} 
+                      style={[styles.addCartBtnList, (isHabis || isComingSoon) && styles.addCartBtnDisabled]} 
                       onPress={() => addToCart(product)}
-                      disabled={isHabis}
+                      disabled={isHabis || isComingSoon}
                       activeOpacity={0.8}
                     >
-                      <Feather name="shopping-cart" size={13} color="white" style={{ marginRight: 4 }} />
-                      <Text style={styles.addCartBtnListText}>{isHabis ? 'Habis' : '+ Keranjang'}</Text>
+                      {(!isComingSoon && !isHabis) && <Feather name="shopping-cart" size={13} color="white" style={{ marginRight: 4 }} />}
+                      <Text style={styles.addCartBtnListText}>{isComingSoon ? 'Segera' : isHabis ? 'Habis' : '+ Keranjang'}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

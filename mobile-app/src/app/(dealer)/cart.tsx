@@ -108,7 +108,10 @@ export default function CartScreen() {
                 </View>
                 
                 <View style={styles.itemDetails}>
-                  <Text style={styles.itemName} numberOfLines={2}>{item.sku || 'SKU Tidak Diketahui'}</Text>
+                  <Text style={styles.itemName} numberOfLines={2}>
+                    {item.sku || 'SKU Tidak Diketahui'}
+                    {item.selected_color ? ` - ${item.selected_color}` : ''}
+                  </Text>
                   <Text style={styles.itemPrice}>Rp {item.price.toLocaleString('id-ID')}</Text>
                   
                   <View style={styles.actionRow}>

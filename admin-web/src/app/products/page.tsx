@@ -45,6 +45,10 @@ interface Product {
   promo_price?: number | null;
   promo_label?: string | null;
   is_new?: boolean;
+  is_flash_sale?: boolean;
+  is_coming_soon?: boolean;
+  colors?: string[];
+  variants?: { color: string; stock: number }[];
 }
 
 interface Category {
@@ -79,7 +83,10 @@ export default function ProductsPage() {
   const [newIsFlashSale, setNewIsFlashSale] = useState(false);
   const [newFlashSalePrice, setNewFlashSalePrice] = useState('');
   const [newIsNewProduct, setNewIsNewProduct] = useState(false);
+  const [newIsComingSoon, setNewIsComingSoon] = useState(false);
+  const [newVariants, setNewVariants] = useState<{ color: string; stock: string }[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Quick Reorder Modal
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
@@ -226,6 +233,9 @@ export default function ProductsPage() {
     setNewIsFlashSale(false);
     setNewFlashSalePrice('');
     setNewIsNewProduct(false);
+    setNewIsComingSoon(false);
+    setNewVariants([]);
+    setIsUploading(false);
   };
 
   const handleEditClick = (product: Product, index: number) => {
@@ -243,6 +253,18 @@ export default function ProductsPage() {
     setNewIsFlashSale(product.is_flash_sale || false);
     setNewFlashSalePrice(product.flash_sale_price != null ? product.flash_sale_price.toString() : '');
     setNewIsNewProduct(product.is_new || false);
+    setNewIsComingSoon(product.is_coming_soon || false);
+    
+    // Map existing variants or create empty if none
+    if (product.variants && Array.isArray(product.variants) && product.variants.length > 0) {
+      setNewVariants(product.variants.map(v => ({ color: v.color, stock: v.stock.toString() })));
+    } else if (product.colors && Array.isArray(product.colors) && product.colors.length > 0) {
+      setNewVariants(product.colors.map(c => ({ color: c, stock: '0' })));
+    } else {
+      setNewVariants([]);
+    }
+
+    setIsUploading(false);
     setIsModalOpen(true);
   };
 
@@ -251,9 +273,17 @@ export default function ProductsPage() {
     if (!newProductName || !newSku || !newPrice || !newStock || !newCategoryId) return;
 
     setIsSaving(true);
-    const stockNum = parseInt(newStock);
+    let stockNum = parseInt(newStock);
     const orderNum = parseInt(newSortOrder) || 1;
     const parsedUrls = newImageUrls ? newImageUrls.split(',').map(u => u.trim()).filter(Boolean) : [];
+    
+    const parsedVariants = newVariants
+      .filter(v => v.color.trim() !== '')
+      .map(v => ({ color: v.color.trim(), stock: parseInt(v.stock) || 0 }));
+      
+    if (parsedVariants.length > 0) {
+      stockNum = parsedVariants.reduce((sum, v) => sum + v.stock, 0);
+    }
 
     const prodData: any = {
       name: newProductName,
@@ -270,6 +300,9 @@ export default function ProductsPage() {
       is_flash_sale: newIsFlashSale,
       flash_sale_price: newFlashSalePrice ? parseFloat(newFlashSalePrice) : null,
       is_new: newIsNewProduct,
+      is_coming_soon: newIsComingSoon,
+      colors: parsedVariants.map(v => v.color),
+      variants: parsedVariants,
     };
 
     if (editingProduct) {
@@ -279,10 +312,15 @@ export default function ProductsPage() {
         .eq('id', editingProduct.id)
         .select('*, categories(name)');
 
-      // Fallback if sort_order doesn't exist yet
-      if (error && (error.message?.includes('sort_order') || error.message?.includes('is_new') || error.code === '42703')) {
+      // Fallback if columns don't exist yet
+      if (error && (error.message?.includes('sort_order') || error.message?.includes('is_new') || error.message?.includes('colors') || error.message?.includes('variants') || error.message?.includes('flash_sale') || error.message?.includes('coming_soon') || error.code === '42703')) {
         delete prodData.sort_order;
         delete prodData.is_new;
+        delete prodData.is_coming_soon;
+        delete prodData.colors;
+        delete prodData.variants;
+        delete prodData.is_flash_sale;
+        delete prodData.flash_sale_price;
         const fallback = await supabase
           .from('products')
           .update(prodData)
@@ -306,9 +344,14 @@ export default function ProductsPage() {
         .select('*, categories(name)');
 
       // Fallback if sort_order doesn't exist yet
-      if (error && (error.message?.includes('sort_order') || error.message?.includes('is_new') || error.code === '42703')) {
+      if (error && (error.message?.includes('sort_order') || error.message?.includes('is_new') || error.message?.includes('colors') || error.message?.includes('variants') || error.message?.includes('flash_sale') || error.message?.includes('coming_soon') || error.code === '42703')) {
         delete prodData.sort_order;
         delete prodData.is_new;
+        delete prodData.is_coming_soon;
+        delete prodData.colors;
+        delete prodData.variants;
+        delete prodData.is_flash_sale;
+        delete prodData.flash_sale_price;
         const fallback = await supabase
           .from('products')
           .insert([prodData])
@@ -326,6 +369,103 @@ export default function ProductsPage() {
       }
     }
     setIsSaving(false);
+  };
+
+  const compressImage = (file: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1000;
+          const MAX_HEIGHT = 1000;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error('Canvas to Blob failed'));
+            },
+            'image/jpeg',
+            0.7
+          );
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    const newUploadedUrls: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.match('image/jpeg') && !file.type.match('image/png') && !file.type.match('image/jpg')) {
+        alert('Format file tidak didukung (harus JPG/PNG): ' + file.name);
+        continue;
+      }
+
+      try {
+        const compressedBlob = await compressImage(file);
+        const fileName = `product_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+
+        const { data, error } = await supabase.storage
+          .from('product_images')
+          .upload(fileName, compressedBlob, { contentType: 'image/jpeg' });
+
+        if (error) {
+          console.error("Upload error:", error);
+          alert('Gagal mengupload gambar ' + file.name + ': ' + error.message + '\nPastikan Anda sudah membuat bucket "product_images" di Supabase.');
+          continue;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from('product_images')
+          .getPublicUrl(fileName);
+
+        if (publicUrlData.publicUrl) {
+          newUploadedUrls.push(publicUrlData.publicUrl);
+        }
+      } catch (err) {
+        console.error("Compression/Upload error:", err);
+      }
+    }
+
+    if (newUploadedUrls.length > 0) {
+      setNewImageUrls((prev) => {
+        const current = prev.split(',').map(s => s.trim()).filter(Boolean);
+        return [...current, ...newUploadedUrls].join(', ');
+      });
+    }
+
+    setIsUploading(false);
+    if (e.target) e.target.value = '';
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -1079,10 +1219,12 @@ export default function ProductsPage() {
                     type="number" 
                     required
                     placeholder="0"
-                    value={newStock}
+                    value={newVariants.length > 0 ? newVariants.reduce((s, v) => s + (parseInt(v.stock) || 0), 0) : newStock}
                     onChange={(e) => setNewStock(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold text-gray-900"
+                    disabled={newVariants.length > 0}
+                    className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold text-gray-900 ${newVariants.length > 0 ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                   />
+                  {newVariants.length > 0 && <p className="text-[10px] text-gray-500 mt-1">Stok dihitung otomatis dari varian.</p>}
                 </div>
               </div>
 
@@ -1204,15 +1346,121 @@ export default function ProductsPage() {
                 </label>
               </div>
 
+              {/* LABEL COMING SOON */}
+              <div className="bg-purple-50/80 p-3.5 rounded-xl border border-purple-200 mt-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newIsComingSoon}
+                    onChange={(e) => setNewIsComingSoon(e.target.checked)}
+                    className="w-5 h-5 text-purple-600 rounded border-purple-300 focus:ring-purple-500"
+                  />
+                  <div>
+                    <span className="text-sm font-bold text-purple-900 block">Tandai sebagai Coming Soon</span>
+                    <span className="text-[10px] font-medium text-purple-700">Produk ini belum rilis dan mendapatkan badge khusus</span>
+                  </div>
+                </label>
+              </div>
+
+              {/* VARIAN WARNA & STOK */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 tracking-wide">VARIAN WARNA & STOK</label>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Tambah variasi warna beserta jumlah stoknya.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setNewVariants([...newVariants, { color: '', stock: '0' }])}
+                    className="px-3 py-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1"
+                  >
+                    <Plus size={12} strokeWidth={3} />
+                    Tambah Varian
+                  </button>
+                </div>
+
+                {newVariants.length > 0 ? (
+                  <div className="space-y-2">
+                    {newVariants.map((variant, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          placeholder="Warna (Misal: Putih)"
+                          value={variant.color}
+                          onChange={(e) => {
+                            const updated = [...newVariants];
+                            updated[idx].color = e.target.value;
+                            setNewVariants(updated);
+                          }}
+                          className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-emerald-500"
+                        />
+                        <input
+                          type="number"
+                          placeholder="Stok"
+                          value={variant.stock}
+                          onChange={(e) => {
+                            const updated = [...newVariants];
+                            updated[idx].stock = e.target.value;
+                            setNewVariants(updated);
+                          }}
+                          className="w-24 px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-emerald-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = [...newVariants];
+                            updated.splice(idx, 1);
+                            setNewVariants(updated);
+                          }}
+                          className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4 bg-white rounded-lg border border-dashed border-gray-300">
+                    <p className="text-xs text-gray-400 font-medium">Belum ada varian. Produk menggunakan stok gabungan.</p>
+                  </div>
+                )}
+              </div>
+
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide">URL GAMBAR (Pisahkan dengan koma)</label>
-                <input 
-                  type="text" 
-                  placeholder="https://.../img1.jpg, https://.../img2.jpg"
-                  value={newImageUrls}
-                  onChange={(e) => setNewImageUrls(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium placeholder:font-normal"
-                />
+                <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide">FOTO PRODUK (Upload JPG/PNG atau Paste URL)</label>
+                
+                {/* Upload Section */}
+                <div className="mb-3 p-4 border-2 border-dashed border-emerald-200 bg-emerald-50/50 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-emerald-50 transition-colors">
+                  <div className="p-2 bg-emerald-100 text-emerald-600 rounded-full">
+                    <ImageIcon size={20} />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-bold text-emerald-800">Upload Foto Produk</p>
+                    <p className="text-xs text-emerald-600/80 mb-2">Bisa upload beberapa foto (JPG/PNG). Otomatis di-compress.</p>
+                  </div>
+                  <label className={`cursor-pointer px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {isUploading ? 'Mengupload...' : 'Pilih File Gambar'}
+                    <input 
+                      type="file" 
+                      multiple 
+                      accept="image/jpeg, image/png, image/jpg"
+                      className="hidden" 
+                      onChange={handleFileUpload}
+                      disabled={isUploading}
+                    />
+                  </label>
+                </div>
+
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    placeholder="https://.../img1.jpg, https://.../img2.jpg"
+                    value={newImageUrls}
+                    onChange={(e) => setNewImageUrls(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium placeholder:font-normal"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">URL Gambar</div>
+                </div>
 
                 {/* Pratinjau Gambar Langsung */}
                 {(() => {

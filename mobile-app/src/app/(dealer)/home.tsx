@@ -9,6 +9,8 @@ import { supabase } from '../../lib/supabase';
 import FallbackImage from '../../components/FallbackImage';
 import { useCart } from '../../context/CartContext';
 import { useSafeBottom } from '../../hooks/useSafeBottom';
+import NewBadge from '../../components/NewBadge';
+import ComingSoonBadge from '../../components/ComingSoonBadge';
 
 const WA_NUMBER = '628114981666'; // 08114981666 → format internasional
 
@@ -257,7 +259,7 @@ export default function DealerHome() {
     let { data, error } = await supabase
       .from('products')
       .select('*')
-      .eq('status', 'ACTIVE')
+      .in('status', ['ACTIVE', 'LOW_STOCK'])
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true })
       .limit(20);
@@ -438,9 +440,10 @@ export default function DealerHome() {
             </View>
           ) : (
             bestSellerProducts.map((item) => {
-              const isHabis = item.stock === 0;
+              const isHabis = item.stock === 0 || item.status === 'LOW_STOCK';
               const hasNewTag = item.is_new || (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
-              const displaySku = item.sku ? item.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
+              const isComingSoon = item.is_coming_soon || (item.sku && item.sku.toUpperCase().includes('COMING')) || (item.name && item.name.toUpperCase().includes('COMING'));
+              const displaySku = item.sku ? item.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : 'SKU Tidak Diketahui';
               return (
               <TouchableOpacity 
                 key={item.id} 
@@ -463,20 +466,21 @@ export default function DealerHome() {
                     </View>
                   )}
                 </View>
-                {(!isHabis && hasNewTag) && (
-                  <View style={styles.newBadge}>
-                    <Text style={styles.newBadgeText}>NEW</Text>
-                  </View>
+                {(!isHabis && isComingSoon) && (
+                  <ComingSoonBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
+                )}
+                {(!isHabis && hasNewTag && !isComingSoon) && (
+                  <NewBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
                 )}
                 <Text style={styles.productName} numberOfLines={2}>{displaySku}</Text>
                 <Text style={styles.productSold}>100+ terjual</Text>
                 <Text style={styles.productPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
                 <TouchableOpacity 
-                  style={[styles.buyButton, isHabis && { backgroundColor: '#cbd5e1' }]} 
+                  style={[styles.buyButton, (isHabis || isComingSoon) && { backgroundColor: '#cbd5e1' }]} 
                   onPress={() => addToCart(item)} 
-                  disabled={isHabis}
+                  disabled={isHabis || isComingSoon}
                 >
-                  <Text style={styles.buyText}>{isHabis ? 'Habis' : '+ Keranjang'}</Text>
+                  <Text style={styles.buyText}>{isComingSoon ? 'Segera' : isHabis ? 'Habis' : '+ Keranjang'}</Text>
                 </TouchableOpacity>
               </TouchableOpacity>
             )})
@@ -501,7 +505,7 @@ export default function DealerHome() {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
             {flashSaleProducts.map((item) => {
-              const isHabis = item.stock === 0;
+              const isHabis = item.stock === 0 || item.status === 'LOW_STOCK';
               return (
                 <TouchableOpacity 
                   key={`flash-${item.id}`} 
@@ -561,9 +565,10 @@ export default function DealerHome() {
             </View>
           ) : (
             recentlyViewed.map((item) => {
-              const isHabis = item.stock === 0;
+              const isHabis = item.stock === 0 || item.status === 'LOW_STOCK';
               const hasNewTag = item.is_new || (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
-              const displaySku = item.sku ? item.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
+              const isComingSoon = item.is_coming_soon || (item.sku && item.sku.toUpperCase().includes('COMING')) || (item.name && item.name.toUpperCase().includes('COMING'));
+              const displaySku = item.sku ? item.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : 'SKU Tidak Diketahui';
               return (
               <View 
                 key={item.id} 
@@ -584,10 +589,11 @@ export default function DealerHome() {
                     </View>
                   )}
                 </View>
-                {(!isHabis && hasNewTag) && (
-                  <View style={styles.newBadge}>
-                    <Text style={styles.newBadgeText}>NEW</Text>
-                  </View>
+                {(!isHabis && isComingSoon) && (
+                  <ComingSoonBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
+                )}
+                {(!isHabis && hasNewTag && !isComingSoon) && (
+                  <NewBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
                 )}
                 <Text style={styles.productName} numberOfLines={2}>{displaySku}</Text>
                 <Text style={styles.productPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>

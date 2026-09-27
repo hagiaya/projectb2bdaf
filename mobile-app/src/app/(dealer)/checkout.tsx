@@ -258,13 +258,13 @@ export default function CheckoutScreen() {
       if (orderError || !order) throw (orderError || new Error('Gagal membuat data pesanan'));
       const orderId = order.id;
 
-      // 3. Insert Order Items
       const orderItems = items.map(item => ({
         order_id: orderId,
-        product_id: item.id,
+        product_id: item.product_id || item.id,
         quantity: item.quantity,
         unit_price: item.price,
         total_price: item.price * item.quantity,
+        selected_color: item.selected_color || null,
       }));
 
       const { error: itemsError } = await supabase
@@ -382,7 +382,10 @@ export default function CheckoutScreen() {
           {items.map(item => (
             <View key={item.id} style={styles.itemRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.itemName}>{item.name || item.sku || 'SKU Produk'}</Text>
+                <Text style={styles.itemName}>
+                  {item.name || item.sku || 'SKU Produk'}
+                  {item.selected_color ? ` - ${item.selected_color}` : ''}
+                </Text>
                 <Text style={styles.itemQty}>{item.quantity} x Rp {item.price.toLocaleString('id-ID')}</Text>
               </View>
               <Text style={styles.itemTotal}>Rp {(item.price * item.quantity).toLocaleString('id-ID')}</Text>

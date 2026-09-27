@@ -211,6 +211,7 @@ export default function ProgramsPage() {
   const [newDimensions, setNewDimensions] = useState('');
   const [newCategory, setNewCategory] = useState('Display Toko');
   const [newDesc, setNewDesc] = useState('');
+  const [newImageUrl, setNewImageUrl] = useState('');
 
   // Modal Verification / Claim Approval
   const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
@@ -291,6 +292,7 @@ export default function ProgramsPage() {
       dimensions: newDimensions.trim() || 'Standar Toko',
       category: newCategory,
       description: newDesc.trim() || undefined,
+      image_url: newImageUrl.trim() || undefined,
     };
 
     setSupportItemsList([...supportItemsList, newItem]);
@@ -299,6 +301,7 @@ export default function ProgramsPage() {
     setNewMinPurchase('');
     setNewDimensions('');
     setNewDesc('');
+    setNewImageUrl('');
   };
 
   const handleDeleteSupportItem = (id: string) => {
@@ -1187,15 +1190,33 @@ export default function ProgramsPage() {
                       key={item.id}
                       className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 transition-all flex flex-col justify-between"
                     >
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-black px-2 py-0.5 bg-slate-900 text-white rounded">
-                              {item.code}
-                            </span>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">
-                              #{idx + 1}
-                            </span>
+                      <div className="flex items-start gap-3 mb-2">
+                        {item.image_url && (
+                          <img 
+                            src={item.image_url} 
+                            alt={item.name}
+                            className="w-16 h-16 object-cover rounded-lg border border-slate-200 shrink-0 bg-slate-100"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        )}
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black px-2 py-0.5 bg-slate-900 text-white rounded">
+                                {item.code}
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                #{idx + 1}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSupportItem(item.id)}
+                              className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors"
+                              title="Hapus item"
+                            >
+                              <Trash2 size={15} />
+                            </button>
                           </div>
                           <h5 className="text-sm font-extrabold text-slate-900 mt-1">
                             {item.name}
@@ -1206,15 +1227,6 @@ export default function ProgramsPage() {
                             </p>
                           )}
                         </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteSupportItem(item.id)}
-                          className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors"
-                          title="Hapus item"
-                        >
-                          <Trash2 size={15} />
-                        </button>
                       </div>
 
                       {/* Minimal Pembelian Box */}
@@ -1286,12 +1298,22 @@ export default function ProgramsPage() {
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs"
                     />
                   </div>
-                  <div className="md:col-span-2 flex items-end gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">URL GAMBAR</label>
+                    <input
+                      type="text"
+                      placeholder="https://example.com/image.jpg"
+                      value={newImageUrl}
+                      onChange={(e) => setNewImageUrl(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div className="md:col-span-1 flex items-end gap-2">
                     <div className="flex-1">
                       <label className="block text-[11px] font-bold text-slate-600 mb-1">DESKRIPSI SINGKAT</label>
                       <input
                         type="text"
-                        placeholder="Deskripsi bahan atau kegunaan display"
+                        placeholder="Bahan atau kegunaan"
                         value={newDesc}
                         onChange={(e) => setNewDesc(e.target.value)}
                         className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs"

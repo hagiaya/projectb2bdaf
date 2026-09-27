@@ -5,6 +5,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
 import { useCart } from '../../../context/CartContext';
 import FallbackImage from '../../../components/FallbackImage';
+import NewBadge from '../../../components/NewBadge';
+import ComingSoonBadge from '../../../components/ComingSoonBadge';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
@@ -14,7 +17,10 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({});
   const { cartCount, addToCart } = useCart();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (id) {
@@ -32,6 +38,9 @@ export default function ProductDetailScreen() {
       
     if (!error && data) {
       setProduct(data);
+      if (data.colors && Array.isArray(data.colors) && data.colors.length > 0 && !(data.variants && data.variants.length > 0)) {
+        setSelectedColor(data.colors[0]);
+      }
     } else {
       console.error("Error fetching product:", error);
     }
@@ -66,10 +75,11 @@ export default function ProductDetailScreen() {
     );
   }
 
-  const isHabis = product.stock === 0;
+  const isHabis = product.stock === 0 || product.status === 'LOW_STOCK';
   const hasNewTag = product.is_new || (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW'));
-  const displaySku = product.sku ? product.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
-  const displayName = product.name ? product.name.replace(/NEW/gi, '').trim() : '';
+  const isComingSoon = product.is_coming_soon || (product.sku && product.sku.toUpperCase().includes('COMING')) || (product.name && product.name.toUpperCase().includes('COMING'));
+  const displaySku = product.sku ? product.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : 'SKU Tidak Diketahui';
+  const displayName = product.name ? product.name.replace(/NEW|COMING SOON|COMING/gi, '').trim() : '';
 
   const images = (product.image_urls && product.image_urls.length > 0) 
                  ? product.image_urls 
@@ -90,7 +100,7 @@ export default function ProductDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
         {/* IMAGE SLIDER */}
         <View style={styles.imageSliderContainer}>
           {images.length > 0 ? (
@@ -132,10 +142,11 @@ export default function ProductDetailScreen() {
 
         {/* BASIC DETAILS */}
         <View style={styles.detailsSection}>
-          {(!isHabis && hasNewTag) && (
-            <View style={styles.newBadge}>
-              <Text style={styles.newBadgeText}>NEW</Text>
-            </View>
+          {(!isHabis && isComingSoon) && (
+            <ComingSoonBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
+          )}
+          {(!isHabis && hasNewTag && !isComingSoon) && (
+            <NewBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
           )}
           <View style={styles.priceRow}>
             <Text style={styles.price}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
@@ -183,6 +194,87 @@ export default function ProductDetailScreen() {
           </View>
         </View>
 
+        {/* VARIAN WARNA & STOK */}
+        {product.variants && Array.isArray(product.variants) && product.variants.length > 0 ? (
+          <View style={styles.descriptionSection}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+              <View style={{ width: 4, height: 16, backgroundColor: '#dc2626', marginRight: 8 }} />
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#1e293b' }}>Pilihan</Text>
+            </View>
+            <View style={{ gap: 12 }}>
+              {product.variants.map((v: any) => {
+                const vQty = variantQuantities[v.color] || 0;
+                const vOutOfStock = v.stock === 0;
+                return (
+                  <View key={v.color} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 1, borderColor: selectedColor === v.color || vQty > 0 ? '#dc2626' : '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1e293b' }}>{v.color}</Text>
+                      <Text style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
+                        Rp {v.price ? v.price.toLocaleString('id-ID') : product.price.toLocaleString('id-ID')}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                        Stok: <Text style={{ color: vOutOfStock ? '#ef4444' : '#1e293b', fontWeight: 'bold' }}>{vOutOfStock ? 'Habis' : 'Tersedia'}</Text>
+                        {!vOutOfStock && ` (${v.stock})`}
+                      </Text>
+                    </View>
+                    
+                    <View style={[styles.quantityControl, { height: 44, width: 110, paddingHorizontal: 4, opacity: vOutOfStock ? 0.5 : 1 }]}>
+                      <TouchableOpacity 
+                        style={[styles.qtyBtn, { width: 32, height: 32 }]} 
+                        onPress={() => setVariantQuantities(prev => ({ ...prev, [v.color]: Math.max(0, (prev[v.color] || 0) - 1) }))} 
+                        disabled={vOutOfStock || vQty === 0}
+                      >
+                        <Feather name="minus" size={18} color="#64748b" />
+                      </TouchableOpacity>
+                      <TextInput
+                        style={[styles.qtyText, { padding: 0, margin: 0, textAlign: 'center', flex: 1, fontSize: 16, fontWeight: 'bold' }]}
+                        value={String(vQty)}
+                        keyboardType="numeric"
+                        editable={!vOutOfStock}
+                        onChangeText={(val) => {
+                          const num = parseInt(val.replace(/[^0-9]/g, ''), 10);
+                          const qty = isNaN(num) ? 0 : Math.min(num, v.stock);
+                          setVariantQuantities(prev => ({ ...prev, [v.color]: qty }));
+                        }}
+                      />
+                      <TouchableOpacity 
+                        style={[styles.qtyBtn, { width: 32, height: 32 }]} 
+                        onPress={() => setVariantQuantities(prev => ({ ...prev, [v.color]: Math.min(v.stock, (prev[v.color] || 0) + 1) }))} 
+                        disabled={vOutOfStock || vQty >= v.stock}
+                      >
+                        <Feather name="plus" size={18} color="#64748b" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : product.colors && Array.isArray(product.colors) && product.colors.length > 0 ? (
+          <View style={styles.descriptionSection}>
+            <Text style={styles.sectionTitle}>Pilih Warna</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
+              {product.colors.map((color: string) => (
+                <TouchableOpacity
+                  key={color}
+                  style={[
+                    styles.colorChip,
+                    selectedColor === color && styles.colorChipActive
+                  ]}
+                  onPress={() => setSelectedColor(color)}
+                >
+                  <Text style={[
+                    styles.colorChipText,
+                    selectedColor === color && styles.colorChipTextActive
+                  ]}>
+                    {color}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
         {/* DESKRIPSI */}
         <View style={styles.descriptionSection}>
           <Text style={styles.sectionTitle}>Deskripsi Produk</Text>
@@ -193,36 +285,58 @@ export default function ProductDetailScreen() {
       </ScrollView>
 
       {/* BOTTOM ACTION BAR */}
-      <View style={styles.bottomBar}>
-        <View style={styles.quantityControl}>
-          <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(Math.max(1, quantity - 1))} disabled={product.stock === 0}>
-            <Feather name="minus" size={20} color="#64748b" />
-          </TouchableOpacity>
-          <TextInput
-            style={[styles.qtyText, { padding: 0, margin: 0, textAlign: 'center', minWidth: 40 }]}
-            value={String(quantity)}
-            keyboardType="numeric"
-            editable={product.stock > 0}
-            onChangeText={(val) => {
-              if (val === '') {
-                setQuantity(1);
-                return;
-              }
-              const num = parseInt(val.replace(/[^0-9]/g, ''), 10);
-              if (!isNaN(num)) setQuantity(Math.max(1, num));
-            }}
-          />
-          <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(quantity + 1)} disabled={product.stock === 0}>
-            <Feather name="plus" size={20} color="#64748b" />
-          </TouchableOpacity>
-        </View>
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 24 }]}>
+        {product.variants && Array.isArray(product.variants) && product.variants.length > 0 ? (
+          <View style={{ flex: 1, paddingRight: 16 }}>
+            <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>Total Item</Text>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: '#1e293b' }}>
+              {Object.values(variantQuantities).reduce((a, b) => a + b, 0)} Pcs
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.quantityControl}>
+            <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(Math.max(1, quantity - 1))} disabled={product.stock === 0}>
+              <Feather name="minus" size={20} color="#64748b" />
+            </TouchableOpacity>
+            <TextInput
+              style={[styles.qtyText, { padding: 0, margin: 0, textAlign: 'center', minWidth: 40 }]}
+              value={String(quantity)}
+              keyboardType="numeric"
+              editable={product.stock > 0}
+              onChangeText={(val) => {
+                if (val === '') {
+                  setQuantity(1);
+                  return;
+                }
+                const num = parseInt(val.replace(/[^0-9]/g, ''), 10);
+                if (!isNaN(num)) setQuantity(Math.max(1, num));
+              }}
+            />
+            <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(quantity + 1)} disabled={product.stock === 0}>
+              <Feather name="plus" size={20} color="#64748b" />
+            </TouchableOpacity>
+          </View>
+        )}
+        
         <TouchableOpacity 
-          style={[styles.addToCartBtn, product.stock === 0 && { backgroundColor: '#cbd5e1' }]} 
-          disabled={product.stock === 0} 
-          onPress={() => addToCart(product, quantity)}
+          style={[
+            styles.addToCartBtn, 
+            (isHabis || isComingSoon || (product.variants && Array.isArray(product.variants) && product.variants.length > 0 && Object.values(variantQuantities).reduce((a, b) => a + b, 0) === 0)) && { backgroundColor: '#cbd5e1' }
+          ]} 
+          disabled={isHabis || isComingSoon || (product.variants && Array.isArray(product.variants) && product.variants.length > 0 && Object.values(variantQuantities).reduce((a, b) => a + b, 0) === 0)} 
+          onPress={() => {
+            if (product.variants && Array.isArray(product.variants) && product.variants.length > 0) {
+              Object.entries(variantQuantities).forEach(([color, qty]) => {
+                if (qty > 0) addToCart(product, qty, color);
+              });
+              setVariantQuantities({});
+            } else {
+              addToCart(product, quantity, selectedColor || undefined);
+            }
+          }}
         >
-          {product.stock > 0 && <Feather name="shopping-cart" size={20} color="white" />}
-          <Text style={styles.addToCartText}>{product.stock === 0 ? 'Stok Habis' : 'Tambah ke Keranjang'}</Text>
+          {product.stock > 0 && !isComingSoon && <Feather name="shopping-cart" size={20} color="white" />}
+          <Text style={styles.addToCartText}>{isComingSoon ? 'Segera Hadir' : product.stock === 0 ? 'Stok Habis' : 'Tambah ke Keranjang'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -343,7 +457,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     flexDirection: 'row',
     padding: 16,
-    paddingBottom: 32, // safe area bottom padding
     borderTopWidth: 1,
     borderTopColor: '#f1f5f9',
     gap: 16,
@@ -372,5 +485,25 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 16,
   },
-  addToCartText: { color: 'white', fontSize: 16, fontWeight: 'bold' }
+  addToCartText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+  colorChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  colorChipActive: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#8ec44a',
+  },
+  colorChipText: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  colorChipTextActive: {
+    color: '#16a34a',
+  },
 });

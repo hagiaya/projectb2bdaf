@@ -1294,6 +1294,14 @@ export default function DealerProgramsScreen() {
                                   )}
                                 </View>
 
+                                {item.image_url && (
+                                  <Image 
+                                    source={{ uri: item.image_url }} 
+                                    style={{ width: '100%', height: 70, borderRadius: 6, marginBottom: 8, backgroundColor: '#f1f5f9' }} 
+                                    contentFit="cover" 
+                                  />
+                                )}
+
                                 <Text
                                   style={[
                                     styles.itemChipName,
@@ -2072,11 +2080,19 @@ export default function DealerProgramsScreen() {
                         style={styles.productCardHeaderRow}
                       >
                         <View style={[styles.productThumbBox, isSelected && styles.productThumbBoxSelected]}>
-                          <Feather
-                            name={item.category?.includes('Lantai') ? 'layers' : item.category?.includes('Meja') ? 'box' : item.category?.includes('Digital') ? 'tv' : 'grid'}
-                            size={22}
-                            color={isSelected ? '#15803d' : '#0284c7'}
-                          />
+                          {item.image_url ? (
+                            <Image 
+                              source={{ uri: item.image_url }} 
+                              style={{ width: '100%', height: '100%', borderRadius: 6 }} 
+                              contentFit="cover" 
+                            />
+                          ) : (
+                            <Feather
+                              name={item.category?.includes('Lantai') ? 'layers' : item.category?.includes('Meja') ? 'box' : item.category?.includes('Digital') ? 'tv' : 'grid'}
+                              size={22}
+                              color={isSelected ? '#15803d' : '#0284c7'}
+                            />
+                          )}
                         </View>
 
                         <View style={{ flex: 1, marginLeft: 10 }}>

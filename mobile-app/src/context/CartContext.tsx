@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Alert } from 'react-native';
 
 export type CartItem = {
-  id: string; // product id
+  id: string; // product id + selected color
+  product_id: string; // actual product id
   name: string;
   sku?: string;
   price: number;
@@ -10,11 +11,12 @@ export type CartItem = {
   stock: number;
   image_url?: string | null;
   image_urls?: string[];
+  selected_color?: string;
 };
 
 interface CartContextType {
   items: CartItem[];
-  addToCart: (product: any, quantity?: number) => void;
+  addToCart: (product: any, quantity?: number, selectedColor?: string) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
@@ -30,9 +32,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  const addToCart = (product: any, quantity: number = 1) => {
+  const addToCart = (product: any, quantity: number = 1, selectedColor?: string) => {
     setItems((prevItems) => {
-      const existing = prevItems.find(item => item.id === product.id);
+      const cartItemId = selectedColor ? `${product.id}-${selectedColor}` : product.id;
+      const existing = prevItems.find(item => item.id === cartItemId);
       
       if (existing) {
         if (existing.quantity + quantity > product.stock) {
@@ -41,7 +44,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         }
         
         return prevItems.map(item => 
-          item.id === product.id 
+          item.id === cartItemId 
             ? { ...item, quantity: item.quantity + quantity }
             : item
         );
@@ -53,7 +56,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       
       return [...prevItems, { 
-        id: product.id, 
+        id: cartItemId, 
+        product_id: product.id,
         name: product.name, 
         sku: product.sku || product.name,
         price: Number(product.price), 
@@ -61,6 +65,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         stock: product.stock,
         image_url: product.image_url,
         image_urls: product.image_urls,
+        selected_color: selectedColor,
       }];
     });
     Alert.alert('Berhasil', `${product.name} telah ditambahkan ke keranjang.`);

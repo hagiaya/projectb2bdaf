@@ -5,7 +5,7 @@ import {
   Search, ShoppingCart, Filter, Eye, Check, X, Clock, 
   Package, Truck, DollarSign, CreditCard, ChevronRight,
   AlertCircle, CheckCircle2, User, MapPin, Phone, RefreshCw, ZoomIn,
-  PackageCheck, FileText, UploadCloud, Calendar, CheckSquare, Download, FileSpreadsheet
+  PackageCheck, FileText, UploadCloud, Calendar, CheckSquare, Download, FileSpreadsheet, MessageCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
@@ -520,6 +520,24 @@ export default function OrdersPage() {
     doc.save(`Invoice_${order.order_number}.pdf`);
   };
 
+  const handleShareInvoiceWA = (order: Order, items: OrderItem[]) => {
+    const storeName = order.dealers?.store_name || 'Dealer';
+    const dateStr = new Date(order.created_at).toLocaleString('id-ID');
+    const phone = order.dealers?.profiles?.phone_number || order.dealers?.phone || '';
+    
+    let itemsText = '';
+    items.forEach((item, index) => {
+      const pName = item.products?.name || item.product_name || 'Produk';
+      itemsText += `${index + 1}. ${pName} (${item.quantity} x Rp ${Number(item.price || item.unit_price).toLocaleString('id-ID')})\n`;
+    });
+
+    const text = `Halo ${storeName},\n\nBerikut adalah rincian Pesanan Anda dari DAP B2B:\n\n*Nomor Order*: ${order.order_number}\n*Tanggal*: ${dateStr}\n*Status*: ${getStageBadge(order.status).label}\n\n*Rincian Barang*:\n${itemsText}\n*Total Tagihan*: Rp ${Number(order.total_amount || 0).toLocaleString('id-ID')}\n\nTerima kasih atas pesanan Anda.`;
+    
+    const encodedText = encodeURIComponent(text);
+    const waUrl = phone ? `https://wa.me/${phone.replace(/^0/, '62')}?text=${encodedText}` : `https://api.whatsapp.com/send?text=${encodedText}`;
+    window.open(waUrl, '_blank');
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-8">
       {/* Real-time Order Alert Toast */}
@@ -867,6 +885,14 @@ export default function OrdersPage() {
                   title="Unduh Invoice PDF"
                 >
                   <FileText size={14} /> Cetak Invoice
+                </button>
+                <button
+                  onClick={() => handleShareInvoiceWA(selectedOrder, orderItems)}
+                  disabled={isLoadingItems}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50 shadow-sm"
+                  title="Bagikan rincian via WhatsApp"
+                >
+                  <MessageCircle size={14} /> Bagikan via WA
                 </button>
                 <button 
                   onClick={() => setSelectedOrder(null)}

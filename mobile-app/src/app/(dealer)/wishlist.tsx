@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useWishlist } from '../../context/WishlistContext';
 import { useCart } from '../../context/CartContext';
+import NewBadge from '../../components/NewBadge';
 import { supabase } from '../../lib/supabase';
 import FallbackImage from '../../components/FallbackImage';
 import { useSafeBottom } from '../../hooks/useSafeBottom';
@@ -50,7 +51,7 @@ export default function WishlistScreen() {
       <ScrollView contentContainerStyle={[styles.list, { paddingBottom: safeBottom }]}>
         {wishlistItems.map((item) => {
           const realItem = realItems.find(r => r.id === item.id) || item;
-          const isHabis = realItem.stock === 0;
+          const isHabis = realItem.stock === 0 || realItem.status === 'LOW_STOCK';
           const hasNewTag = realItem.is_new || (realItem.sku && realItem.sku.toUpperCase().includes('NEW')) || (realItem.name && realItem.name.toUpperCase().includes('NEW'));
           const displaySku = realItem.sku ? realItem.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
           const displayPrice = realItem.price || 0;
@@ -72,9 +73,7 @@ export default function WishlistScreen() {
               </View>
               <View style={styles.details}>
                 {(!isHabis && hasNewTag) && (
-                  <View style={styles.newBadge}>
-                    <Text style={styles.newBadgeText}>NEW</Text>
-                  </View>
+                  <NewBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
                 )}
                 <Text style={styles.category}>{item.category || 'Uncategorized'}</Text>
                 <Text style={styles.name}>{displaySku}</Text>

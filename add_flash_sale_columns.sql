@@ -1,0 +1,3 @@
+ALTER TABLE public.products
+ADD COLUMN IF NOT EXISTS is_flash_sale BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS flash_sale_price NUMERIC(15,2);
