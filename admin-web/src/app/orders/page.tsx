@@ -523,12 +523,12 @@ export default function OrdersPage() {
   const handleShareInvoiceWA = (order: Order, items: OrderItem[]) => {
     const storeName = order.dealers?.store_name || 'Dealer';
     const dateStr = new Date(order.created_at).toLocaleString('id-ID');
-    const phone = order.dealers?.profiles?.phone_number || order.dealers?.phone || '';
+    const phone = order.dealers?.profiles?.phone_number || '';
     
     let itemsText = '';
     items.forEach((item, index) => {
-      const pName = item.products?.name || item.product_name || 'Produk';
-      itemsText += `${index + 1}. ${pName} (${item.quantity} x Rp ${Number(item.price || item.unit_price).toLocaleString('id-ID')})\n`;
+      const pName = item.products?.name || 'Produk';
+      itemsText += `${index + 1}. ${pName} (${item.quantity} x Rp ${Number(item.unit_price).toLocaleString('id-ID')})\n`;
     });
 
     const text = `Halo ${storeName},\n\nBerikut adalah rincian Pesanan Anda dari DAP B2B:\n\n*Nomor Order*: ${order.order_number}\n*Tanggal*: ${dateStr}\n*Status*: ${getStageBadge(order.status).label}\n\n*Rincian Barang*:\n${itemsText}\n*Total Tagihan*: Rp ${Number(order.total_amount || 0).toLocaleString('id-ID')}\n\nTerima kasih atas pesanan Anda.`;

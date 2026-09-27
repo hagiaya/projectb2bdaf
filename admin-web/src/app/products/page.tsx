@@ -46,6 +46,7 @@ interface Product {
   promo_label?: string | null;
   is_new?: boolean;
   is_flash_sale?: boolean;
+  flash_sale_price?: number | null;
   is_coming_soon?: boolean;
   colors?: string[];
   variants?: { color: string; stock: number }[];
