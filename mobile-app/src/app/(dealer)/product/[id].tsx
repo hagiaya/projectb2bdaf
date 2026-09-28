@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, ActivityIndicator, TextInput, Modal, SafeAreaView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
@@ -7,6 +7,7 @@ import { useCart } from '../../../context/CartContext';
 import FallbackImage from '../../../components/FallbackImage';
 import NewBadge from '../../../components/NewBadge';
 import ComingSoonBadge from '../../../components/ComingSoonBadge';
+import { useSafeBottom } from '../../../hooks/useSafeBottom';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
@@ -16,11 +17,13 @@ export default function ProductDetailScreen() {
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isImageFullscreen, setIsImageFullscreen] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({});
   const { cartCount, addToCart } = useCart();
   const insets = useSafeAreaInsets();
+  const safeBottom = useSafeBottom(12); // add extra 12px for breathing room
 
   useEffect(() => {
     if (id) {
@@ -100,7 +103,7 @@ export default function ProductDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
         {/* IMAGE SLIDER */}
         <View style={styles.imageSliderContainer}>
           {images.length > 0 ? (
@@ -114,7 +117,9 @@ export default function ProductDetailScreen() {
                 style={styles.imageSlider}
               >
                 {images.map((url: string, index: number) => (
-                  <FallbackImage key={index} uri={url} style={styles.productImage} resizeMode="cover" />
+                  <TouchableOpacity key={index} activeOpacity={0.9} onPress={() => setIsImageFullscreen(true)}>
+                    <FallbackImage uri={url} style={styles.productImage} resizeMode="cover" />
+                  </TouchableOpacity>
                 ))}
               </ScrollView>
               
@@ -150,8 +155,15 @@ export default function ProductDetailScreen() {
           )}
           <View style={styles.priceRow}>
             <Text style={styles.price}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
-            <View style={styles.categoryTag}>
-              <Text style={styles.categoryTagText}>{product.categories?.name || 'Lainnya'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {product.pcs_per_box && (
+                <View style={[styles.categoryTag, { backgroundColor: '#eab308', borderColor: '#eab308' }]}>
+                  <Text style={[styles.categoryTagText, { color: 'white', fontWeight: '900' }]}>{product.pcs_per_box}pcs / BOX</Text>
+                </View>
+              )}
+              <View style={styles.categoryTag}>
+                <Text style={styles.categoryTagText}>{product.categories?.name || 'Lainnya'}</Text>
+              </View>
             </View>
           </View>
           <Text style={styles.productName}>{displaySku}</Text>
@@ -285,7 +297,7 @@ export default function ProductDetailScreen() {
       </ScrollView>
 
       {/* BOTTOM ACTION BAR */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 24 }]}>
+      <View style={[styles.bottomBar, { paddingBottom: safeBottom }]}>
         {product.variants && Array.isArray(product.variants) && product.variants.length > 0 ? (
           <View style={{ flex: 1, paddingRight: 16 }}>
             <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>Total Item</Text>
@@ -339,6 +351,41 @@ export default function ProductDetailScreen() {
           <Text style={styles.addToCartText}>{isComingSoon ? 'Segera Hadir' : product.stock === 0 ? 'Stok Habis' : 'Tambah ke Keranjang'}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* FULLSCREEN IMAGE MODAL */}
+      <Modal visible={isImageFullscreen} transparent={true} animationType="fade" onRequestClose={() => setIsImageFullscreen(false)}>
+        <View style={styles.fullscreenOverlay}>
+          <SafeAreaView style={{ flex: 1 }}>
+            <View style={styles.fullscreenHeader}>
+              <Text style={styles.fullscreenTitle}>
+                {images.length > 1 ? `${activeImageIndex + 1} / ${images.length}` : ''}
+              </Text>
+              <TouchableOpacity onPress={() => setIsImageFullscreen(false)} style={styles.fullscreenCloseBtn}>
+                <Feather name="x" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.fullscreenImageContainer}>
+              <ScrollView 
+                horizontal 
+                pagingEnabled 
+                showsHorizontalScrollIndicator={false}
+                onScroll={onScroll}
+                scrollEventThrottle={16}
+                contentOffset={{ x: activeImageIndex * width, y: 0 }}
+                style={{ flex: 1 }}
+              >
+                {images.map((url: string, index: number) => (
+                  <View key={index} style={{ width, justifyContent: 'center', alignItems: 'center' }}>
+                    <FallbackImage uri={url} style={{ width: width, height: width }} resizeMode="contain" />
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -505,5 +552,34 @@ const styles = StyleSheet.create({
   },
   colorChipTextActive: {
     color: '#16a34a',
+  },
+
+  // Fullscreen Modal
+  fullscreenOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+  },
+  fullscreenHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 20,
+  },
+  fullscreenTitle: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  fullscreenCloseBtn: {
+    padding: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 20,
+  },
+  fullscreenImageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

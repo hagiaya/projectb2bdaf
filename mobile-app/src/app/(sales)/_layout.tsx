@@ -1,8 +1,11 @@
 import { Tabs } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import React from 'react';
+import { useSafeBottom } from '../../hooks/useSafeBottom';
 
 export default function SalesLayout() {
+  const safeBottom = useSafeBottom(8); // Add 8px base padding
+
   return (
     <Tabs
       screenOptions={{
@@ -12,8 +15,8 @@ export default function SalesLayout() {
         tabBarStyle: {
           backgroundColor: '#ffffff',
           borderTopColor: '#f1f5f9',
-          height: 60,
-          paddingBottom: 8,
+          height: 52 + safeBottom, // dynamic height
+          paddingBottom: safeBottom,
           paddingTop: 8,
         },
         tabBarLabelStyle: {

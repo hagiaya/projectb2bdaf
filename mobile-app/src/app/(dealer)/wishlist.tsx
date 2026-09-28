@@ -48,7 +48,7 @@ export default function WishlistScreen() {
         <View style={{ width: 32 }} />
       </View>
 
-      <ScrollView contentContainerStyle={[styles.list, { paddingBottom: safeBottom }]}>
+      <ScrollView contentContainerStyle={[styles.list, { paddingBottom: safeBottom + 16 }]}>
         {wishlistItems.map((item) => {
           const realItem = realItems.find(r => r.id === item.id) || item;
           const isHabis = realItem.stock === 0 || realItem.status === 'LOW_STOCK';
@@ -68,6 +68,11 @@ export default function WishlistScreen() {
                 {isHabis && (
                   <View style={styles.habisOverlay}>
                     <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>HABIS</Text>
+                  </View>
+                )}
+                {realItem.pcs_per_box && (
+                  <View style={{ position: 'absolute', top: 4, left: 4, backgroundColor: '#eab308', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, zIndex: 10 }}>
+                    <Text style={{ fontSize: 8, fontWeight: '900', color: 'white' }}>{realItem.pcs_per_box}pcs/BOX</Text>
                   </View>
                 )}
               </View>

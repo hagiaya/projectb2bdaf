@@ -323,7 +323,7 @@ export default function OrdersScreen() {
         <View style={{ width: 32 }} />
       </View>
 
-      <ScrollView contentContainerStyle={[styles.list, { paddingBottom: safeBottom }]}>
+      <ScrollView contentContainerStyle={[styles.list, { paddingBottom: safeBottom + 16 }]}>
         {loading ? (
           <View style={{ padding: 40, alignItems: 'center' }}>
             <ActivityIndicator size="large" color="#8ec44a" />

@@ -32,21 +32,20 @@ export function useAutoUpdates() {
 
         if (fetchResult.isNew) {
           setIsUpdateAvailable(true);
-          if (!silent) {
-            Alert.alert(
-              'Pembaruan Siap! 🚀',
-              'Versi terbaru aplikasi telah selesai diunduh. Mulai ulang aplikasi sekarang untuk menerapkan perubahan?',
-              [
-                { text: 'Nanti', style: 'cancel' },
-                {
-                  text: 'Mulai Ulang Sekarang',
-                  onPress: async () => {
-                    await Updates.reloadAsync();
-                  },
+          // Selalu tampilkan popup ketika ada update yang berhasil diunduh, jangan disembunyikan
+          Alert.alert(
+            'Pembaruan Siap! 🚀',
+            'Versi terbaru aplikasi (perbaikan & fitur baru) telah selesai diunduh. Mulai ulang aplikasi sekarang untuk menerapkan perubahan?',
+            [
+              { text: 'Nanti', style: 'cancel' },
+              {
+                text: 'Mulai Ulang Sekarang',
+                onPress: async () => {
+                  await Updates.reloadAsync();
                 },
-              ]
-            );
-          }
+              },
+            ]
+          );
         }
       } else {
         if (!silent) {

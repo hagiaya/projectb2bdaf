@@ -50,6 +50,7 @@ interface Product {
   is_coming_soon?: boolean;
   colors?: string[];
   variants?: { color: string; stock: number }[];
+  pcs_per_box?: number | null;
 }
 
 interface Category {
@@ -65,7 +66,8 @@ export default function ProductsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Semua Kategori');
-  const [selectedLabelFilter, setSelectedLabelFilter] = useState('Semua Label');
+  const [filterNew, setFilterNew] = useState(false);
+  const [filterComingSoon, setFilterComingSoon] = useState(false);
   const [sortBy, setSortBy] = useState('priority'); // 'priority' | 'name_asc' | 'price_asc' | 'price_desc' | 'stock_desc' | 'newest'
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -86,6 +88,7 @@ export default function ProductsPage() {
   const [newFlashSalePrice, setNewFlashSalePrice] = useState('');
   const [newIsNewProduct, setNewIsNewProduct] = useState(false);
   const [newIsComingSoon, setNewIsComingSoon] = useState(false);
+  const [newPcsPerBox, setNewPcsPerBox] = useState('');
   const [newVariants, setNewVariants] = useState<{ color: string; stock: string }[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -236,6 +239,7 @@ export default function ProductsPage() {
     setNewFlashSalePrice('');
     setNewIsNewProduct(false);
     setNewIsComingSoon(false);
+    setNewPcsPerBox('');
     setNewVariants([]);
     setIsUploading(false);
   };
@@ -256,6 +260,7 @@ export default function ProductsPage() {
     setNewFlashSalePrice(product.flash_sale_price != null ? product.flash_sale_price.toString() : '');
     setNewIsNewProduct(product.is_new || false);
     setNewIsComingSoon(product.is_coming_soon || false);
+    setNewPcsPerBox(product.pcs_per_box != null ? product.pcs_per_box.toString() : '');
     
     // Map existing variants or create empty if none
     if (product.variants && Array.isArray(product.variants) && product.variants.length > 0) {
@@ -303,6 +308,7 @@ export default function ProductsPage() {
       flash_sale_price: newFlashSalePrice ? parseFloat(newFlashSalePrice) : null,
       is_new: newIsNewProduct,
       is_coming_soon: newIsComingSoon,
+      pcs_per_box: newPcsPerBox ? parseInt(newPcsPerBox) : null,
       colors: parsedVariants.map(v => v.color),
       variants: parsedVariants,
     };
@@ -315,14 +321,30 @@ export default function ProductsPage() {
         .select('*, categories(name)');
 
       // Fallback if columns don't exist yet
-      if (error && (error.message?.includes('sort_order') || error.message?.includes('is_new') || error.message?.includes('colors') || error.message?.includes('variants') || error.message?.includes('flash_sale') || error.message?.includes('coming_soon') || error.code === '42703')) {
-        delete prodData.sort_order;
-        delete prodData.is_new;
-        delete prodData.is_coming_soon;
-        delete prodData.colors;
-        delete prodData.variants;
-        delete prodData.is_flash_sale;
-        delete prodData.flash_sale_price;
+      if (error && error.code === '42703') {
+        const errMsg = error.message || '';
+        if (errMsg.includes('sort_order')) delete prodData.sort_order;
+        if (errMsg.includes('is_new')) delete prodData.is_new;
+        if (errMsg.includes('coming_soon')) delete prodData.is_coming_soon;
+        if (errMsg.includes('colors')) delete prodData.colors;
+        if (errMsg.includes('variants')) delete prodData.variants;
+        if (errMsg.includes('pcs_per_box')) delete prodData.pcs_per_box;
+        if (errMsg.includes('flash_sale')) {
+          delete prodData.is_flash_sale;
+          delete prodData.flash_sale_price;
+        }
+        
+        if (!errMsg.includes('sort_order') && !errMsg.includes('is_new') && !errMsg.includes('coming_soon') && !errMsg.includes('colors') && !errMsg.includes('variants') && !errMsg.includes('flash_sale') && !errMsg.includes('pcs_per_box')) {
+          delete prodData.sort_order;
+          delete prodData.is_new;
+          delete prodData.is_coming_soon;
+          delete prodData.colors;
+          delete prodData.variants;
+          delete prodData.pcs_per_box;
+          delete prodData.is_flash_sale;
+          delete prodData.flash_sale_price;
+        }
+
         const fallback = await supabase
           .from('products')
           .update(prodData)
@@ -346,14 +368,30 @@ export default function ProductsPage() {
         .select('*, categories(name)');
 
       // Fallback if sort_order doesn't exist yet
-      if (error && (error.message?.includes('sort_order') || error.message?.includes('is_new') || error.message?.includes('colors') || error.message?.includes('variants') || error.message?.includes('flash_sale') || error.message?.includes('coming_soon') || error.code === '42703')) {
-        delete prodData.sort_order;
-        delete prodData.is_new;
-        delete prodData.is_coming_soon;
-        delete prodData.colors;
-        delete prodData.variants;
-        delete prodData.is_flash_sale;
-        delete prodData.flash_sale_price;
+      if (error && error.code === '42703') {
+        const errMsg = error.message || '';
+        if (errMsg.includes('sort_order')) delete prodData.sort_order;
+        if (errMsg.includes('is_new')) delete prodData.is_new;
+        if (errMsg.includes('coming_soon')) delete prodData.is_coming_soon;
+        if (errMsg.includes('colors')) delete prodData.colors;
+        if (errMsg.includes('variants')) delete prodData.variants;
+        if (errMsg.includes('pcs_per_box')) delete prodData.pcs_per_box;
+        if (errMsg.includes('flash_sale')) {
+          delete prodData.is_flash_sale;
+          delete prodData.flash_sale_price;
+        }
+
+        if (!errMsg.includes('sort_order') && !errMsg.includes('is_new') && !errMsg.includes('coming_soon') && !errMsg.includes('colors') && !errMsg.includes('variants') && !errMsg.includes('flash_sale') && !errMsg.includes('pcs_per_box')) {
+          delete prodData.sort_order;
+          delete prodData.is_new;
+          delete prodData.is_coming_soon;
+          delete prodData.colors;
+          delete prodData.variants;
+          delete prodData.pcs_per_box;
+          delete prodData.is_flash_sale;
+          delete prodData.flash_sale_price;
+        }
+
         const fallback = await supabase
           .from('products')
           .insert([prodData])
@@ -607,9 +645,16 @@ export default function ProductsPage() {
       (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
       
     let matchesLabel = true;
-    if (selectedLabelFilter === 'New') matchesLabel = !!p.is_new;
-    if (selectedLabelFilter === 'Coming Soon') matchesLabel = !!p.is_coming_soon;
-    if (selectedLabelFilter === 'Flash Sale') matchesLabel = !!p.is_flash_sale;
+    const hasNewTag = Boolean(p.is_new || (p.sku && p.sku.toUpperCase().includes('NEW')) || (p.name && p.name.toUpperCase().includes('NEW')));
+    const isComingSoon = Boolean(p.is_coming_soon || (p.sku && p.sku.toUpperCase().includes('COMING')) || (p.name && p.name.toUpperCase().includes('COMING')));
+    
+    if (filterNew && filterComingSoon) {
+      matchesLabel = hasNewTag || isComingSoon;
+    } else if (filterNew) {
+      matchesLabel = hasNewTag && !isComingSoon;
+    } else if (filterComingSoon) {
+      matchesLabel = isComingSoon;
+    }
 
     return matchesCategory && matchesSearch && matchesLabel;
   }).sort((a, b) => {
@@ -677,6 +722,7 @@ export default function ProductsPage() {
               setNewSku('');
               setNewPrice('');
               setNewStock('');
+              setNewPcsPerBox('');
               setNewSortOrder((products.length + 1).toString());
               setNewImageUrls('');
               setIsModalOpen(true);
@@ -736,19 +782,27 @@ export default function ProductsPage() {
               </select>
             </div>
 
-            {/* Filter Label */}
-            <div className="relative">
-              <Tag className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
-              <select 
-                value={selectedLabelFilter}
-                onChange={(e) => { setSelectedLabelFilter(e.target.value); setCurrentPage(1); }}
-                className="pl-9 pr-8 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm bg-white font-medium text-gray-700 transition-all appearance-none cursor-pointer"
-              >
-                <option>Semua Label</option>
-                <option value="New">New</option>
-                <option value="Coming Soon">Coming Soon</option>
-                <option value="Flash Sale">Flash Sale</option>
-              </select>
+            {/* Filter Checkboxes */}
+            <div className="flex items-center gap-3 bg-white px-4 py-2 border border-gray-200 rounded-xl">
+              <span className="text-sm font-semibold text-gray-700 mr-2 flex items-center gap-1.5"><Tag size={16} className="text-gray-400" /> Filter:</span>
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <input 
+                  type="checkbox" 
+                  checked={filterNew}
+                  onChange={(e) => { setFilterNew(e.target.checked); setCurrentPage(1); }}
+                  className="w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer"
+                />
+                <span className="text-sm text-gray-700 group-hover:text-emerald-700 font-medium">New Arrival</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <input 
+                  type="checkbox" 
+                  checked={filterComingSoon}
+                  onChange={(e) => { setFilterComingSoon(e.target.checked); setCurrentPage(1); }}
+                  className="w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer"
+                />
+                <span className="text-sm text-gray-700 group-hover:text-emerald-700 font-medium">Coming Soon</span>
+              </label>
             </div>
 
             {/* Sort Dropdown */}
@@ -1251,6 +1305,20 @@ export default function ProductsPage() {
                     className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold text-gray-900 ${newVariants.length > 0 ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                   />
                   {newVariants.length > 0 && <p className="text-[10px] text-gray-500 mt-1">Stok dihitung otomatis dari varian.</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-1">
+                  <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide">JUMLAH PCS PER BOX (Opsional)</label>
+                  <input 
+                    type="number" 
+                    placeholder="Contoh: 20"
+                    value={newPcsPerBox}
+                    onChange={(e) => setNewPcsPerBox(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">Jika diisi, akan tampil badge (Misal: 20pcs / BOX)</p>
                 </div>
               </div>
 

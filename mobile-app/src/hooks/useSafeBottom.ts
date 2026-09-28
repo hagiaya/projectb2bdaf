@@ -15,8 +15,9 @@ const IOS_EXTRA = 8;
 
 export function useSafeBottom(extra = 0): number {
   const insets = useSafeAreaInsets();
-  const platformExtra = Platform.OS === 'android' ? 80 : IOS_EXTRA; // Increased to 80 to ensure it doesn't touch the bottom nav
-  return Math.max(insets.bottom + platformExtra + extra, platformExtra); // Ensure minimum padding even if insets.bottom is 0
+  // On Android, insets.bottom is usually correct for edge-to-edge. If 0, fallback to 24 just in case.
+  const baseBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 24) : insets.bottom;
+  return baseBottom + extra;
 }
 
 export function useSafeTop(extra = 0): number {

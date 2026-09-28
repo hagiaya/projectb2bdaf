@@ -465,6 +465,11 @@ export default function DealerHome() {
                       <Text style={styles.habisText}>HABIS</Text>
                     </View>
                   )}
+                  {item.pcs_per_box && (
+                    <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#eab308', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, zIndex: 10 }}>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{item.pcs_per_box}pcs/BOX</Text>
+                    </View>
+                  )}
                 </View>
                 {(!isHabis && isComingSoon) && (
                   <ComingSoonBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
@@ -524,6 +529,11 @@ export default function DealerHome() {
                     {isHabis && (
                       <View style={styles.habisOverlay}>
                         <Text style={styles.habisText}>HABIS</Text>
+                      </View>
+                    )}
+                    {item.pcs_per_box && (
+                      <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#eab308', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, zIndex: 10 }}>
+                        <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{item.pcs_per_box}pcs/BOX</Text>
                       </View>
                     )}
                   </View>
@@ -586,6 +596,11 @@ export default function DealerHome() {
                   {isHabis && (
                     <View style={styles.habisOverlay}>
                       <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>HABIS</Text>
+                    </View>
+                  )}
+                  {item.pcs_per_box && (
+                    <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#eab308', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, zIndex: 10 }}>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{item.pcs_per_box}pcs/BOX</Text>
                     </View>
                   )}
                 </View>

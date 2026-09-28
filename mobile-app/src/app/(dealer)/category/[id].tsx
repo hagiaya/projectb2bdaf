@@ -8,6 +8,8 @@ import FallbackImage from '../../../components/FallbackImage';
 import { useCart } from '../../../context/CartContext';
 import NewBadge from '../../../components/NewBadge';
 import ComingSoonBadge from '../../../components/ComingSoonBadge';
+import { useSafeBottom } from '../../../hooks/useSafeBottom';
+import { Modal } from 'react-native';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 44) / 2; // 2 Sisi / 2 Column Grid
@@ -22,6 +24,13 @@ export default function CategoryProductsScreen() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const safeBottom = useSafeBottom();
+
+  // Filters & Sorting
+  const [sortBy, setSortBy] = useState<'priority' | 'price_asc' | 'price_desc'>('priority');
+  const [filterNew, setFilterNew] = useState(false);
+  const [filterComingSoon, setFilterComingSoon] = useState(false);
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
 
   useEffect(() => {
     // Load saved view mode preference
@@ -95,10 +104,28 @@ export default function CategoryProductsScreen() {
   };
 
   const filteredProducts = products.filter((product) => {
-    return (
+    const matchesSearch = (
       (product.name && product.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (product.sku && product.sku.toLowerCase().includes(searchQuery.toLowerCase()))
     );
+
+    const hasNewTag = Boolean(product.is_new || (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW')));
+    const isComingSoon = Boolean(product.is_coming_soon || (product.sku && product.sku.toUpperCase().includes('COMING')) || (product.name && product.name.toUpperCase().includes('COMING')));
+    
+    let matchesFilter = true;
+    if (filterNew && filterComingSoon) {
+      matchesFilter = hasNewTag || isComingSoon;
+    } else if (filterNew) {
+      matchesFilter = hasNewTag && !isComingSoon;
+    } else if (filterComingSoon) {
+      matchesFilter = isComingSoon;
+    }
+
+    return matchesSearch && matchesFilter;
+  }).sort((a, b) => {
+    if (sortBy === 'price_asc') return (a.promo_price || a.price) - (b.promo_price || b.price);
+    if (sortBy === 'price_desc') return (b.promo_price || b.price) - (a.promo_price || a.price);
+    return 0; // priority handled in fetch
   });
 
   return (
@@ -141,28 +168,36 @@ export default function CategoryProductsScreen() {
         <Text style={styles.productCountText}>
           {filteredProducts.length} Produk
         </Text>
-        <View style={styles.toggleGroup}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <TouchableOpacity 
-            style={[styles.toggleBtn, viewMode === 'grid' && styles.toggleBtnActive]}
-            onPress={() => handleToggleViewMode('grid')}
+            style={styles.filterBtn}
+            onPress={() => setIsFilterModalVisible(true)}
             activeOpacity={0.7}
           >
-            <Feather name="grid" size={15} color={viewMode === 'grid' ? '#15803d' : '#64748b'} />
-            <Text style={[styles.toggleBtnText, viewMode === 'grid' && styles.toggleBtnTextActive]}>Grid</Text>
+            <Feather name="filter" size={15} color="#15803d" />
+            <Text style={styles.filterBtnText}>Filter & Urutkan</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.toggleBtn, viewMode === 'list' && styles.toggleBtnActive]}
-            onPress={() => handleToggleViewMode('list')}
-            activeOpacity={0.7}
-          >
-            <Feather name="list" size={15} color={viewMode === 'list' ? '#15803d' : '#64748b'} />
-            <Text style={[styles.toggleBtnText, viewMode === 'list' && styles.toggleBtnTextActive]}>List</Text>
-          </TouchableOpacity>
+          <View style={styles.toggleGroup}>
+            <TouchableOpacity 
+              style={[styles.toggleBtn, viewMode === 'grid' && styles.toggleBtnActive]}
+              onPress={() => handleToggleViewMode('grid')}
+              activeOpacity={0.7}
+            >
+              <Feather name="grid" size={15} color={viewMode === 'grid' ? '#15803d' : '#64748b'} />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.toggleBtn, viewMode === 'list' && styles.toggleBtnActive]}
+              onPress={() => handleToggleViewMode('list')}
+              activeOpacity={0.7}
+            >
+              <Feather name="list" size={15} color={viewMode === 'list' ? '#15803d' : '#64748b'} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
       {/* DAFTAR PRODUK (GRID / LIST VIEW) */}
-      <ScrollView contentContainerStyle={styles.productList} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.productList, { paddingBottom: safeBottom + 16 }]} showsVerticalScrollIndicator={false}>
         {loading ? (
           <ActivityIndicator size="large" color="#8ec44a" style={{ marginTop: 40 }} />
         ) : viewMode === 'grid' ? (
@@ -193,6 +228,11 @@ export default function CategoryProductsScreen() {
                   {isHabis && (
                     <View style={styles.habisOverlay}>
                       <Text style={styles.habisText}>HABIS</Text>
+                    </View>
+                  )}
+                  {product.pcs_per_box && (
+                    <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#eab308', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, zIndex: 10 }}>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{product.pcs_per_box}pcs/BOX</Text>
                     </View>
                   )}
                   {product.image_urls && product.image_urls.length > 1 && (
@@ -294,6 +334,11 @@ export default function CategoryProductsScreen() {
                       <Text style={styles.habisTextList}>HABIS</Text>
                     </View>
                   )}
+                  {product.pcs_per_box && (
+                    <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#eab308', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, zIndex: 10 }}>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{product.pcs_per_box}pcs/BOX</Text>
+                    </View>
+                  )}
 
                   {product.image_urls && product.image_urls.length > 1 && (
                     <View style={{ position: 'absolute', bottom: 4, flexDirection: 'row', gap: 3 }}>
@@ -374,10 +419,95 @@ export default function CategoryProductsScreen() {
         {!loading && filteredProducts.length === 0 && (
           <View style={styles.emptyState}>
             <Feather name="inbox" size={48} color="#94a3b8" />
-            <Text style={styles.emptyText}>Tidak ada produk dalam kategori ini.</Text>
+            <Text style={styles.emptyText}>Tidak ada produk ditemukan.</Text>
           </View>
         )}
       </ScrollView>
+
+      {/* MODAL FILTER & SORTING (Shopee style) */}
+      <Modal visible={isFilterModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter & Urutkan</Text>
+              <TouchableOpacity onPress={() => setIsFilterModalVisible(false)} style={{ padding: 4 }}>
+                <Feather name="x" size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ padding: 16 }}>
+              <Text style={styles.filterSectionTitle}>Urutkan Berdasarkan</Text>
+              <View style={styles.filterOptionsRow}>
+                <TouchableOpacity 
+                  style={[styles.filterOptionBtn, sortBy === 'priority' && styles.filterOptionBtnActive]}
+                  onPress={() => setSortBy('priority')}
+                >
+                  <Text style={[styles.filterOptionText, sortBy === 'priority' && styles.filterOptionTextActive]}>Terkait (Default)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.filterOptionBtn, sortBy === 'price_asc' && styles.filterOptionBtnActive]}
+                  onPress={() => setSortBy('price_asc')}
+                >
+                  <Text style={[styles.filterOptionText, sortBy === 'price_asc' && styles.filterOptionTextActive]}>Harga Terendah</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.filterOptionBtn, sortBy === 'price_desc' && styles.filterOptionBtnActive]}
+                  onPress={() => setSortBy('price_desc')}
+                >
+                  <Text style={[styles.filterOptionText, sortBy === 'price_desc' && styles.filterOptionTextActive]}>Harga Tertinggi</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.filterSectionTitle, { marginTop: 20 }]}>Filter Label (Centang)</Text>
+              <View style={styles.filterOptionsRow}>
+                <TouchableOpacity 
+                  style={[styles.filterOptionBtn, filterNew && styles.filterOptionBtnActive]}
+                  onPress={() => setFilterNew(!filterNew)}
+                >
+                  <View style={styles.checkboxRow}>
+                    <View style={[styles.checkbox, filterNew && styles.checkboxActive]}>
+                      {filterNew && <Feather name="check" size={12} color="white" />}
+                    </View>
+                    <Text style={[styles.filterOptionText, filterNew && styles.filterOptionTextActive]}>New Arrival</Text>
+                  </View>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.filterOptionBtn, filterComingSoon && styles.filterOptionBtnActive]}
+                  onPress={() => setFilterComingSoon(!filterComingSoon)}
+                >
+                  <View style={styles.checkboxRow}>
+                    <View style={[styles.checkbox, filterComingSoon && styles.checkboxActive]}>
+                      {filterComingSoon && <Feather name="check" size={12} color="white" />}
+                    </View>
+                    <Text style={[styles.filterOptionText, filterComingSoon && styles.filterOptionTextActive]}>Coming Soon</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+            
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.resetBtn}
+                onPress={() => {
+                  setSortBy('priority');
+                  setFilterNew(false);
+                  setFilterComingSoon(false);
+                }}
+              >
+                <Text style={styles.resetBtnText}>Atur Ulang</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.applyBtn}
+                onPress={() => setIsFilterModalVisible(false)}
+              >
+                <Text style={styles.applyBtnText}>Tampilkan Produk</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -473,6 +603,22 @@ const styles = StyleSheet.create({
   toggleBtnTextActive: {
     color: '#15803d',
     fontWeight: 'bold',
+  },
+  filterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d4edb8',
+    backgroundColor: '#e8f5d8',
+    gap: 6,
+  },
+  filterBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#15803d',
   },
 
   // Product List ScrollView
@@ -718,5 +864,25 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     textDecorationLine: 'line-through',
   },
+  
+  // Filter Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  modalTitle: { fontSize: 16, fontWeight: 'bold', color: '#1e293b' },
+  filterSectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#334155', marginBottom: 12 },
+  filterOptionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  filterOptionBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#cbd5e1', backgroundColor: '#f8fafc' },
+  filterOptionBtnActive: { borderColor: '#8ec44a', backgroundColor: '#f0f7e6' },
+  filterOptionText: { fontSize: 13, color: '#475569' },
+  filterOptionTextActive: { color: '#15803d', fontWeight: 'bold' },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  checkbox: { width: 16, height: 16, borderRadius: 4, borderWidth: 1, borderColor: '#cbd5e1', justifyContent: 'center', alignItems: 'center' },
+  checkboxActive: { backgroundColor: '#8ec44a', borderColor: '#8ec44a' },
+  modalFooter: { flexDirection: 'row', padding: 16, borderTopWidth: 1, borderTopColor: '#f1f5f9', gap: 12 },
+  resetBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', alignItems: 'center' },
+  resetBtnText: { color: '#475569', fontWeight: 'bold' },
+  applyBtn: { flex: 2, paddingVertical: 12, borderRadius: 10, backgroundColor: '#8ec44a', alignItems: 'center' },
+  applyBtnText: { color: 'white', fontWeight: 'bold' },
 });
 

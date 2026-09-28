@@ -126,7 +126,7 @@ export default function CatalogScreen() {
       </View>
 
       {/* DAFTAR KATEGORI (GRID / LIST) */}
-      <ScrollView contentContainerStyle={[styles.categoryList, { paddingBottom: safeBottom }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.categoryList, { paddingBottom: safeBottom + 16 }]} showsVerticalScrollIndicator={false}>
         {loading ? (
           <ActivityIndicator size="large" color="#8ec44a" style={{ marginTop: 40 }} />
         ) : viewMode === 'grid' ? (
