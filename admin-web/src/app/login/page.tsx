@@ -128,36 +128,6 @@ export default function AdminLogin() {
             </div>
           )}
 
-          {/* Quick 1-Click Login Card */}
-          <div className="mb-6 bg-emerald-50/80 border border-emerald-200 rounded-xl p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
-                <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                <span>Akun Admin Resmi</span>
-              </div>
-              <span className="text-[11px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full">
-                Terverifikasi
-              </span>
-            </div>
-            <p className="text-xs text-emerald-700/90 mt-1 font-mono">
-              ditoapp@atomicmail.io
-            </p>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={handleQuickAdminLogin}
-              className="mt-3 w-full flex items-center justify-center gap-2 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-xs font-bold rounded-lg transition-all shadow-sm cursor-pointer disabled:opacity-60"
-            >
-              <Zap className="w-3.5 h-3.5 fill-current" />
-              {loading ? 'Menghubungkan...' : '1-Klik Masuk sebagai Admin'}
-            </button>
-          </div>
-
-          <div className="relative flex py-2 items-center mb-6">
-            <div className="flex-grow border-t border-slate-200"></div>
-            <span className="flex-shrink mx-4 text-slate-400 text-xs uppercase tracking-wider font-semibold">Atau Manual</span>
-            <div className="flex-grow border-t border-slate-200"></div>
-          </div>
 
           <form onSubmit={(e) => handleLogin(e)} className="space-y-5">
             <div>
