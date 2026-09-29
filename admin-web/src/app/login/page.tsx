@@ -71,6 +71,7 @@ export default function AdminLogin() {
 
       // Cek apakah emailnya Dito (bypassing role check)
       const userEmail = sessionData.user?.email || loginEmail;
+      let userRole = 'SUPER_ADMIN';
       if (userEmail.toLowerCase() !== 'ditoapp@atomicmail.io') {
         const { data: profileData } = await supabase
           .from('profiles')
@@ -78,11 +79,14 @@ export default function AdminLogin() {
           .eq('id', sessionData.user.id)
           .single();
 
-        if (profileData?.role !== 'ADMIN') {
+        if (profileData?.role !== 'ADMIN' && profileData?.role !== 'SUPER_ADMIN') {
           await supabase.auth.signOut();
-          throw new Error(`Akses ditolak. Akun Anda terdaftar sebagai ${profileData?.role || 'User'}. Portal ini khusus untuk Administrator. Silakan gunakan Link User untuk login Sales/Dealer.`);
+          throw new Error(`Akses ditolak. Akun Anda terdaftar sebagai ${profileData?.role || 'User'}. Portal ini khusus untuk Administrator.`);
         }
+        userRole = profileData?.role;
       }
+      
+      localStorage.setItem('adminRole', userRole);
 
       // Pastikan session tersimpan sempurna sebelum redirect
       await new Promise((r) => setTimeout(r, 150));

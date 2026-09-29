@@ -52,8 +52,10 @@ const proMenuItems = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [activeReturnsCount, setActiveReturnsCount] = useState(0);
+  const [adminRole, setAdminRole] = useState('SUPER_ADMIN');
 
   useEffect(() => {
+    setAdminRole(localStorage.getItem('adminRole') || 'SUPER_ADMIN');
     fetchActiveReturns();
 
     // Realtime subscription for returns table
@@ -94,11 +96,17 @@ export default function Sidebar() {
           <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain rounded-lg" />
           DAP APP
         </h1>
-        <p className="text-xs text-emerald-200/70 mt-1.5 font-medium tracking-wide">ADMIN DASHBOARD</p>
+        <p className="text-xs text-emerald-200/70 mt-1.5 font-medium tracking-wide">
+          {adminRole === 'SUPER_ADMIN' ? 'SUPER ADMIN DASHBOARD' : 'ADMIN DASHBOARD'}
+        </p>
       </div>
       <nav className="flex-1 px-4 pb-4 space-y-1.5 overflow-y-auto">
         <div className="mb-2 px-3 text-[10px] font-bold text-emerald-300/50 tracking-widest uppercase">General</div>
-        {menuItems.map((item) => {
+        {menuItems.filter(item => {
+          if (adminRole === 'SUPER_ADMIN') return true;
+          // Restricted ADMIN role access
+          return ['/', '/programs', '/monitoring', '/orders', '/returns'].includes(item.href);
+        }).map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
           const hasReturnBadge = item.badgeKey === 'returns' && activeReturnsCount > 0;
@@ -127,10 +135,12 @@ export default function Sidebar() {
           );
         })}
 
-        <div className="mt-8 mb-2 px-3 text-[10px] font-bold text-emerald-300/50 tracking-widest uppercase flex items-center gap-2">
-          ADVANCED FEATURES
-        </div>
-        {proMenuItems.map((item) => {
+        {adminRole === 'SUPER_ADMIN' && (
+          <div className="mt-8 mb-2 px-3 text-[10px] font-bold text-emerald-300/50 tracking-widest uppercase flex items-center gap-2">
+            ADVANCED FEATURES
+          </div>
+        )}
+        {adminRole === 'SUPER_ADMIN' && proMenuItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
           return (
@@ -155,8 +165,10 @@ export default function Sidebar() {
             A
           </div>
           <div>
-            <p className="text-sm font-bold text-white">Admin User</p>
-            <p className="text-xs text-emerald-200/80 font-medium">Super Admin</p>
+            <p className="text-sm font-bold text-white">
+              {adminRole === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin Operasional'}
+            </p>
+            <p className="text-xs text-emerald-200/80 font-medium">{adminRole}</p>
           </div>
         </div>
       </div>

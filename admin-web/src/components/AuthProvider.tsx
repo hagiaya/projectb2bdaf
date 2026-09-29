@@ -52,11 +52,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
             .eq('id', session.user.id)
             .single();
 
-          if (profile?.role !== 'ADMIN') {
+          if (profile?.role !== 'ADMIN' && profile?.role !== 'SUPER_ADMIN') {
             await supabase.auth.signOut();
             if (isMounted) {
               router.push('/login');
             }
+          } else {
+            localStorage.setItem('adminRole', profile?.role);
           }
         }
       } catch (err) {
@@ -81,9 +83,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
             .eq('id', session.user.id)
             .single();
           
-          if (profile?.role !== 'ADMIN') {
+          if (profile?.role !== 'ADMIN' && profile?.role !== 'SUPER_ADMIN') {
             await supabase.auth.signOut();
             router.push('/login');
+          } else {
+            localStorage.setItem('adminRole', profile?.role);
           }
         }
       }

@@ -178,6 +178,7 @@ export default function ProgramsPage() {
   const [loading, setLoading] = useState(true);
   const [programs, setPrograms] = useState<DealerProgram[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [adminRole, setAdminRole] = useState('SUPER_ADMIN');
 
   // Filter States
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('ALL');
@@ -270,6 +271,7 @@ export default function ProgramsPage() {
   };
 
   useEffect(() => {
+    setAdminRole(localStorage.getItem('adminRole') || 'SUPER_ADMIN');
     fetchData();
   }, []);
 
@@ -603,15 +605,17 @@ export default function ProgramsPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            resetForm();
-            setIsProgramModalOpen(true);
-          }}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm hover:shadow-md flex items-center gap-2 text-sm active:scale-95"
-        >
-          <Plus size={18} strokeWidth={2.5} /> Buat Program Baru
-        </button>
+        {adminRole === 'SUPER_ADMIN' && (
+          <button
+            onClick={() => {
+              resetForm();
+              setIsProgramModalOpen(true);
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm hover:shadow-md flex items-center gap-2 text-sm active:scale-95"
+          >
+            <Plus size={18} strokeWidth={2.5} /> Buat Program Baru
+          </button>
+        )}
       </div>
 
       {/* KPI METRIC CARDS */}
@@ -845,7 +849,7 @@ export default function ProgramsPage() {
                       </div>
 
                       {/* KHUSUS PROGRAM SUPPORT: TOMBOL KELOLA PRODUK SUPPORT */}
-                      {prog.program_type === 'BARANG_SUPPORT' && (
+                      {prog.program_type === 'BARANG_SUPPORT' && adminRole === 'SUPER_ADMIN' && (
                         <button
                           onClick={() => openSupportModal(prog)}
                           className="w-full mb-2.5 py-2 px-3 bg-amber-400 hover:bg-amber-500 text-slate-950 font-extrabold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
@@ -865,23 +869,27 @@ export default function ProgramsPage() {
                         >
                           <Eye size={14} /> Peserta ({prog.participants_count || 0})
                         </button>
-                        <button
-                          onClick={() => openEditProgram(prog)}
-                          className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition-colors"
-                          title="Edit Program"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleToggleStatus(prog)}
-                          className={`px-3 py-2 text-xs font-bold rounded-xl transition-colors ${
-                            prog.status === 'ACTIVE'
-                              ? 'text-amber-700 bg-amber-50 hover:bg-amber-100'
-                              : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
-                          }`}
-                        >
-                          {prog.status === 'ACTIVE' ? 'Nonaktif' : 'Aktifkan'}
-                        </button>
+                        {adminRole === 'SUPER_ADMIN' && (
+                          <>
+                            <button
+                              onClick={() => openEditProgram(prog)}
+                              className="p-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition-colors"
+                              title="Edit Program"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleToggleStatus(prog)}
+                              className={`px-3 py-2 text-xs font-bold rounded-xl transition-colors ${
+                                prog.status === 'ACTIVE'
+                                  ? 'text-amber-700 bg-amber-50 hover:bg-amber-100'
+                                  : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                              }`}
+                            >
+                              {prog.status === 'ACTIVE' ? 'Nonaktif' : 'Aktifkan'}
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1209,14 +1217,16 @@ export default function ProgramsPage() {
                                 #{idx + 1}
                               </span>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteSupportItem(item.id)}
-                              className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors"
-                              title="Hapus item"
-                            >
-                              <Trash2 size={15} />
-                            </button>
+                            {adminRole === 'SUPER_ADMIN' && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSupportItem(item.id)}
+                                className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors"
+                                title="Hapus item"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
                           </div>
                           <h5 className="text-sm font-extrabold text-slate-900 mt-1">
                             {item.name}

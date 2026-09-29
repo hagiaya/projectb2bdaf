@@ -118,6 +118,7 @@ export default function UsersPage() {
                 </td>
                 <td className="p-5">
                   <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${
+                    user.role === 'SUPER_ADMIN' ? 'bg-indigo-100/50 text-indigo-700 border-indigo-200/50' :
                     user.role === 'ADMIN' ? 'bg-purple-100/50 text-purple-700 border-purple-200/50' :
                     user.role === 'DEALER' ? 'bg-blue-100/50 text-blue-700 border-blue-200/50' :
                     'bg-slate-100/80 text-slate-700 border-slate-200'
@@ -131,6 +132,7 @@ export default function UsersPage() {
                     onChange={(e) => handleUpdateRole(user.id, e.target.value)}
                     className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none font-semibold text-slate-700 cursor-pointer"
                   >
+                    <option value="SUPER_ADMIN">SUPER ADMIN</option>
                     <option value="ADMIN">ADMIN</option>
                     <option value="DEALER">DEALER</option>
                     <option value="SALES">SALES</option>
