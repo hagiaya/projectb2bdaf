@@ -214,6 +214,8 @@ export default function ProgramsPage() {
   const [newCategory, setNewCategory] = useState('Display Toko');
   const [newDesc, setNewDesc] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('');
+  const [isUploadingNewItemImage, setIsUploadingNewItemImage] = useState(false);
+  const [uploadingItemImageId, setUploadingItemImageId] = useState<string | null>(null);
 
   // Modal Verification / Claim Approval
   const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
@@ -305,6 +307,62 @@ export default function ProgramsPage() {
     setNewDimensions('');
     setNewDesc('');
     setNewImageUrl('');
+  };
+
+  const handleSupportItemImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, itemId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingItemImageId(itemId);
+    try {
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const fileName = `support-item-${itemId}-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('promo-banners')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('promo-banners')
+        .getPublicUrl(fileName);
+
+      setSupportItemsList(supportItemsList.map(item => 
+        item.id === itemId ? { ...item, image_url: publicUrl } : item
+      ));
+    } catch (err: any) {
+      console.error('Image upload error:', err);
+      alert('Gagal mengupload gambar item: ' + err.message);
+    } finally {
+      setUploadingItemImageId(null);
+    }
+  };
+
+  const handleNewItemImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingNewItemImage(true);
+    try {
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const fileName = `new-support-item-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('promo-banners')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('promo-banners')
+        .getPublicUrl(fileName);
+
+      setNewImageUrl(publicUrl);
+    } catch (err: any) {
+      console.error('Image upload error:', err);
+      alert('Gagal mengupload gambar item: ' + err.message);
+    } finally {
+      setIsUploadingNewItemImage(false);
+    }
   };
 
   const handleDeleteSupportItem = (id: string) => {
@@ -1227,14 +1285,37 @@ export default function ProgramsPage() {
                       className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 transition-all flex flex-col justify-between"
                     >
                       <div className="flex items-start gap-3 mb-2">
-                        {item.image_url && (
-                          <img 
-                            src={item.image_url} 
-                            alt={item.name}
-                            className="w-16 h-16 object-cover rounded-lg border border-slate-200 shrink-0 bg-slate-100"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                          />
-                        )}
+                        <div className="relative shrink-0 group">
+                          {item.image_url ? (
+                            <img 
+                              src={item.image_url} 
+                              alt={item.name}
+                              className="w-16 h-16 object-cover rounded-lg border border-slate-200 bg-slate-100"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          ) : (
+                            <div className="w-16 h-16 rounded-lg border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center">
+                              <Package size={16} className="text-slate-300" />
+                            </div>
+                          )}
+                          {adminRole === 'SUPER_ADMIN' && (
+                            <label className="absolute inset-0 bg-black/40 text-white rounded-lg flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                              <span className="text-[10px] font-bold mt-1 text-center leading-tight">Ubah</span>
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden"
+                                onChange={(e) => handleSupportItemImageUpload(e, item.id)}
+                                disabled={uploadingItemImageId === item.id}
+                              />
+                            </label>
+                          )}
+                          {uploadingItemImageId === item.id && (
+                            <div className="absolute inset-0 bg-emerald-900/60 rounded-lg flex items-center justify-center">
+                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            </div>
+                          )}
+                        </div>
                         <div className="flex-1">
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
@@ -1337,14 +1418,29 @@ export default function ProgramsPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">URL GAMBAR</label>
-                    <input
-                      type="text"
-                      placeholder="https://example.com/image.jpg"
-                      value={newImageUrl}
-                      onChange={(e) => setNewImageUrl(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs"
-                    />
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">UNGGAH GAMBAR</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleNewItemImageUpload}
+                        disabled={isUploadingNewItemImage}
+                        className="w-full text-[10px] file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer border border-slate-200 rounded-lg"
+                      />
+                    </div>
+                    {isUploadingNewItemImage && <p className="text-[10px] text-emerald-600 mt-1 font-bold animate-pulse">Mengupload...</p>}
+                    {newImageUrl && !isUploadingNewItemImage && (
+                      <div className="mt-2 relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 shadow-sm">
+                        <img src={newImageUrl} alt="Preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setNewImageUrl('')}
+                          className="absolute top-0 right-0 p-0.5 bg-red-500 text-white rounded-bl-md hover:bg-red-600"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="md:col-span-1 flex items-end gap-2">
                     <div className="flex-1">
