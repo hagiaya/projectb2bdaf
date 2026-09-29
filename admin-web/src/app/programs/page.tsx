@@ -198,6 +198,7 @@ export default function ProgramsPage() {
   const [formStartDate, setFormStartDate] = useState('2026-09-01');
   const [formEndDate, setFormEndDate] = useState('2026-12-31');
   const [formSubmitting, setFormSubmitting] = useState(false);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
 
   // Modal Kelola Support Items (Etalase & Display)
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
@@ -349,6 +350,33 @@ export default function ProgramsPage() {
       alert('Gagal menyimpan: ' + msg);
     } finally {
       setIsSavingSupportItems(false);
+    }
+  };
+
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingBanner(true);
+    try {
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const fileName = `program-banner-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('promo-banners')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('promo-banners')
+        .getPublicUrl(fileName);
+
+      setFormBanner(publicUrl);
+    } catch (err: any) {
+      console.error('Banner upload error:', err);
+      alert('Gagal mengupload banner: ' + err.message);
+    } finally {
+      setIsUploadingBanner(false);
     }
   };
 
@@ -1424,15 +1452,30 @@ export default function ProgramsPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    BANNER IMAGE URL
+                    BANNER IMAGE
                   </label>
-                  <input
-                    type="text"
-                    placeholder="https://..."
-                    value={formBanner}
-                    onChange={(e) => setFormBanner(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-medium"
-                  />
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleBannerUpload}
+                      disabled={isUploadingBanner}
+                      className="w-full text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer border border-slate-200 rounded-xl"
+                    />
+                    {isUploadingBanner && <span className="text-xs text-emerald-600 font-bold animate-pulse">Mengupload gambar...</span>}
+                    {formBanner && !isUploadingBanner && (
+                      <div className="relative w-full h-16 rounded-lg overflow-hidden border border-slate-200">
+                        <img src={formBanner} alt="Preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setFormBanner('')}
+                          className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-md hover:bg-red-600"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
