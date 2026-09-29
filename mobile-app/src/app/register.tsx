@@ -66,10 +66,7 @@ export default function RegisterScreen() {
         return;
       }
 
-      setSalesList([
-        { id: '4b8741ba-852f-4676-81c0-9269dcbee607', name: 'Demo Sales', phone: '081234567890' },
-        { id: 'ef8f5bc9-f6d6-409b-b74d-31d641ff9636', name: 'Demo Sales Baru', phone: '088899997777' },
-      ]);
+      setSalesList([]);
     } catch (err) {
       console.log('Error fetching sales list:', err);
     }

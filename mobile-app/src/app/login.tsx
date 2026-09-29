@@ -61,15 +61,6 @@ const REAL_ACCOUNTS: QuickAccount[] = [
     subtitle: 'PIC: Budi Pratama',
     badge: 'Dealer',
   },
-  {
-    label: 'Demo Dealer (Toko Sinar Abadi)',
-    role: 'DEALER',
-    phoneOrEmail: 'demo@dealer.com',
-    authEmail: 'demo@dealer.com',
-    pass: 'dealer123',
-    subtitle: 'PIC: Ahmad Fauzi',
-    badge: 'Dealer',
-  },
 ];
 
 export default function LoginScreen() {
