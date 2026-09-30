@@ -5,63 +5,6 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Feather } from '@expo/vector-icons';
 
-interface QuickAccount {
-  label: string;
-  role: 'SALES' | 'DEALER';
-  phoneOrEmail: string;
-  authEmail: string;
-  pass: string;
-  subtitle: string;
-  badge: string;
-}
-
-const REAL_ACCOUNTS: QuickAccount[] = [
-  {
-    label: 'Ahmad Fauzi (Sales Field)',
-    role: 'SALES',
-    phoneOrEmail: '081234567890',
-    authEmail: '081234567890@sales.b2b.app',
-    pass: 'sales123',
-    subtitle: '3 Toko Binaan • 11 Order • Saldo Rp 1.25M',
-    badge: 'Sales Field',
-  },
-  {
-    label: 'Budi Pratama (Sales Spv)',
-    role: 'SALES',
-    phoneOrEmail: '088899997777',
-    authEmail: '088899997777@sales.b2b.app',
-    pass: 'sales123',
-    subtitle: '1 Toko Binaan (Tiwi Acc) • Saldo Rp 850K',
-    badge: 'Supervisor',
-  },
-  {
-    label: 'Lie Sudito (CV. JAVA CELLULER)',
-    role: 'DEALER',
-    phoneOrEmail: '08114991888',
-    authEmail: '08114991888@b2b-app.local',
-    pass: 'dealer123',
-    subtitle: 'Timika Papua • PIC: Ahmad Fauzi • 2 Program',
-    badge: 'Dealer',
-  },
-  {
-    label: 'Reza Latandrang (Toko Reza Cell)',
-    role: 'DEALER',
-    phoneOrEmail: '085123968217',
-    authEmail: '085123968217@b2b-app.local',
-    pass: 'dealer123',
-    subtitle: '9 Order Aktif • PIC: Ahmad Fauzi',
-    badge: 'Dealer',
-  },
-  {
-    label: 'mokoagow (Toko Tiwi Accessories)',
-    role: 'DEALER',
-    phoneOrEmail: '083117927964',
-    authEmail: '083117927964@b2b-app.local',
-    pass: 'dealer123',
-    subtitle: 'PIC: Budi Pratama',
-    badge: 'Dealer',
-  },
-];
 
 export default function LoginScreen() {
   const [identifier, setIdentifier] = useState('');
@@ -70,7 +13,6 @@ export default function LoginScreen() {
   const [step, setStep] = useState(1); // 1 = Input identifier, 2 = Password/OTP Input
   const [authMode, setAuthMode] = useState<'otp' | 'password'>('password');
   const [detectedRole, setDetectedRole] = useState<'SALES' | 'DEALER' | null>(null);
-  const [showQuickPicker, setShowQuickPicker] = useState(true);
 
   const normalizePhone = (p: string) => {
     let digits = p.replace(/\D/g, '');
@@ -215,29 +157,6 @@ export default function LoginScreen() {
     }
   };
 
-  const handleQuickLogin = async (acc: QuickAccount) => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: acc.authEmail,
-        password: acc.pass,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      if (acc.role === 'SALES') {
-        router.replace('/(sales)');
-      } else {
-        router.replace('/(dealer)/home');
-      }
-    } catch (err: any) {
-      Alert.alert('Gagal Login Cepat', err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
@@ -327,68 +246,6 @@ export default function LoginScreen() {
         )}
       </View>
 
-      {/* QUICK ACCOUNT PICKER (DATA REAL) */}
-      <View style={styles.quickSection}>
-        <TouchableOpacity
-          style={styles.quickHeader}
-          onPress={() => setShowQuickPicker(!showQuickPicker)}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Feather name="zap" size={16} color="#166534" />
-            <Text style={styles.quickTitle}>Pilih Akun Cepat (Data Real Database)</Text>
-          </View>
-          <Feather name={showQuickPicker ? 'chevron-up' : 'chevron-down'} size={18} color="#64748b" />
-        </TouchableOpacity>
-
-        {showQuickPicker && (
-          <View style={styles.quickList}>
-            {REAL_ACCOUNTS.map((acc, idx) => (
-              <TouchableOpacity
-                key={idx}
-                style={styles.accountCard}
-                onPress={() => handleQuickLogin(acc)}
-                disabled={loading}
-              >
-                <View style={styles.accountCardLeft}>
-                  <View
-                    style={[
-                      styles.avatarBadge,
-                      { backgroundColor: acc.role === 'SALES' ? '#dcfce7' : '#e0f2fe' },
-                    ]}
-                  >
-                    <Feather
-                      name={acc.role === 'SALES' ? 'briefcase' : 'shopping-bag'}
-                      size={16}
-                      color={acc.role === 'SALES' ? '#166534' : '#0369a1'}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Text style={styles.accountName}>{acc.label}</Text>
-                      <View
-                        style={[
-                          styles.roleTag,
-                          { backgroundColor: acc.role === 'SALES' ? '#bbf7d0' : '#bae6fd' },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.roleTagText,
-                            { color: acc.role === 'SALES' ? '#14532d' : '#0c4a6e' },
-                          ]}
-                        >
-                          {acc.badge}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.accountSub}>{acc.subtitle}</Text>
-                  </View>
-                </View>
-                <Feather name="arrow-right" size={16} color="#94a3b8" />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
       </View>
     </ScrollView>
   );
@@ -441,45 +298,4 @@ const styles = StyleSheet.create({
   backButton: { paddingVertical: 10, alignItems: 'center' },
   backButtonText: { color: '#64748b', fontSize: 13, fontWeight: '600' },
 
-  // Quick picker
-  quickSection: {
-    width: '100%',
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    marginTop: 8,
-    marginBottom: 40,
-  },
-  quickHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 8,
-  },
-  quickTitle: { fontSize: 13, fontWeight: '700', color: '#14532d' },
-  quickList: { marginTop: 8, gap: 10 },
-  accountCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#f8fafc',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  accountCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  avatarBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  accountName: { fontSize: 13, fontWeight: '700', color: '#1e293b' },
-  roleTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  roleTagText: { fontSize: 10, fontWeight: '700' },
-  accountSub: { fontSize: 11, color: '#64748b', marginTop: 2 },
 });

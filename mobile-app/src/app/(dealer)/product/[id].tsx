@@ -297,7 +297,7 @@ export default function ProductDetailScreen() {
       </ScrollView>
 
       {/* BOTTOM ACTION BAR */}
-      <View style={[styles.bottomBar, { paddingBottom: safeBottom }]}>
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom > 0 ? insets.bottom + 8 : 16 }]}>
         {product.variants && Array.isArray(product.variants) && product.variants.length > 0 ? (
           <View style={{ flex: 1, paddingRight: 16 }}>
             <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '600' }}>Total Item</Text>
