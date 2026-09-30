@@ -158,7 +158,7 @@ export default function ProductDetailScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               {product.pcs_per_box && (
                 <View style={[styles.categoryTag, { backgroundColor: '#eab308', borderColor: '#eab308' }]}>
-                  <Text style={[styles.categoryTagText, { color: 'white', fontWeight: '900' }]}>{product.pcs_per_box}pcs / BOX</Text>
+                  <Text style={[styles.categoryTagText, { color: 'white', fontWeight: '900' }]}>{product.pcs_per_box}pcs / {product.unit_name?.toUpperCase() || 'BOX'}</Text>
                 </View>
               )}
               <View style={styles.categoryTag}>
@@ -357,12 +357,13 @@ export default function ProductDetailScreen() {
         <View style={styles.fullscreenOverlay}>
           <SafeAreaView style={{ flex: 1 }}>
             <View style={styles.fullscreenHeader}>
+              <TouchableOpacity onPress={() => setIsImageFullscreen(false)} style={styles.fullscreenCloseBtn}>
+                <Feather name="arrow-left" size={24} color="white" />
+              </TouchableOpacity>
               <Text style={styles.fullscreenTitle}>
                 {images.length > 1 ? `${activeImageIndex + 1} / ${images.length}` : ''}
               </Text>
-              <TouchableOpacity onPress={() => setIsImageFullscreen(false)} style={styles.fullscreenCloseBtn}>
-                <Feather name="x" size={24} color="white" />
-              </TouchableOpacity>
+              <View style={{ width: 40 }} />
             </View>
             
             <View style={styles.fullscreenImageContainer}>
@@ -557,7 +558,7 @@ const styles = StyleSheet.create({
   // Fullscreen Modal
   fullscreenOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    backgroundColor: '#000000',
   },
   fullscreenHeader: {
     flexDirection: 'row',

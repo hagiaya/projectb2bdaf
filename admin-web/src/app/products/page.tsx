@@ -51,6 +51,7 @@ interface Product {
   colors?: string[];
   variants?: { color: string; stock: number }[];
   pcs_per_box?: number | null;
+  unit_name?: string | null;
 }
 
 interface Category {
@@ -89,9 +90,11 @@ export default function ProductsPage() {
   const [newIsNewProduct, setNewIsNewProduct] = useState(false);
   const [newIsComingSoon, setNewIsComingSoon] = useState(false);
   const [newPcsPerBox, setNewPcsPerBox] = useState('');
+  const [newUnitName, setNewUnitName] = useState('Box');
   const [newVariants, setNewVariants] = useState<{ color: string; stock: string }[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [draggedImageIdx, setDraggedImageIdx] = useState<number | null>(null);
 
   // Quick Reorder Modal
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
@@ -240,6 +243,7 @@ export default function ProductsPage() {
     setNewIsNewProduct(false);
     setNewIsComingSoon(false);
     setNewPcsPerBox('');
+    setNewUnitName('Box');
     setNewVariants([]);
     setIsUploading(false);
   };
@@ -261,6 +265,7 @@ export default function ProductsPage() {
     setNewIsNewProduct(product.is_new || false);
     setNewIsComingSoon(product.is_coming_soon || false);
     setNewPcsPerBox(product.pcs_per_box != null ? product.pcs_per_box.toString() : '');
+    setNewUnitName(product.unit_name || 'Box');
     
     // Map existing variants or create empty if none
     if (product.variants && Array.isArray(product.variants) && product.variants.length > 0) {
@@ -309,6 +314,7 @@ export default function ProductsPage() {
       is_new: newIsNewProduct,
       is_coming_soon: newIsComingSoon,
       pcs_per_box: newPcsPerBox ? parseInt(newPcsPerBox) : null,
+      unit_name: newUnitName,
       colors: parsedVariants.map(v => v.color),
       variants: parsedVariants,
     };
@@ -329,18 +335,20 @@ export default function ProductsPage() {
         if (errMsg.includes('colors')) delete prodData.colors;
         if (errMsg.includes('variants')) delete prodData.variants;
         if (errMsg.includes('pcs_per_box')) delete prodData.pcs_per_box;
+        if (errMsg.includes('unit_name')) delete prodData.unit_name;
         if (errMsg.includes('flash_sale')) {
           delete prodData.is_flash_sale;
           delete prodData.flash_sale_price;
         }
         
-        if (!errMsg.includes('sort_order') && !errMsg.includes('is_new') && !errMsg.includes('coming_soon') && !errMsg.includes('colors') && !errMsg.includes('variants') && !errMsg.includes('flash_sale') && !errMsg.includes('pcs_per_box')) {
+        if (!errMsg.includes('sort_order') && !errMsg.includes('is_new') && !errMsg.includes('coming_soon') && !errMsg.includes('colors') && !errMsg.includes('variants') && !errMsg.includes('flash_sale') && !errMsg.includes('pcs_per_box') && !errMsg.includes('unit_name')) {
           delete prodData.sort_order;
           delete prodData.is_new;
           delete prodData.is_coming_soon;
           delete prodData.colors;
           delete prodData.variants;
           delete prodData.pcs_per_box;
+          delete prodData.unit_name;
           delete prodData.is_flash_sale;
           delete prodData.flash_sale_price;
         }
@@ -376,18 +384,20 @@ export default function ProductsPage() {
         if (errMsg.includes('colors')) delete prodData.colors;
         if (errMsg.includes('variants')) delete prodData.variants;
         if (errMsg.includes('pcs_per_box')) delete prodData.pcs_per_box;
+        if (errMsg.includes('unit_name')) delete prodData.unit_name;
         if (errMsg.includes('flash_sale')) {
           delete prodData.is_flash_sale;
           delete prodData.flash_sale_price;
         }
 
-        if (!errMsg.includes('sort_order') && !errMsg.includes('is_new') && !errMsg.includes('coming_soon') && !errMsg.includes('colors') && !errMsg.includes('variants') && !errMsg.includes('flash_sale') && !errMsg.includes('pcs_per_box')) {
+        if (!errMsg.includes('sort_order') && !errMsg.includes('is_new') && !errMsg.includes('coming_soon') && !errMsg.includes('colors') && !errMsg.includes('variants') && !errMsg.includes('flash_sale') && !errMsg.includes('pcs_per_box') && !errMsg.includes('unit_name')) {
           delete prodData.sort_order;
           delete prodData.is_new;
           delete prodData.is_coming_soon;
           delete prodData.colors;
           delete prodData.variants;
           delete prodData.pcs_per_box;
+          delete prodData.unit_name;
           delete prodData.is_flash_sale;
           delete prodData.flash_sale_price;
         }
@@ -723,6 +733,7 @@ export default function ProductsPage() {
               setNewPrice('');
               setNewStock('');
               setNewPcsPerBox('');
+              setNewUnitName('Box');
               setNewSortOrder((products.length + 1).toString());
               setNewImageUrls('');
               setIsModalOpen(true);
@@ -1309,16 +1320,30 @@ export default function ProductsPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-1">
-                  <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide">JUMLAH PCS PER BOX (Opsional)</label>
-                  <input 
-                    type="number" 
-                    placeholder="Contoh: 20"
-                    value={newPcsPerBox}
-                    onChange={(e) => setNewPcsPerBox(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
-                  />
-                  <p className="text-[10px] text-gray-500 mt-1">Jika diisi, akan tampil badge (Misal: 20pcs / BOX)</p>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide">JUMLAH ISI PER SATUAN (Opsional)</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="Contoh: 20"
+                      value={newPcsPerBox}
+                      onChange={(e) => setNewPcsPerBox(e.target.value)}
+                      className="w-2/3 px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
+                    />
+                    <select
+                      value={newUnitName}
+                      onChange={(e) => setNewUnitName(e.target.value)}
+                      className="w-1/3 px-2 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium bg-white"
+                    >
+                      <option value="Box">Box</option>
+                      <option value="Pieces">Pieces</option>
+                      <option value="Set">Set</option>
+                      <option value="Toples">Toples</option>
+                      <option value="Unit">Unit</option>
+                      <option value="Pack">Pack</option>
+                    </select>
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-1">Jika diisi, akan tampil badge (Misal: 20pcs / {newUnitName})</p>
                 </div>
               </div>
 
@@ -1573,8 +1598,25 @@ export default function ProductsPage() {
                       </p>
                       <div className="flex gap-2.5 overflow-x-auto pb-1">
                         {previewUrls.map((url, idx) => (
-                          <div key={idx} className="relative group flex-shrink-0">
-                            <div className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 bg-white shadow-xs">
+                          <div 
+                            key={idx} 
+                            className="relative group flex-shrink-0 cursor-move"
+                            draggable
+                            onDragStart={() => setDraggedImageIdx(idx)}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              if (draggedImageIdx === null || draggedImageIdx === idx) return;
+                              const newUrls = [...previewUrls];
+                              const draggedUrl = newUrls[draggedImageIdx];
+                              newUrls.splice(draggedImageIdx, 1);
+                              newUrls.splice(idx, 0, draggedUrl);
+                              setNewImageUrls(newUrls.join(', '));
+                              setDraggedImageIdx(null);
+                            }}
+                            onDragEnd={() => setDraggedImageIdx(null)}
+                          >
+                            <div className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 bg-white shadow-xs pointer-events-none">
                               <ProductImage src={url} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
                             </div>
                             {idx === 0 && (

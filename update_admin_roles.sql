@@ -1,15 +1,9 @@
--- update_admin_roles.sql
--- Menambahkan role SUPER_ADMIN ke dalam ENUM user_role (jika belum ada)
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid WHERE t.typname = 'user_role' AND e.enumlabel = 'SUPER_ADMIN') THEN
-        ALTER TYPE public.user_role ADD VALUE 'SUPER_ADMIN';
-    END IF;
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
+-- Perintah ini akan memastikan bahwa profil Admin dibuat secara paksa dan dihubungkan ke email Anda.
+-- Berguna jika akun baru tersebut tidak sengaja terhapus profilnya atau profil gagal dibuat otomatis.
 
--- Mengubah seluruh pengguna yang saat ini berstatus ADMIN menjadi SUPER_ADMIN
-UPDATE public.profiles
-SET role = 'SUPER_ADMIN'
-WHERE role = 'ADMIN';
+INSERT INTO public.profiles (id, full_name, role)
+SELECT id, 'Admin Operasional (DAP)', 'ADMIN'
+FROM auth.users 
+WHERE email = 'admin@dap.com'
+ON CONFLICT (id) DO UPDATE 
+SET role = 'ADMIN', full_name = 'Admin Operasional (DAP)';

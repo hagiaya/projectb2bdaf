@@ -467,7 +467,7 @@ export default function DealerHome() {
                   )}
                   {item.pcs_per_box && (
                     <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#eab308', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, zIndex: 10 }}>
-                      <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{item.pcs_per_box}pcs/BOX</Text>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{item.pcs_per_box}pcs/{item.unit_name?.toUpperCase() || 'BOX'}</Text>
                     </View>
                   )}
                 </View>
@@ -533,7 +533,7 @@ export default function DealerHome() {
                     )}
                     {item.pcs_per_box && (
                       <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#eab308', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, zIndex: 10 }}>
-                        <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{item.pcs_per_box}pcs/BOX</Text>
+                        <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{item.pcs_per_box}pcs/{item.unit_name?.toUpperCase() || 'BOX'}</Text>
                       </View>
                     )}
                   </View>
@@ -600,7 +600,7 @@ export default function DealerHome() {
                   )}
                   {item.pcs_per_box && (
                     <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#eab308', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, zIndex: 10 }}>
-                      <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{item.pcs_per_box}pcs/BOX</Text>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{item.pcs_per_box}pcs/{item.unit_name?.toUpperCase() || 'BOX'}</Text>
                     </View>
                   )}
                 </View>

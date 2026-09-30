@@ -232,7 +232,7 @@ export default function CategoryProductsScreen() {
                   )}
                   {product.pcs_per_box && (
                     <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#eab308', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, zIndex: 10 }}>
-                      <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{product.pcs_per_box}pcs/BOX</Text>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{product.pcs_per_box}pcs/{product.unit_name?.toUpperCase() || 'BOX'}</Text>
                     </View>
                   )}
                   {product.image_urls && product.image_urls.length > 1 && (
@@ -336,7 +336,7 @@ export default function CategoryProductsScreen() {
                   )}
                   {product.pcs_per_box && (
                     <View style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#eab308', borderRadius: 12, paddingHorizontal: 6, paddingVertical: 2, zIndex: 10 }}>
-                      <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{product.pcs_per_box}pcs/BOX</Text>
+                      <Text style={{ fontSize: 9, fontWeight: '900', color: 'white' }}>{product.pcs_per_box}pcs/{product.unit_name?.toUpperCase() || 'BOX'}</Text>
                     </View>
                   )}
 
