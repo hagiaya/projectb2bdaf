@@ -429,9 +429,15 @@ export default function SalesPage() {
     if (!confirm(`Apakah Anda yakin ingin menghapus akun ${roleName} "${sales.profiles?.full_name}"? Tindakan ini tidak dapat dibatalkan.`)) return;
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+
       const res = await fetch('/api/sales/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           sales_id: sales.id,
           profile_id: sales.profile_id,

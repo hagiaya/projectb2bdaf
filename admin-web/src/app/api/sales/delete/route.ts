@@ -13,7 +13,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Sales ID wajib diberikan' }, { status: 400 });
     }
 
+    const authHeader = req.headers.get('Authorization');
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader || '' } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
@@ -24,12 +26,23 @@ export async function POST(req: NextRequest) {
     await supabase.from('sales').update({ spv_id: null }).eq('spv_id', sales_id);
 
     // 3. Delete sales record
-    const { error: deleteErr } = await supabase.from('sales').delete().eq('id', sales_id);
+    const { data: deletedSales, error: deleteErr } = await supabase.from('sales').delete().eq('id', sales_id).select();
 
     if (deleteErr) {
       // If restricted by foreign keys (e.g. visits, orders), we might want to just set status to INACTIVE
-      if (deleteErr.message.includes('foreign key constraint')) {
+      if (deleteErr.message.includes('foreign key constraint') || deleteErr.code === '23503') {
         await supabase.from('sales').update({ status: 'INACTIVE' }).eq('id', sales_id);
+        
+        // Also reset profile role via RPC so it doesn't auto-heal
+        if (profile_id) {
+          await supabase.rpc('admin_approve_sales_account', {
+            p_sales_id: sales_id,
+            p_profile_id: profile_id,
+            p_status: 'INACTIVE',
+            p_role: 'USER',
+          });
+        }
+        
         return NextResponse.json({ 
           success: true, 
           message: 'Sales tidak bisa dihapus sepenuhnya karena memiliki riwayat data. Status diubah menjadi Nonaktif.' 
@@ -38,9 +51,18 @@ export async function POST(req: NextRequest) {
       throw deleteErr;
     }
 
+    if (!deletedSales || deletedSales.length === 0) {
+      throw new Error('Gagal menghapus sales (Mungkin ditolak oleh hak akses / RLS).');
+    }
+
     // 4. Reset profile role to USER if it was SALES or SPV
     if (profile_id) {
-       await supabase.from('profiles').update({ role: 'USER' }).eq('id', profile_id);
+       await supabase.rpc('admin_approve_sales_account', {
+         p_sales_id: null,
+         p_profile_id: profile_id,
+         p_status: 'INACTIVE',
+         p_role: 'USER',
+       });
     }
 
     return NextResponse.json({ success: true, message: 'Akun sales berhasil dihapus' });
