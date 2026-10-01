@@ -19,29 +19,22 @@ export async function POST(req: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // 1. Unassign from dealers
+    // 1. Unassign from dealers for all duplicate sales records of this profile
     await supabase.from('dealers').update({ sales_id: null }).eq('sales_id', sales_id);
 
     // 2. Unassign any child sales if this was an SPV
     await supabase.from('sales').update({ spv_id: null }).eq('spv_id', sales_id);
 
-    // 3. Delete sales record
-    const { data: deletedSales, error: deleteErr } = await supabase.from('sales').delete().eq('id', sales_id).select();
+    // 3. Delete ALL duplicate sales records for this profile
+    const { data: deletedSales, error: deleteErr } = await supabase.from('sales').delete().eq('profile_id', profile_id).select();
 
     if (deleteErr) {
-      // If restricted by foreign keys (e.g. visits, orders), we might want to just set status to INACTIVE
       if (deleteErr.message.includes('foreign key constraint') || deleteErr.code === '23503') {
-        await supabase.from('sales').update({ status: 'INACTIVE' }).eq('id', sales_id);
+        // Set all duplicate records to INACTIVE
+        await supabase.from('sales').update({ status: 'INACTIVE' }).eq('profile_id', profile_id);
         
-        // Also reset profile role via RPC so it doesn't auto-heal
-        if (profile_id) {
-          await supabase.rpc('admin_approve_sales_account', {
-            p_sales_id: sales_id,
-            p_profile_id: profile_id,
-            p_status: 'INACTIVE',
-            p_role: 'USER',
-          });
-        }
+        // Mark profile as REJECTED so it cannot log in and auto-heal won't recreate it
+        await supabase.from('profiles').update({ approval_status: 'REJECTED' }).eq('id', profile_id);
         
         return NextResponse.json({ 
           success: true, 
@@ -55,15 +48,8 @@ export async function POST(req: NextRequest) {
       throw new Error('Gagal menghapus sales (Mungkin ditolak oleh hak akses / RLS).');
     }
 
-    // 4. Reset profile role to USER if it was SALES or SPV
-    if (profile_id) {
-       await supabase.rpc('admin_approve_sales_account', {
-         p_sales_id: null,
-         p_profile_id: profile_id,
-         p_status: 'INACTIVE',
-         p_role: 'USER',
-       });
-    }
+    // 4. Mark profile as REJECTED so auto-heal won't recreate it
+    await supabase.from('profiles').update({ approval_status: 'REJECTED' }).eq('id', profile_id);
 
     return NextResponse.json({ success: true, message: 'Akun sales berhasil dihapus' });
   } catch (err: any) {

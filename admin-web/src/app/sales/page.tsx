@@ -219,7 +219,7 @@ export default function SalesPage() {
         }
       });
 
-      const unlinkedProfiles = (pData || []).filter((p) => !uniqueSalesMap.has(p.id));
+      const unlinkedProfiles = (pData || []).filter((p) => !uniqueSalesMap.has(p.id) && p.approval_status !== 'REJECTED');
 
       if (unlinkedProfiles.length > 0) {
         // Auto-heal: create corresponding sales record for any profile with role SALES or SPV
