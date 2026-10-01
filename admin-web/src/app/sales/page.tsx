@@ -25,7 +25,8 @@ import {
   Mail,
   Lock,
   Copy,
-  FileCode
+  FileCode,
+  Trash2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -420,6 +421,32 @@ export default function SalesPage() {
     } catch (err: any) {
       alert(`Gagal mengubah status: ${err.message}`);
       fetchData();
+    }
+  };
+
+  const handleDeleteSales = async (sales: SalesRep) => {
+    const roleName = sales.is_spv ? 'SPV' : 'Sales';
+    if (!confirm(`Apakah Anda yakin ingin menghapus akun ${roleName} "${sales.profiles?.full_name}"? Tindakan ini tidak dapat dibatalkan.`)) return;
+
+    try {
+      const res = await fetch('/api/sales/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sales_id: sales.id,
+          profile_id: sales.profile_id,
+        }),
+      });
+
+      const resData = await res.json();
+      if (!res.ok || resData.error) {
+        throw new Error(resData.error || 'Gagal menghapus akun');
+      }
+
+      alert(resData.message || `Akun ${roleName} berhasil dihapus.`);
+      fetchData();
+    } catch (err: any) {
+      alert(`Gagal menghapus: ${err.message}`);
     }
   };
 
@@ -1066,6 +1093,13 @@ export default function SalesPage() {
                             {isActive ? 'Nonaktifkan' : 'Aktifkan'}
                           </button>
                         )}
+                        <button
+                          onClick={() => handleDeleteSales(sales)}
+                          className="px-2 py-1.5 rounded-lg text-xs font-semibold text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer ml-1"
+                          title="Hapus Akun"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>

@@ -6,8 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { Lock, Mail, AlertCircle, Eye, EyeOff, ShieldCheck, Zap } from 'lucide-react';
 
 export default function AdminLogin() {
-  const [email, setEmail] = useState('ditoapp@atomicmail.io');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -142,7 +142,7 @@ export default function AdminLogin() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full pl-11 pr-3 py-3 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#8ec44a] focus:border-transparent transition-all text-sm font-medium"
-                  placeholder="ditoapp@atomicmail.io"
+                  placeholder="admin@example.com"
                 />
               </div>
             </div>
