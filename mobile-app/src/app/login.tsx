@@ -157,6 +157,25 @@ export default function LoginScreen() {
     }
   };
 
+  const handleRequestOtp = async () => {
+    setLoading(true);
+    try {
+      const raw = identifier.trim();
+      const normalizedPhone = normalizePhone(raw);
+      const { data, error } = await supabase.functions.invoke('send-otp', {
+        body: { phone: normalizedPhone },
+      });
+
+      if (error || !data?.success) {
+        throw new Error(data?.error || error?.message || 'Gagal mengirim OTP');
+      }
+      Alert.alert('OTP Terkirim', `Kode OTP telah dikirim ke nomor WhatsApp ${normalizedPhone}.`);
+    } catch (err: any) {
+      Alert.alert('Gagal Mengirim OTP', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
@@ -220,6 +239,12 @@ export default function LoginScreen() {
                 maxLength={authMode === 'otp' ? 6 : 50}
               />
             </View>
+            
+            {authMode === 'otp' && (
+              <TouchableOpacity onPress={handleRequestOtp} disabled={loading} style={{ alignItems: 'flex-end', marginTop: -4 }}>
+                <Text style={{ color: '#8ec44a', fontSize: 13, fontWeight: '600' }}>Kirim Ulang OTP</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity style={styles.button} onPress={handleVerify} disabled={loading}>
               {loading ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Masuk Sekarang</Text>}
@@ -229,8 +254,14 @@ export default function LoginScreen() {
               <TouchableOpacity
                 style={styles.switchAuthButton}
                 onPress={() => {
-                  setAuthMode(authMode === 'password' ? 'otp' : 'password');
-                  setOtpOrPassword('');
+                  if (authMode === 'password') {
+                    setAuthMode('otp');
+                    setOtpOrPassword('');
+                    handleRequestOtp();
+                  } else {
+                    setAuthMode('password');
+                    setOtpOrPassword('');
+                  }
                 }}
               >
                 <Text style={styles.switchAuthText}>

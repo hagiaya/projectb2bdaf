@@ -400,11 +400,11 @@ export default function RegisterScreen() {
                 </TouchableOpacity>
               </View>
 
-              <TextInput style={styles.input} placeholder="Nama Toko (Sesuai KTP/SIUP)" value={storeName} onChangeText={setStoreName} />
-              <TextInput style={styles.input} placeholder="Nama Lengkap Pemilik" value={ownerName} onChangeText={setOwnerName} />
-              <TextInput style={styles.input} placeholder="Email Aktif" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
-              <TextInput style={styles.input} placeholder="Nomor Handphone (WhatsApp)" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-              <TextInput style={styles.input} placeholder="Alamat Lengkap Toko" value={address} onChangeText={setAddress} />
+              <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Nama Toko (Sesuai KTP/SIUP)" value={storeName} onChangeText={setStoreName} />
+              <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Nama Lengkap Pemilik" value={ownerName} onChangeText={setOwnerName} />
+              <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Email Aktif" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
+              <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Nomor Handphone (WhatsApp)" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+              <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Alamat Lengkap Toko" value={address} onChangeText={setAddress} />
 
               <View style={styles.locationContainer}>
                 <Text style={styles.locationLabel}>Lokasi Toko (Peta)</Text>
@@ -517,10 +517,10 @@ export default function RegisterScreen() {
         ) : (
           // SALES FORM
           <>
-            <TextInput style={styles.input} placeholder="Nama Lengkap" value={salesName} onChangeText={setSalesName} />
-            <TextInput style={styles.input} placeholder="Nomor Handphone (Aktif)" keyboardType="phone-pad" value={salesPhone} onChangeText={setSalesPhone} />
-            <TextInput style={styles.input} placeholder="Nomor KTP (NIK)" keyboardType="number-pad" value={salesKtp} onChangeText={setSalesKtp} />
-            <TextInput style={styles.input} placeholder="Buat Password" secureTextEntry value={salesPassword} onChangeText={setSalesPassword} />
+            <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Nama Lengkap" value={salesName} onChangeText={setSalesName} />
+            <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Nomor Handphone (Aktif)" keyboardType="phone-pad" value={salesPhone} onChangeText={setSalesPhone} />
+            <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Nomor KTP (NIK)" keyboardType="number-pad" value={salesKtp} onChangeText={setSalesKtp} />
+            <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Buat Password" secureTextEntry value={salesPassword} onChangeText={setSalesPassword} />
             
             <TouchableOpacity style={styles.button} onPress={handleRegisterSales} disabled={loading}>
               {loading ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Daftar Sebagai Sales</Text>}
