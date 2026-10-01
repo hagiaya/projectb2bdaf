@@ -30,6 +30,7 @@ export interface SupportItem {
   dimensions?: string;
   category?: string;
   description?: string;
+  image_url?: string;
 }
 
 export const DEFAULT_SUPPORT_ITEMS: SupportItem[] = [

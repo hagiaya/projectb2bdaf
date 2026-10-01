@@ -505,7 +505,7 @@ export default function DealerHome() {
               <Text style={[styles.sectionTitle, { color: '#ef4444' }]}>Flash Sale</Text>
             </View>
             <View style={{ backgroundColor: '#ef4444', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
-              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 12 }}>{String(hours).padStart(2, '0')} : {String(minutes).padStart(2, '0')} : {String(seconds).padStart(2, '0')}</Text>
+              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 12 }}>{countdown.h.padStart(2, '0')} : {countdown.m.padStart(2, '0')} : {countdown.s.padStart(2, '0')}</Text>
             </View>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>

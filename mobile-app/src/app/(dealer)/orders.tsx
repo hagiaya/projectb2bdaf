@@ -220,7 +220,7 @@ export default function OrdersScreen() {
       };
 
       if (receivingModalOrder.payment_method === 'KREDIT') {
-        const { data: dData } = await supabase.from('dealers').select('credit_term_days').eq('profile_id', user.id).single();
+        const { data: dData } = await supabase.from('dealers').select('credit_term_days').eq('profile_id', user?.id).single();
         if (dData?.credit_term_days) {
            const dueDate = new Date();
            dueDate.setDate(dueDate.getDate() + dData.credit_term_days);
