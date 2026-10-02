@@ -530,11 +530,23 @@ export default function DealersPage() {
 
   const handleDeleteDealer = async (id: string) => {
     if (confirm("Apakah Anda yakin ingin menghapus dealer ini?")) {
-      const { error } = await supabase.from('dealers').delete().eq('id', id);
-      if (!error) {
-        setDealers(dealers.filter(d => d.id !== id));
+      // Mencoba hard delete terlebih dahulu, meminta pengembalian data untuk mengecek apakah RLS memblokir
+      const { data, error } = await supabase.from('dealers').delete().eq('id', id).select();
+      
+      // Jika error (karena foreign key dll) atau data kosong (karena RLS memblokir penghapusan)
+      if (error || !data || data.length === 0) {
+        // Fallback: Soft Delete dengan mengubah status menjadi INACTIVE
+        const { error: updateError } = await supabase.from('dealers').update({ status: 'INACTIVE' }).eq('id', id);
+        
+        if (!updateError) {
+          setDealers(dealers.filter(d => d.id !== id));
+          alert("Dealer disembunyikan / dinonaktifkan karena tidak bisa dihapus permanen (memiliki riwayat data atau dibatasi sistem).");
+        } else {
+          alert("Gagal menghapus atau menonaktifkan dealer.");
+        }
       } else {
-        alert("Gagal menghapus dealer.");
+        // Berhasil dihapus permanen
+        setDealers(dealers.filter(d => d.id !== id));
       }
     }
   };
@@ -567,6 +579,8 @@ export default function DealersPage() {
   // Filtered dealers calculation
   // Filtered dealers calculation
   const filteredDealers = dealers.filter((d) => {
+    if (d.status === 'INACTIVE') return false; // Sembunyikan dealer yang dinonaktifkan (soft delete)
+
     const regName = d.regions?.name || '';
     const matchesRegion = selectedRegionFilter === 'Semua Wilayah' || regName === selectedRegionFilter;
     const matchesSearch = d.store_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
