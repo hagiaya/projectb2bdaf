@@ -518,6 +518,19 @@ export default function ProgramsPage() {
     }
   };
 
+  const handleDeleteParticipant = async (participantId: string) => {
+    if (confirm('Hapus data outlet (partisipan) ini secara permanen?')) {
+      try {
+        const { error } = await supabase.from('dealer_program_participants').delete().eq('id', participantId);
+        if (error) throw error;
+        setParticipants(participants.filter((p) => p.id !== participantId));
+        alert('Data outlet bergabung berhasil dihapus.');
+      } catch (err: any) {
+        alert('Gagal menghapus outlet: ' + (err.message || 'Error tidak diketahui'));
+      }
+    }
+  };
+
   const openEditProgram = (prog: DealerProgram) => {
     setEditingProgramId(prog.id);
     setFormTitle(prog.title);
@@ -1225,6 +1238,16 @@ export default function ProgramsPage() {
                               title="Detail Peserta"
                             >
                               <Eye size={16} />
+                            </button>
+                          )}
+                          
+                          {adminRole === 'SUPER_ADMIN' && (
+                            <button
+                              onClick={() => handleDeleteParticipant(part.id)}
+                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Hapus Outlet"
+                            >
+                              <Trash2 size={16} />
                             </button>
                           )}
                         </div>
