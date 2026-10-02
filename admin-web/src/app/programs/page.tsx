@@ -505,6 +505,19 @@ export default function ProgramsPage() {
     setPrograms(programs.map((p) => (p.id === program.id ? { ...p, status: newStatus } : p)));
   };
 
+  const handleDeleteProgram = async (programId: string) => {
+    if (confirm('Apakah Anda yakin ingin menghapus program ini secara permanen? Semua data peserta terkait juga mungkin akan terpengaruh.')) {
+      try {
+        const { error } = await supabase.from('dealer_programs').delete().eq('id', programId);
+        if (error) throw error;
+        setPrograms(programs.filter(p => p.id !== programId));
+        alert('Program berhasil dihapus.');
+      } catch (err: any) {
+        alert('Gagal menghapus program: ' + (err.message || 'Error tidak diketahui'));
+      }
+    }
+  };
+
   const openEditProgram = (prog: DealerProgram) => {
     setEditingProgramId(prog.id);
     setFormTitle(prog.title);
@@ -963,6 +976,13 @@ export default function ProgramsPage() {
                               title="Edit Program"
                             >
                               <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProgram(prog.id)}
+                              className="p-2 border border-slate-200 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl transition-colors"
+                              title="Hapus Program"
+                            >
+                              <Trash2 size={16} />
                             </button>
                             <button
                               onClick={() => handleToggleStatus(prog)}
