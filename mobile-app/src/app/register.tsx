@@ -21,7 +21,6 @@ export default function RegisterScreen() {
   const [accountType, setAccountType] = useState<'personal' | 'perusahaan'>('personal');
   const [storeName, setStoreName] = useState('');
   const [ownerName, setOwnerName] = useState('');
-  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [ktpImage, setKtpImage] = useState<string | null>(null);
@@ -155,8 +154,8 @@ export default function RegisterScreen() {
   };
 
   const handleSendOtpDealer = async () => {
-    if (!storeName || !ownerName || !email || !phone || !location || !ktpBase64 || (accountType === 'perusahaan' && !npwpBase64)) {
-      const msg = 'Harap isi semua kolom (Toko, Nama, Email, HP), lokasi peta, serta foto dokumen yang diwajibkan.';
+    if (!storeName || !ownerName || !phone || !location || !ktpBase64 || (accountType === 'perusahaan' && !npwpBase64)) {
+      const msg = 'Harap isi semua kolom (Toko, Nama, HP), lokasi peta, serta foto dokumen yang diwajibkan.';
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('Error', msg);
       return;
@@ -402,7 +401,6 @@ export default function RegisterScreen() {
 
               <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Nama Toko (Sesuai KTP/SIUP)" value={storeName} onChangeText={setStoreName} />
               <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Nama Lengkap Pemilik" value={ownerName} onChangeText={setOwnerName} />
-              <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Email Aktif" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
               <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Nomor Handphone (WhatsApp)" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
               <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Alamat Lengkap Toko" value={address} onChangeText={setAddress} />
 
