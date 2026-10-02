@@ -765,8 +765,8 @@ export default function ProductsPage() {
 
       {/* SEARCH, CATEGORY FILTER & SORT SELECT */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-        <div className="p-5 border-b border-gray-100 flex flex-col md:flex-row gap-4 bg-gray-50/50">
-          <div className="relative flex-1">
+        <div className="p-5 border-b border-gray-100 flex flex-col xl:flex-row flex-wrap gap-4 bg-gray-50/50">
+          <div className="relative flex-1 min-w-[250px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input 
               type="text" 
