@@ -459,9 +459,6 @@ export default function ProgramsPage() {
         status: 'ACTIVE',
       };
 
-      if (formType === 'BARANG_SUPPORT') {
-        payload.support_items = DEFAULT_SUPPORT_ITEMS;
-      }
 
       if (editingProgramId) {
         const { error } = await supabase
@@ -492,7 +489,7 @@ export default function ProgramsPage() {
       setIsProgramModalOpen(false);
       resetForm();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = err instanceof Error ? err.message : (typeof err === 'object' && err !== null && 'message' in err ? String((err as any).message) : JSON.stringify(err));
       alert('Gagal menyimpan program: ' + msg);
     } finally {
       setFormSubmitting(false);
