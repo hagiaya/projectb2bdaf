@@ -189,7 +189,7 @@ export default function DealersPage() {
     cod_term_days: 0,
     cod_term_label: 'Bayar Saat Terima Barang (H+0)',
     cod_max_amount: 10000000,
-    cod_policy_terms: `Ketentuan Pembayaran COD (Cash on Delivery):\n1. Pembayaran wajib diserahkan kepada kurir pengantar saat barang tiba di alamat toko/outlet.\n2. Pembayaran dapat berupa uang tunai pas atau konfirmasi transfer langsung ke rekening resmi kurir/perusahaan.\n3. Maksimal nilai transaksi per pesanan COD disesuaikan dengan limit kebijakan perusahaan.\n4. Jika pembayaran belum siap saat kurir tiba, pihak DAP berhak menunda serah terima barang atau menjadwalkan pengantaran ulang.`,
+    cod_policy_terms: `Ketentuan Pembayaran COD (Cash on Delivery):\n1. Pembayaran wajib dilakukan setelah barang di terima di alamat dealer.\n2. Perusahaan hanya menerima pembayaran dengan metode transfer ke rekening resmi perusahaan\n3. Perusahaan tidak menerima pembayaran secara tunai\n4. Apabila pembayaran bukan ke rekening resmi perusahaan, dealer dianggap belum melakukan pembayaran, maka perusahaan tetap berhak dan akan tetap menagih tagihan sesuai dengan nominal invoice`,
   });
   const [isSavingCodSettings, setIsSavingCodSettings] = useState(false);
 
