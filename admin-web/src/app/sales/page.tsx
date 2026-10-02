@@ -206,6 +206,10 @@ export default function SalesPage() {
       const uniqueSalesMap = new Map<string, any>();
       (sData || []).forEach((s: any) => {
         if (!s.profile_id) return;
+        
+        // Sembunyikan akun yang sudah dihapus (REJECTED)
+        if (s.profiles?.approval_status === 'REJECTED') return;
+
         const existing = uniqueSalesMap.get(s.profile_id);
         if (!existing) {
           uniqueSalesMap.set(s.profile_id, s);

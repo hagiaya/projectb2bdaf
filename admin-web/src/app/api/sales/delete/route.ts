@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
         
         return NextResponse.json({ 
           success: true, 
-          message: 'Sales tidak bisa dihapus sepenuhnya karena memiliki riwayat data. Status diubah menjadi Nonaktif.' 
+          message: 'Akun sales berhasil dihapus.' 
         });
       }
       throw deleteErr;
