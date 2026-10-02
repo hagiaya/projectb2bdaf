@@ -78,7 +78,8 @@ export default function ProductDetailScreen() {
     );
   }
 
-  const isHabis = product.stock === 0 || product.status === 'LOW_STOCK';
+  const isHabis = product.stock === 0 || product.status === 'OUT_OF_STOCK';
+              const isLowStock = !isHabis && ((product.stock > 0 && product.stock <= 10) || product.status === 'LOW_STOCK');
   const hasNewTag = product.is_new || (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW'));
   const isComingSoon = product.is_coming_soon || (product.sku && product.sku.toUpperCase().includes('COMING')) || (product.name && product.name.toUpperCase().includes('COMING'));
   const displaySku = product.sku ? product.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : 'SKU Tidak Diketahui';
@@ -225,7 +226,7 @@ export default function ProductDetailScreen() {
                         Rp {v.price ? v.price.toLocaleString('id-ID') : product.price.toLocaleString('id-ID')}
                       </Text>
                       <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                        Stok: <Text style={{ color: vOutOfStock ? '#ef4444' : '#1e293b', fontWeight: 'bold' }}>{vOutOfStock ? 'Habis' : 'Tersedia'}</Text>
+                        Stok: <Text style={{ color: vOutOfStock ? '#ef4444' : '#1e293b', fontWeight: 'bold' }}>{vOutOfStock ? 'Sold Out' : 'Tersedia'}</Text>
                         {!vOutOfStock && ` (${v.stock})`}
                       </Text>
                     </View>
@@ -348,7 +349,7 @@ export default function ProductDetailScreen() {
           }}
         >
           {product.stock > 0 && !isComingSoon && <Feather name="shopping-cart" size={20} color="white" />}
-          <Text style={styles.addToCartText}>{isComingSoon ? 'Segera Hadir' : product.stock === 0 ? 'Stok Habis' : 'Tambah ke Keranjang'}</Text>
+          <Text style={styles.addToCartText}>{isComingSoon ? 'Segera Hadir' : product.stock === 0 ? 'Sold Out' : 'Tambah ke Keranjang'}</Text>
         </TouchableOpacity>
       </View>
 

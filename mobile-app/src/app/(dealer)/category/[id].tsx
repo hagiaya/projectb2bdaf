@@ -68,7 +68,7 @@ export default function CategoryProductsScreen() {
       let query = supabase
         .from('products')
         .select('*, categories(name)')
-        .in('status', ['ACTIVE', 'LOW_STOCK']);
+        .in('status', ['ACTIVE', 'LOW_STOCK', 'OUT_OF_STOCK']);
 
       if (id !== 'all') {
         query = query.eq('category_id', id);
@@ -82,7 +82,7 @@ export default function CategoryProductsScreen() {
         let fbQuery = supabase
           .from('products')
           .select('*, categories(name)')
-          .in('status', ['ACTIVE', 'LOW_STOCK']);
+          .in('status', ['ACTIVE', 'LOW_STOCK', 'OUT_OF_STOCK']);
         if (id !== 'all') {
           fbQuery = fbQuery.eq('category_id', id);
         }
@@ -204,7 +204,8 @@ export default function CategoryProductsScreen() {
           /* ========== MODE GRID (2 SISI) ========== */
           <View style={styles.gridContainer}>
             {filteredProducts.map((product) => {
-              const isHabis = product.stock === 0 || product.status === 'LOW_STOCK';
+              const isHabis = product.stock === 0 || product.status === 'OUT_OF_STOCK';
+              const isLowStock = !isHabis && ((product.stock > 0 && product.stock <= 10) || product.status === 'LOW_STOCK');
               const hasNewTag = Boolean(product.is_new || (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW')));
               const isComingSoon = Boolean(product.is_coming_soon || (product.sku && product.sku.toUpperCase().includes('COMING')) || (product.name && product.name.toUpperCase().includes('COMING')));
               const displaySku = product.sku ? product.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : (product.name || 'Produk');
@@ -227,7 +228,7 @@ export default function CategoryProductsScreen() {
                   
                   {isHabis && (
                     <View style={styles.habisOverlay}>
-                      <Text style={styles.habisText}>HABIS</Text>
+                      <Text style={styles.habisText}>SOLD OUT</Text>
                     </View>
                   )}
                   {product.pcs_per_box && (
@@ -284,12 +285,13 @@ export default function CategoryProductsScreen() {
                     </View>
                   ) : (
                     <Text style={styles.productPrice}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
+                {isLowStock && <Text style={{fontSize: 10, color: '#ef4444', marginTop: 2, fontWeight: 'bold'}}>Stok Menipis</Text>}
                   )}
 
                   {/* FOOTER & BUTTON */}
                   <View style={styles.cardFooter}>
                     <Text style={[styles.stockText, isHabis && { color: '#ef4444' }]}>
-                      {isComingSoon ? 'Segera' : isHabis ? 'Stok Habis' : `Stok: ${product.stock}`}
+                      {isComingSoon ? 'Segera' : isHabis ? 'Sold Out' : `Stok: ${product.stock}`}
                     </Text>
                     <TouchableOpacity 
                       style={[styles.addCartBtn, (isHabis || isComingSoon) && { backgroundColor: '#cbd5e1' }]} 
@@ -307,7 +309,8 @@ export default function CategoryProductsScreen() {
           /* ========== MODE LIST (DAFTAR 1 SISI HORIZONTAL) ========== */
           <View style={styles.listContainer}>
             {filteredProducts.map((product) => {
-              const isHabis = product.stock === 0 || product.status === 'LOW_STOCK';
+              const isHabis = product.stock === 0 || product.status === 'OUT_OF_STOCK';
+              const isLowStock = !isHabis && ((product.stock > 0 && product.stock <= 10) || product.status === 'LOW_STOCK');
               const hasNewTag = Boolean(product.is_new || (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW')));
               const isComingSoon = Boolean(product.is_coming_soon || (product.sku && product.sku.toUpperCase().includes('COMING')) || (product.name && product.name.toUpperCase().includes('COMING')));
               const displaySku = product.sku ? product.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : (product.name || 'Produk');
@@ -331,7 +334,7 @@ export default function CategoryProductsScreen() {
 
                   {isHabis && (
                     <View style={styles.habisOverlayList}>
-                      <Text style={styles.habisTextList}>HABIS</Text>
+                      <Text style={styles.habisTextList}>SOLD OUT</Text>
                     </View>
                   )}
                   {product.pcs_per_box && (
@@ -394,9 +397,10 @@ export default function CategoryProductsScreen() {
                         </View>
                       ) : (
                         <Text style={styles.productPriceList}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
+                {isLowStock && <Text style={{fontSize: 10, color: '#ef4444', marginTop: 2, fontWeight: 'bold'}}>Stok Menipis</Text>}
                       )}
                       <Text style={[styles.stockTextList, isHabis && { color: '#ef4444' }]}>
-                        {isComingSoon ? 'Segera' : isHabis ? 'Stok Habis' : `Stok: ${product.stock}`}
+                        {isComingSoon ? 'Segera' : isHabis ? 'Sold Out' : `Stok: ${product.stock}`}
                       </Text>
                     </View>
 
@@ -407,7 +411,7 @@ export default function CategoryProductsScreen() {
                       activeOpacity={0.8}
                     >
                       {(!isComingSoon && !isHabis) && <Feather name="shopping-cart" size={13} color="white" style={{ marginRight: 4 }} />}
-                      <Text style={styles.addCartBtnListText}>{isComingSoon ? 'Segera' : isHabis ? 'Habis' : '+ Keranjang'}</Text>
+                      <Text style={styles.addCartBtnListText}>{isComingSoon ? 'Segera' : isHabis ? 'Sold Out' : '+ Keranjang'}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

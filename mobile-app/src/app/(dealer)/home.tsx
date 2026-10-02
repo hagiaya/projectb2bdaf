@@ -259,7 +259,7 @@ export default function DealerHome() {
     let { data, error } = await supabase
       .from('products')
       .select('*')
-      .in('status', ['ACTIVE', 'LOW_STOCK'])
+      .in('status', ['ACTIVE', 'LOW_STOCK', 'OUT_OF_STOCK'])
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true })
       .limit(20);
@@ -440,7 +440,8 @@ export default function DealerHome() {
             </View>
           ) : (
             bestSellerProducts.map((item) => {
-              const isHabis = item.stock === 0 || item.status === 'LOW_STOCK';
+              const isHabis = item.stock === 0 || item.status === 'OUT_OF_STOCK';
+              const isLowStock = !isHabis && ((item.stock > 0 && item.stock <= 10) || item.status === 'LOW_STOCK');
               const hasNewTag = item.is_new || (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
               const isComingSoon = item.is_coming_soon || (item.sku && item.sku.toUpperCase().includes('COMING')) || (item.name && item.name.toUpperCase().includes('COMING'));
               const displaySku = item.sku ? item.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : 'SKU Tidak Diketahui';
@@ -462,7 +463,7 @@ export default function DealerHome() {
                   
                   {isHabis && (
                     <View style={styles.habisOverlay}>
-                      <Text style={styles.habisText}>HABIS</Text>
+                      <Text style={styles.habisText}>SOLD OUT</Text>
                     </View>
                   )}
                   {item.pcs_per_box && (
@@ -480,12 +481,13 @@ export default function DealerHome() {
                 <Text style={styles.productName} numberOfLines={2}>{displaySku}</Text>
                 <Text style={styles.productSold}>100+ terjual</Text>
                 <Text style={styles.productPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
+                {isLowStock && <Text style={{fontSize: 10, color: '#ef4444', marginTop: 2, fontWeight: 'bold'}}>Stok Menipis</Text>}
                 <TouchableOpacity 
                   style={[styles.buyButton, (isHabis || isComingSoon) && { backgroundColor: '#cbd5e1' }]} 
                   onPress={() => addToCart(item)} 
                   disabled={isHabis || isComingSoon}
                 >
-                  <Text style={styles.buyText}>{isComingSoon ? 'Segera' : isHabis ? 'Habis' : '+ Keranjang'}</Text>
+                  <Text style={styles.buyText}>{isComingSoon ? 'Segera' : isHabis ? 'Sold Out' : '+ Keranjang'}</Text>
                 </TouchableOpacity>
               </TouchableOpacity>
             )})
@@ -510,7 +512,8 @@ export default function DealerHome() {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
             {flashSaleProducts.map((item) => {
-              const isHabis = item.stock === 0 || item.status === 'LOW_STOCK';
+              const isHabis = item.stock === 0 || item.status === 'OUT_OF_STOCK';
+              const isLowStock = !isHabis && ((item.stock > 0 && item.stock <= 10) || item.status === 'LOW_STOCK');
               return (
                 <TouchableOpacity 
                   key={`flash-${item.id}`} 
@@ -528,7 +531,7 @@ export default function DealerHome() {
                     )}
                     {isHabis && (
                       <View style={styles.habisOverlay}>
-                        <Text style={styles.habisText}>HABIS</Text>
+                        <Text style={styles.habisText}>SOLD OUT</Text>
                       </View>
                     )}
                     {item.pcs_per_box && (
@@ -553,7 +556,7 @@ export default function DealerHome() {
                     onPress={() => addToCart(item, 1)}
                     disabled={isHabis}
                   >
-                    <Text style={styles.buyText}>{isHabis ? 'Habis' : '+ Keranjang'}</Text>
+                    <Text style={styles.buyText}>{isHabis ? 'Sold Out' : '+ Keranjang'}</Text>
                   </TouchableOpacity>
                 </TouchableOpacity>
               );
@@ -575,7 +578,8 @@ export default function DealerHome() {
             </View>
           ) : (
             recentlyViewed.map((item) => {
-              const isHabis = item.stock === 0 || item.status === 'LOW_STOCK';
+              const isHabis = item.stock === 0 || item.status === 'OUT_OF_STOCK';
+              const isLowStock = !isHabis && ((item.stock > 0 && item.stock <= 10) || item.status === 'LOW_STOCK');
               const hasNewTag = item.is_new || (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
               const isComingSoon = item.is_coming_soon || (item.sku && item.sku.toUpperCase().includes('COMING')) || (item.name && item.name.toUpperCase().includes('COMING'));
               const displaySku = item.sku ? item.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : 'SKU Tidak Diketahui';
@@ -595,7 +599,7 @@ export default function DealerHome() {
                   )}
                   {isHabis && (
                     <View style={styles.habisOverlay}>
-                      <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>HABIS</Text>
+                      <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>SOLD OUT</Text>
                     </View>
                   )}
                   {item.pcs_per_box && (
@@ -612,6 +616,7 @@ export default function DealerHome() {
                 )}
                 <Text style={styles.productName} numberOfLines={2}>{displaySku}</Text>
                 <Text style={styles.productPrice}>Rp {Number(item.price).toLocaleString('id-ID')}</Text>
+                {isLowStock && <Text style={{fontSize: 10, color: '#ef4444', marginTop: 2, fontWeight: 'bold'}}>Stok Menipis</Text>}
               </View>
             )})
           )}

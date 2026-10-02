@@ -51,7 +51,8 @@ export default function WishlistScreen() {
       <ScrollView contentContainerStyle={[styles.list, { paddingBottom: safeBottom + 16 }]}>
         {wishlistItems.map((item) => {
           const realItem = realItems.find(r => r.id === item.id) || item;
-          const isHabis = realItem.stock === 0 || realItem.status === 'LOW_STOCK';
+          const isHabis = realItem.stock === 0 || realItem.status === 'OUT_OF_STOCK';
+              const isLowStock = !isHabis && ((realItem.stock > 0 && realItem.stock <= 10) || realItem.status === 'LOW_STOCK');
           const hasNewTag = realItem.is_new || (realItem.sku && realItem.sku.toUpperCase().includes('NEW')) || (realItem.name && realItem.name.toUpperCase().includes('NEW'));
           const displaySku = realItem.sku ? realItem.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
           const displayPrice = realItem.price || 0;
@@ -67,7 +68,7 @@ export default function WishlistScreen() {
                 />
                 {isHabis && (
                   <View style={styles.habisOverlay}>
-                    <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>HABIS</Text>
+                    <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>SOLD OUT</Text>
                   </View>
                 )}
                 {realItem.pcs_per_box && (
