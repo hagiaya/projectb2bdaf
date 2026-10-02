@@ -284,8 +284,10 @@ export default function CategoryProductsScreen() {
                       </Text>
                     </View>
                   ) : (
-                    <Text style={styles.productPrice}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
-                {isLowStock && <Text style={{fontSize: 10, color: '#ef4444', marginTop: 2, fontWeight: 'bold'}}>Stok Menipis</Text>}
+                    <>
+                      <Text style={styles.productPrice}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
+                      {isLowStock && <Text style={{fontSize: 10, color: '#ef4444', marginTop: 2, fontWeight: 'bold'}}>Stok Menipis</Text>}
+                    </>
                   )}
 
                   {/* FOOTER & BUTTON */}
@@ -396,9 +398,11 @@ export default function CategoryProductsScreen() {
                           </Text>
                         </View>
                       ) : (
-                        <Text style={styles.productPriceList}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
-                {isLowStock && <Text style={{fontSize: 10, color: '#ef4444', marginTop: 2, fontWeight: 'bold'}}>Stok Menipis</Text>}
-                      )}
+                    <>
+                      <Text style={styles.productPriceList}>Rp {Number(product.price).toLocaleString('id-ID')}</Text>
+                      {isLowStock && <Text style={{fontSize: 10, color: '#ef4444', marginTop: 2, fontWeight: 'bold'}}>Stok Menipis</Text>}
+                    </>
+                  )}
                       <Text style={[styles.stockTextList, isHabis && { color: '#ef4444' }]}>
                         {isComingSoon ? 'Segera' : isHabis ? 'Sold Out' : `Stok: ${product.stock}`}
                       </Text>
