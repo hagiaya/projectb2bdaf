@@ -409,21 +409,6 @@ export default function DealerHome() {
               <Text style={styles.menuText}>{item.name}</Text>
             </TouchableOpacity>
           ))}
-          {/* Tombol Pengaduan / WA */}
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => {
-              const msg = encodeURIComponent('Halo, saya dealer dan ingin menyampaikan pengaduan/keluhan:');
-              Linking.openURL(`https://wa.me/${WA_NUMBER}?text=${msg}`).catch(() =>
-                Alert.alert('Gagal', 'Tidak dapat membuka WhatsApp. Pastikan WhatsApp terinstall.')
-              );
-            }}
-          >
-            <View style={[styles.menuIcon, { backgroundColor: '#dcfce7' }]}>
-              <Feather name="message-circle" size={22} color="#16a34a" />
-            </View>
-            <Text style={styles.menuText}>Pengaduan</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
