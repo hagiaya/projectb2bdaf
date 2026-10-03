@@ -212,7 +212,7 @@ export default function CategoryProductsScreen() {
               return (
               <TouchableOpacity 
                 key={product.id} 
-                style={[styles.productCard, isHabis && { opacity: 0.6 }]}
+                style={[styles.productCard, (isHabis || isComingSoon) && { opacity: 0.6 }]}
                 disabled={isHabis}
                 onPress={() => router.push(`/product/${product.id}`)}
               >
@@ -227,8 +227,9 @@ export default function CategoryProductsScreen() {
                   )}
                   
                   {(isHabis || isComingSoon) && (
-                    <View style={[styles.habisOverlay, isComingSoon && { backgroundColor: 'transparent' }]}>
-                      <Text style={[styles.habisText, isComingSoon && { color: '#eab308', borderColor: '#eab308', textShadowColor: 'rgba(0,0,0,0.5)' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
+                    <View style={styles.habisOverlay}>
+                      {isComingSoon && <Feather name="star" size={24} color="#eab308" style={{ marginBottom: 4 }} />}
+                      <Text style={[styles.habisText, isComingSoon && { color: '#eab308', borderColor: '#eab308' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                     </View>
                   )}
                   {product.pcs_per_box && (
@@ -319,7 +320,7 @@ export default function CategoryProductsScreen() {
               return (
               <TouchableOpacity 
                 key={product.id} 
-                style={[styles.productListCard, isHabis && { opacity: 0.6 }]}
+                style={[styles.productListCard, (isHabis || isComingSoon) && { opacity: 0.6 }]}
                 disabled={isHabis}
                 onPress={() => router.push(`/product/${product.id}`)}
                 activeOpacity={0.7}
@@ -335,8 +336,9 @@ export default function CategoryProductsScreen() {
                   )}
 
                   {(isHabis || isComingSoon) && (
-                    <View style={[styles.habisOverlayList, isComingSoon && { backgroundColor: 'transparent' }]}>
-                      <Text style={[styles.habisTextList, isComingSoon && { color: '#eab308', borderColor: '#eab308', textShadowColor: 'rgba(0,0,0,0.5)' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
+                    <View style={styles.habisOverlayList}>
+                      {isComingSoon && <Feather name="star" size={24} color="#eab308" style={{ marginBottom: 4 }} />}
+                      <Text style={[styles.habisTextList, isComingSoon && { color: '#eab308', borderColor: '#eab308' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                     </View>
                   )}
                   {product.pcs_per_box && (

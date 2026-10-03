@@ -59,7 +59,7 @@ export default function WishlistScreen() {
           const displayPrice = realItem.price || 0;
           
           return (
-            <View key={item.id} style={[styles.card, isHabis && { opacity: 0.6 }]}>
+            <View key={item.id} style={[styles.card, (isHabis || isComingSoon) && { opacity: 0.6 }]}>
               <View style={{ position: 'relative' }}>
                 <FallbackImage 
                   uri={(realItem.image_urls && realItem.image_urls.length > 0) ? realItem.image_urls[0] : realItem.image_url} 
@@ -68,8 +68,9 @@ export default function WishlistScreen() {
                   iconColor="#ef4444"
                 />
                 {(isHabis || isComingSoon) && (
-                  <View style={[styles.habisOverlay, isComingSoon && { backgroundColor: 'transparent' }]}>
-                    <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }, isComingSoon && { color: '#eab308', borderColor: '#eab308', textShadowColor: 'rgba(0,0,0,0.5)' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
+                  <View style={styles.habisOverlay}>
+                      {isComingSoon && <Feather name="star" size={24} color="#eab308" style={{ marginBottom: 4 }} />}
+                    <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }, isComingSoon && { color: '#eab308', borderColor: '#eab308' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                   </View>
                 )}
                 {realItem.pcs_per_box && (

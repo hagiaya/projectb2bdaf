@@ -433,7 +433,7 @@ export default function DealerHome() {
               return (
               <TouchableOpacity 
                 key={item.id} 
-                style={[styles.productCard, isHabis && { opacity: 0.6 }]}
+                style={[styles.productCard, (isHabis || isComingSoon) && { opacity: 0.6 }]}
                 disabled={isHabis}
                 onPress={() => router.push(`/product/${item.id}`)}
               >
@@ -447,8 +447,9 @@ export default function DealerHome() {
                   )}
                   
                   {(isHabis || isComingSoon) && (
-                    <View style={[styles.habisOverlay, isComingSoon && { backgroundColor: 'transparent' }]}>
-                      <Text style={[styles.habisText, isComingSoon && { color: '#eab308', borderColor: '#eab308', textShadowColor: 'rgba(0,0,0,0.5)' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
+                    <View style={styles.habisOverlay}>
+                      {isComingSoon && <Feather name="star" size={24} color="#eab308" style={{ marginBottom: 4 }} />}
+                      <Text style={[styles.habisText, isComingSoon && { color: '#eab308', borderColor: '#eab308' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                     </View>
                   )}
                   {item.pcs_per_box && (
@@ -503,7 +504,7 @@ export default function DealerHome() {
               return (
                 <TouchableOpacity 
                   key={`flash-${item.id}`} 
-                  style={[styles.flashCard, isHabis && { opacity: 0.6 }]}
+                  style={[styles.flashCard, (isHabis || isComingSoon) && { opacity: 0.6 }]}
                   onPress={() => router.push(`/(dealer)/product/${item.id}`)}
                   disabled={isHabis}
                 >
@@ -516,8 +517,9 @@ export default function DealerHome() {
                       <Feather name="package" size={32} color="#94a3b8" style={{ alignSelf: 'center', marginTop: 44 }} />
                     )}
                     {(isHabis || isComingSoon) && (
-                      <View style={[styles.habisOverlay, isComingSoon && { backgroundColor: 'transparent' }]}>
-                        <Text style={[styles.habisText, isComingSoon && { color: '#eab308', borderColor: '#eab308', textShadowColor: 'rgba(0,0,0,0.5)' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
+                      <View style={styles.habisOverlay}>
+                      {isComingSoon && <Feather name="star" size={24} color="#eab308" style={{ marginBottom: 4 }} />}
+                        <Text style={[styles.habisText, isComingSoon && { color: '#eab308', borderColor: '#eab308' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                       </View>
                     )}
                     {item.pcs_per_box && (
@@ -572,7 +574,7 @@ export default function DealerHome() {
               return (
               <View 
                 key={item.id} 
-                style={[styles.recentCard, isHabis && { opacity: 0.6 }]}
+                style={[styles.recentCard, (isHabis || isComingSoon) && { opacity: 0.6 }]}
                 pointerEvents={isHabis ? 'none' : 'auto'}
               >
                 <View style={styles.recentImage}>
@@ -584,8 +586,9 @@ export default function DealerHome() {
                     <Feather name="package" size={24} color="#8ec44a" />
                   )}
                   {(isHabis || isComingSoon) && (
-                    <View style={[styles.habisOverlay, isComingSoon && { backgroundColor: 'transparent' }]}>
-                      <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }, isComingSoon && { color: '#eab308', borderColor: '#eab308', textShadowColor: 'rgba(0,0,0,0.5)' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
+                    <View style={styles.habisOverlay}>
+                      {isComingSoon && <Feather name="star" size={24} color="#eab308" style={{ marginBottom: 4 }} />}
+                      <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }, isComingSoon && { color: '#eab308', borderColor: '#eab308' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                     </View>
                   )}
                   {item.pcs_per_box && (
