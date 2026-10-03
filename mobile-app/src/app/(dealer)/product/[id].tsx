@@ -78,10 +78,10 @@ export default function ProductDetailScreen() {
     );
   }
 
-  const isHabis = product.stock === 0 || product.status === 'OUT_OF_STOCK';
-              const isLowStock = !isHabis && ((product.stock > 0 && product.stock <= 10) || product.status === 'LOW_STOCK');
-  const hasNewTag = product.is_new || (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW'));
   const isComingSoon = product.is_coming_soon || (product.sku && product.sku.toUpperCase().includes('COMING')) || (product.name && product.name.toUpperCase().includes('COMING'));
+  const isHabis = !isComingSoon && (product.stock === 0 || product.status === 'OUT_OF_STOCK');
+  const isLowStock = !isHabis && !isComingSoon && ((product.stock > 0 && product.stock <= 10) || product.status === 'LOW_STOCK');
+  const hasNewTag = product.is_new || (product.sku && product.sku.toUpperCase().includes('NEW')) || (product.name && product.name.toUpperCase().includes('NEW'));
   const displaySku = product.sku ? product.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : 'SKU Tidak Diketahui';
   const displayName = product.name ? product.name.replace(/NEW|COMING SOON|COMING/gi, '').trim() : '';
 

@@ -425,10 +425,10 @@ export default function DealerHome() {
             </View>
           ) : (
             bestSellerProducts.map((item) => {
-              const isHabis = item.stock === 0 || item.status === 'OUT_OF_STOCK';
-              const isLowStock = !isHabis && ((item.stock > 0 && item.stock <= 10) || item.status === 'LOW_STOCK');
-              const hasNewTag = item.is_new || (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
               const isComingSoon = item.is_coming_soon || (item.sku && item.sku.toUpperCase().includes('COMING')) || (item.name && item.name.toUpperCase().includes('COMING'));
+              const isHabis = !isComingSoon && (item.stock === 0 || item.status === 'OUT_OF_STOCK');
+              const isLowStock = !isHabis && !isComingSoon && ((item.stock > 0 && item.stock <= 10) || item.status === 'LOW_STOCK');
+              const hasNewTag = item.is_new || (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
               const displaySku = item.sku ? item.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : 'SKU Tidak Diketahui';
               return (
               <TouchableOpacity 
@@ -447,8 +447,8 @@ export default function DealerHome() {
                   )}
                   
                   {(isHabis || isComingSoon) && (
-                    <View style={styles.habisOverlay}>
-                      <Text style={styles.habisText}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
+                    <View style={[styles.habisOverlay, isComingSoon && { backgroundColor: 'transparent' }]}>
+                      <Text style={[styles.habisText, isComingSoon && { color: '#eab308', borderColor: '#eab308', textShadowColor: 'rgba(0,0,0,0.5)' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                     </View>
                   )}
                   {item.pcs_per_box && (
@@ -497,8 +497,9 @@ export default function DealerHome() {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
             {flashSaleProducts.map((item) => {
-              const isHabis = item.stock === 0 || item.status === 'OUT_OF_STOCK';
-              const isLowStock = !isHabis && ((item.stock > 0 && item.stock <= 10) || item.status === 'LOW_STOCK');
+              const isComingSoon = item.is_coming_soon || (item.sku && item.sku.toUpperCase().includes('COMING')) || (item.name && item.name.toUpperCase().includes('COMING'));
+              const isHabis = !isComingSoon && (item.stock === 0 || item.status === 'OUT_OF_STOCK');
+              const isLowStock = !isHabis && !isComingSoon && ((item.stock > 0 && item.stock <= 10) || item.status === 'LOW_STOCK');
               return (
                 <TouchableOpacity 
                   key={`flash-${item.id}`} 
@@ -515,8 +516,8 @@ export default function DealerHome() {
                       <Feather name="package" size={32} color="#94a3b8" style={{ alignSelf: 'center', marginTop: 44 }} />
                     )}
                     {(isHabis || isComingSoon) && (
-                      <View style={styles.habisOverlay}>
-                        <Text style={styles.habisText}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
+                      <View style={[styles.habisOverlay, isComingSoon && { backgroundColor: 'transparent' }]}>
+                        <Text style={[styles.habisText, isComingSoon && { color: '#eab308', borderColor: '#eab308', textShadowColor: 'rgba(0,0,0,0.5)' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                       </View>
                     )}
                     {item.pcs_per_box && (
@@ -537,9 +538,9 @@ export default function DealerHome() {
                   </View>
                   
                   <TouchableOpacity 
-                    style={[styles.buyBtn, { backgroundColor: '#ef4444', marginTop: 8 }, isHabis && { backgroundColor: '#fca5a5' }]}
+                    style={[styles.buyBtn, { backgroundColor: '#ef4444', marginTop: 8 }, (isHabis || isComingSoon) && { backgroundColor: '#fca5a5' }]}
                     onPress={() => addToCart(item, 1)}
-                    disabled={isHabis}
+                    disabled={isHabis || isComingSoon}
                   >
                     <Text style={styles.buyText}>{isComingSoon ? 'Coming Soon' : isHabis ? 'Sold Out' : '+ Keranjang'}</Text>
                   </TouchableOpacity>
@@ -563,10 +564,10 @@ export default function DealerHome() {
             </View>
           ) : (
             recentlyViewed.map((item) => {
-              const isHabis = item.stock === 0 || item.status === 'OUT_OF_STOCK';
-              const isLowStock = !isHabis && ((item.stock > 0 && item.stock <= 10) || item.status === 'LOW_STOCK');
-              const hasNewTag = item.is_new || (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
               const isComingSoon = item.is_coming_soon || (item.sku && item.sku.toUpperCase().includes('COMING')) || (item.name && item.name.toUpperCase().includes('COMING'));
+              const isHabis = !isComingSoon && (item.stock === 0 || item.status === 'OUT_OF_STOCK');
+              const isLowStock = !isHabis && !isComingSoon && ((item.stock > 0 && item.stock <= 10) || item.status === 'LOW_STOCK');
+              const hasNewTag = item.is_new || (item.sku && item.sku.toUpperCase().includes('NEW')) || (item.name && item.name.toUpperCase().includes('NEW'));
               const displaySku = item.sku ? item.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : 'SKU Tidak Diketahui';
               return (
               <View 
@@ -583,8 +584,8 @@ export default function DealerHome() {
                     <Feather name="package" size={24} color="#8ec44a" />
                   )}
                   {(isHabis || isComingSoon) && (
-                    <View style={styles.habisOverlay}>
-                      <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
+                    <View style={[styles.habisOverlay, isComingSoon && { backgroundColor: 'transparent' }]}>
+                      <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }, isComingSoon && { color: '#eab308', borderColor: '#eab308', textShadowColor: 'rgba(0,0,0,0.5)' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                     </View>
                   )}
                   {item.pcs_per_box && (

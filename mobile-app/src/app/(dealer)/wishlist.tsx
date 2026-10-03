@@ -51,10 +51,10 @@ export default function WishlistScreen() {
       <ScrollView contentContainerStyle={[styles.list, { paddingBottom: safeBottom + 16 }]}>
         {wishlistItems.map((item) => {
           const realItem = realItems.find(r => r.id === item.id) || item;
-          const isHabis = realItem.stock === 0 || realItem.status === 'OUT_OF_STOCK';
-              const isLowStock = !isHabis && ((realItem.stock > 0 && realItem.stock <= 10) || realItem.status === 'LOW_STOCK');
-          const hasNewTag = realItem.is_new || (realItem.sku && realItem.sku.toUpperCase().includes('NEW')) || (realItem.name && realItem.name.toUpperCase().includes('NEW'));
           const isComingSoon = realItem.is_coming_soon || (realItem.sku && realItem.sku.toUpperCase().includes('COMING')) || (realItem.name && realItem.name.toUpperCase().includes('COMING'));
+          const isHabis = !isComingSoon && (realItem.stock === 0 || realItem.status === 'OUT_OF_STOCK');
+          const isLowStock = !isHabis && !isComingSoon && ((realItem.stock > 0 && realItem.stock <= 10) || realItem.status === 'LOW_STOCK');
+          const hasNewTag = realItem.is_new || (realItem.sku && realItem.sku.toUpperCase().includes('NEW')) || (realItem.name && realItem.name.toUpperCase().includes('NEW'));
           const displaySku = realItem.sku ? realItem.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : 'SKU Tidak Diketahui';
           const displayPrice = realItem.price || 0;
           
@@ -68,8 +68,8 @@ export default function WishlistScreen() {
                   iconColor="#ef4444"
                 />
                 {(isHabis || isComingSoon) && (
-                  <View style={styles.habisOverlay}>
-                    <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
+                  <View style={[styles.habisOverlay, isComingSoon && { backgroundColor: 'transparent' }]}>
+                    <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }, isComingSoon && { color: '#eab308', borderColor: '#eab308', textShadowColor: 'rgba(0,0,0,0.5)' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                   </View>
                 )}
                 {realItem.pcs_per_box && (
@@ -95,9 +95,9 @@ export default function WishlistScreen() {
                   <Feather name="trash-2" size={18} color="#ef4444" />
                 </TouchableOpacity>
                 <TouchableOpacity 
-                  style={[styles.cartBtn, isHabis && { backgroundColor: '#cbd5e1' }]} 
+                  style={[styles.cartBtn, (isHabis || isComingSoon) && { backgroundColor: '#cbd5e1' }]} 
                   onPress={() => handleAddToCart(realItem)}
-                  disabled={isHabis}
+                  disabled={isHabis || isComingSoon}
                 >
                   <Feather name="shopping-cart" size={16} color="white" />
                 </TouchableOpacity>
