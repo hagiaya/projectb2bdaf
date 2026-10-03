@@ -564,19 +564,18 @@ export default function SalesPage() {
 
     setSavingEditProfile(true);
     try {
-      const res = await fetch('/api/sales/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          profile_id: activeSalesForEdit.profile_id,
-          full_name: editFullName.trim(),
-          phone_number: editPhone.trim(),
-          password: editPassword.trim() || undefined,
-        }),
+      let digits = editPhone.trim().replace(/\D/g, '');
+      if (digits.startsWith('62')) digits = '0' + digits.slice(2);
+      if (!digits.startsWith('0')) digits = '0' + digits;
+
+      const { error } = await supabase.rpc('admin_update_sales_profile', {
+        p_profile_id: activeSalesForEdit.profile_id,
+        p_full_name: editFullName.trim(),
+        p_phone_number: digits,
+        p_password: editPassword.trim() || null
       });
 
-      const resData = await res.json();
-      if (!res.ok) throw new Error(resData.error || 'Gagal memperbarui profil');
+      if (error) throw error;
 
       alert('Profil personil berhasil diperbarui.');
       setEditProfileModalOpen(false);
