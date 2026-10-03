@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, Trash2, Map, Navigation, CheckCircle2, X, AlertTriangle, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
+interface Region {
   id: string;
   code: string;
   name: string;
