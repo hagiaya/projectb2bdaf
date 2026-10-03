@@ -129,12 +129,12 @@ export default function LoginScreen() {
           }
         }
 
-        const { data, error } = await supabase.auth.signInWithPassword({
+        let loginResult = await supabase.auth.signInWithPassword({
           email: loginEmail,
           password: otpOrPassword,
         });
 
-        if (error) {
+        if (loginResult.error) {
           // Try fallback email format for SPV/SALES (since some might be created via OTP) or just general fallback
           if (!raw.includes('@')) {
             let fallbackEmail = '';
@@ -144,28 +144,29 @@ export default function LoginScreen() {
               fallbackEmail = `${normalizedPhone}@sales.b2b.app`;
             }
             
-            const { data: fallbackData, error: fallbackError } = await supabase.auth.signInWithPassword({
+            const fallbackResult = await supabase.auth.signInWithPassword({
               email: fallbackEmail,
               password: otpOrPassword,
             });
-            if (fallbackError) {
+            if (fallbackResult.error) {
               throw new Error('Kata sandi salah atau akun tidak ditemukan.');
             }
-            // else success, we continue
+            // Use fallback result
+            loginResult = fallbackResult;
           } else {
             throw new Error('Kata sandi salah atau akun tidak ditemukan.');
           }
         }
 
         // Verify role of logged in user
-        if (!data.user) {
+        if (!loginResult.data.user) {
           throw new Error('Gagal login: User tidak ditemukan');
         }
         
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
-          .eq('id', data.user.id)
+          .eq('id', loginResult.data.user.id)
           .single();
 
         if (profile?.role === 'SALES' || profile?.role === 'SPV') {
