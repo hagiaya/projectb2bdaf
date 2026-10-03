@@ -306,7 +306,7 @@ export default function ProductsPage() {
       promo_label: newPromoLabel ? newPromoLabel.trim() : null,
       stock: stockNum,
       sort_order: orderNum,
-      status: stockNum > 20 ? 'ACTIVE' : 'LOW_STOCK',
+      status: 'ACTIVE', // Tetap ACTIVE agar tidak di-hide oleh RLS database
       image_urls: parsedUrls,
       image_url: parsedUrls[0] || null,
       is_flash_sale: newIsFlashSale,
