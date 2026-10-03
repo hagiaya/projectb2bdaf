@@ -446,9 +446,9 @@ export default function DealerHome() {
                     <Feather name="box" size={32} color="#8ec44a" />
                   )}
                   
-                  {isHabis && (
+                  {(isHabis || isComingSoon) && (
                     <View style={styles.habisOverlay}>
-                      <Text style={styles.habisText}>SOLD OUT</Text>
+                      <Text style={styles.habisText}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                     </View>
                   )}
                   {item.pcs_per_box && (
@@ -472,7 +472,7 @@ export default function DealerHome() {
                   onPress={() => addToCart(item)} 
                   disabled={isHabis || isComingSoon}
                 >
-                  <Text style={styles.buyText}>{isComingSoon ? 'Segera' : isHabis ? 'Sold Out' : '+ Keranjang'}</Text>
+                  <Text style={styles.buyText}>{isComingSoon ? 'Coming Soon' : isHabis ? 'Sold Out' : '+ Keranjang'}</Text>
                 </TouchableOpacity>
               </TouchableOpacity>
             )})
@@ -514,9 +514,9 @@ export default function DealerHome() {
                     ) : (
                       <Feather name="package" size={32} color="#94a3b8" style={{ alignSelf: 'center', marginTop: 44 }} />
                     )}
-                    {isHabis && (
+                    {(isHabis || isComingSoon) && (
                       <View style={styles.habisOverlay}>
-                        <Text style={styles.habisText}>SOLD OUT</Text>
+                        <Text style={styles.habisText}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                       </View>
                     )}
                     {item.pcs_per_box && (
@@ -541,7 +541,7 @@ export default function DealerHome() {
                     onPress={() => addToCart(item, 1)}
                     disabled={isHabis}
                   >
-                    <Text style={styles.buyText}>{isHabis ? 'Sold Out' : '+ Keranjang'}</Text>
+                    <Text style={styles.buyText}>{isComingSoon ? 'Coming Soon' : isHabis ? 'Sold Out' : '+ Keranjang'}</Text>
                   </TouchableOpacity>
                 </TouchableOpacity>
               );
@@ -582,9 +582,9 @@ export default function DealerHome() {
                   ) : (
                     <Feather name="package" size={24} color="#8ec44a" />
                   )}
-                  {isHabis && (
+                  {(isHabis || isComingSoon) && (
                     <View style={styles.habisOverlay}>
-                      <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>SOLD OUT</Text>
+                      <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                     </View>
                   )}
                   {item.pcs_per_box && (

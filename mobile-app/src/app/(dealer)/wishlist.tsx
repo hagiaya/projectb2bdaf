@@ -54,7 +54,8 @@ export default function WishlistScreen() {
           const isHabis = realItem.stock === 0 || realItem.status === 'OUT_OF_STOCK';
               const isLowStock = !isHabis && ((realItem.stock > 0 && realItem.stock <= 10) || realItem.status === 'LOW_STOCK');
           const hasNewTag = realItem.is_new || (realItem.sku && realItem.sku.toUpperCase().includes('NEW')) || (realItem.name && realItem.name.toUpperCase().includes('NEW'));
-          const displaySku = realItem.sku ? realItem.sku.replace(/NEW/gi, '').trim() : 'SKU Tidak Diketahui';
+          const isComingSoon = realItem.is_coming_soon || (realItem.sku && realItem.sku.toUpperCase().includes('COMING')) || (realItem.name && realItem.name.toUpperCase().includes('COMING'));
+          const displaySku = realItem.sku ? realItem.sku.replace(/NEW|COMING SOON|COMING/gi, '').trim() : 'SKU Tidak Diketahui';
           const displayPrice = realItem.price || 0;
           
           return (
@@ -66,9 +67,9 @@ export default function WishlistScreen() {
                   fallbackIcon="heart"
                   iconColor="#ef4444"
                 />
-                {isHabis && (
+                {(isHabis || isComingSoon) && (
                   <View style={styles.habisOverlay}>
-                    <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>SOLD OUT</Text>
+                    <Text style={[styles.habisText, { fontSize: 10, paddingHorizontal: 4 }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                   </View>
                 )}
                 {realItem.pcs_per_box && (
@@ -78,7 +79,10 @@ export default function WishlistScreen() {
                 )}
               </View>
               <View style={styles.details}>
-                {(!isHabis && hasNewTag) && (
+                {(!isHabis && isComingSoon) && (
+                  <ComingSoonBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
+                )}
+                {(!isHabis && hasNewTag && !isComingSoon) && (
                   <NewBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
                 )}
                 <Text style={styles.category}>{item.category || 'Uncategorized'}</Text>

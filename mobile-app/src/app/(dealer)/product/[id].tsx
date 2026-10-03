@@ -226,8 +226,8 @@ export default function ProductDetailScreen() {
                         Rp {v.price ? v.price.toLocaleString('id-ID') : product.price.toLocaleString('id-ID')}
                       </Text>
                       <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                        Stok: <Text style={{ color: vOutOfStock ? '#ef4444' : '#1e293b', fontWeight: 'bold' }}>{vOutOfStock ? 'Sold Out' : 'Tersedia'}</Text>
-                        {!vOutOfStock && ` (${v.stock})`}
+                        Stok: <Text style={{ color: (vOutOfStock && !isComingSoon) ? '#ef4444' : (isComingSoon ? '#eab308' : '#1e293b'), fontWeight: 'bold' }}>{isComingSoon ? 'Coming Soon' : (vOutOfStock ? 'Sold Out' : 'Tersedia')}</Text>
+                        {(!vOutOfStock && !isComingSoon) && ` (${v.stock})`}
                       </Text>
                     </View>
                     
@@ -349,7 +349,7 @@ export default function ProductDetailScreen() {
           }}
         >
           {product.stock > 0 && !isComingSoon && <Feather name="shopping-cart" size={20} color="white" />}
-          <Text style={styles.addToCartText}>{isComingSoon ? 'Segera Hadir' : product.stock === 0 ? 'Sold Out' : 'Tambah ke Keranjang'}</Text>
+          <Text style={styles.addToCartText}>{isComingSoon ? 'COMING SOON' : product.stock === 0 ? 'Sold Out' : 'Tambah ke Keranjang'}</Text>
         </TouchableOpacity>
       </View>
 

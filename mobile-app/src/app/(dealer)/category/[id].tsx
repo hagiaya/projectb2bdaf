@@ -226,9 +226,9 @@ export default function CategoryProductsScreen() {
                     <Feather name="box" size={36} color="#8ec44a" />
                   )}
                   
-                  {isHabis && (
+                  {(isHabis || isComingSoon) && (
                     <View style={styles.habisOverlay}>
-                      <Text style={styles.habisText}>SOLD OUT</Text>
+                      <Text style={styles.habisText}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                     </View>
                   )}
                   {product.pcs_per_box && (
@@ -334,9 +334,9 @@ export default function CategoryProductsScreen() {
                     <Feather name="box" size={32} color="#8ec44a" />
                   )}
 
-                  {isHabis && (
+                  {(isHabis || isComingSoon) && (
                     <View style={styles.habisOverlayList}>
-                      <Text style={styles.habisTextList}>SOLD OUT</Text>
+                      <Text style={styles.habisTextList}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
                     </View>
                   )}
                   {product.pcs_per_box && (
