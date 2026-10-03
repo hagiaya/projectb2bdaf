@@ -143,6 +143,7 @@ export default function DealersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newStoreName, setNewStoreName] = useState('');
   const [newOwnerId, setNewOwnerId] = useState('');
+  const [selectedProvince, setSelectedProvince] = useState('');
   const [newRegionId, setNewRegionId] = useState('');
   const [newSalesId, setNewSalesId] = useState('');
   const [newAddress, setNewAddress] = useState('');
@@ -519,6 +520,9 @@ export default function DealersPage() {
       setDealers([data[0] as any, ...dealers]);
       setIsModalOpen(false);
       setNewStoreName('');
+      setSelectedProvince('');
+      setNewRegionId('');
+      setNewOwnerId('');
       setNewAddress('');
       setNewCreditLimit('0');
       setNewIsCreditEligible(false);
@@ -1828,14 +1832,33 @@ export default function DealersPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">WILAYAH <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">PROVINSI WILAYAH <span className="text-red-500">*</span></label>
                   <select 
-                    value={newRegionId} onChange={(e) => setNewRegionId(e.target.value)}
+                    value={selectedProvince} 
+                    onChange={(e) => {
+                      setSelectedProvince(e.target.value);
+                      setNewRegionId('');
+                    }}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-semibold text-gray-800"
                   >
-                    {regions.map((reg) => (
+                    <option value="">-- Pilih Provinsi --</option>
+                    {Array.from(new Set(regions.map(r => r.name))).sort().map(prov => (
+                      <option key={prov} value={prov}>{prov}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">KOTA / KABUPATEN <span className="text-red-500">*</span></label>
+                  <select 
+                    value={newRegionId} 
+                    onChange={(e) => setNewRegionId(e.target.value)}
+                    disabled={!selectedProvince}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-semibold text-gray-800 disabled:bg-gray-100"
+                  >
+                    <option value="">-- Pilih Kota/Kabupaten --</option>
+                    {regions.filter(r => r.name === selectedProvince).sort((a,b) => (a.city_name || '').localeCompare(b.city_name || '')).map((reg) => (
                       <option key={reg.id} value={reg.id}>
-                        {reg.name} {reg.city_name ? `- ${reg.city_name}` : ''} {reg.district_name ? `- ${reg.district_name}` : ''}
+                        {reg.city_name || reg.name}
                       </option>
                     ))}
                   </select>

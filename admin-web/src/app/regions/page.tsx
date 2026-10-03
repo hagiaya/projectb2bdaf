@@ -31,9 +31,48 @@ export default function RegionsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // API Data
+  const [provinces, setProvinces] = useState<{id: string, name: string}[]>([]);
+  const [cities, setCities] = useState<{id: string, name: string}[]>([]);
+  const [selectedProvinceId, setSelectedProvinceId] = useState('');
+
   useEffect(() => {
     fetchData();
+    fetchProvinces();
   }, []);
+
+  const fetchProvinces = async () => {
+    try {
+      const res = await fetch('https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json');
+      const data = await res.json();
+      setProvinces(data);
+    } catch (err) {
+      console.error('Failed to fetch provinces', err);
+    }
+  };
+
+  const fetchCities = async (provinceId: string) => {
+    try {
+      const res = await fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provinceId}.json`);
+      const data = await res.json();
+      setCities(data);
+    } catch (err) {
+      console.error('Failed to fetch cities', err);
+    }
+  };
+
+  // Handle province change
+  const handleProvinceChange = (provinceId: string, provinceName: string) => {
+    setSelectedProvinceId(provinceId);
+    setNewName(provinceName); // 'name' acts as province
+    setNewCityName(''); // reset city
+    if (provinceId) {
+      fetchCities(provinceId);
+    } else {
+      setCities([]);
+    }
+  };
+
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -57,6 +96,8 @@ export default function RegionsPage() {
     setNewManager('');
     setNewStatus('ACTIVE');
     setErrorMessage(null);
+    setSelectedProvinceId('');
+    setCities([]);
     setIsModalOpen(true);
   };
 
@@ -69,6 +110,17 @@ export default function RegionsPage() {
     setNewManager(region.manager_name || '');
     setNewStatus(region.status || 'ACTIVE');
     setErrorMessage(null);
+    
+    // Find province ID by name to load cities
+    const prov = provinces.find(p => p.name === region.name);
+    if (prov) {
+      setSelectedProvinceId(prov.id);
+      fetchCities(prov.id);
+    } else {
+      setSelectedProvinceId('');
+      setCities([]);
+    }
+    
     setIsModalOpen(true);
   };
 
@@ -201,9 +253,8 @@ export default function RegionsPage() {
           <thead>
             <tr className="bg-white text-gray-500 text-xs uppercase tracking-wider">
               <th className="p-5 font-semibold border-b border-gray-100">Kode</th>
-              <th className="p-5 font-semibold border-b border-gray-100">Nama Wilayah</th>
-              <th className="p-5 font-semibold border-b border-gray-100">Kota / Kab</th>
-              <th className="p-5 font-semibold border-b border-gray-100">Kecamatan</th>
+              <th className="p-5 font-semibold border-b border-gray-100">Provinsi</th>
+              <th className="p-5 font-semibold border-b border-gray-100">Kota / Kabupaten</th>
               <th className="p-5 font-semibold border-b border-gray-100">Regional Manager</th>
               <th className="p-5 font-semibold border-b border-gray-100">Status</th>
               <th className="p-5 font-semibold border-b border-gray-100 text-right">Aksi</th>
@@ -235,7 +286,6 @@ export default function RegionsPage() {
                   </div>
                 </td>
                 <td className="p-5 font-medium text-slate-700">{region.city_name || '-'}</td>
-                <td className="p-5 font-medium text-slate-700">{region.district_name || '-'}</td>
                 <td className="p-5 font-medium text-slate-700">{region.manager_name || '-'}</td>
                 <td className="p-5">
                   <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${region.status === 'ACTIVE' ? 'bg-emerald-100/50 text-emerald-700 border border-emerald-200/50' : 'bg-slate-100/80 text-slate-600 border border-slate-200'}`}>
@@ -292,42 +342,42 @@ export default function RegionsPage() {
               )}
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
+                <div className="col-span-2 sm:col-span-1">
                   <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">
-                    NAMA WILAYAH <span className="text-red-500">*</span>
+                    PROVINSI <span className="text-red-500">*</span>
                   </label>
-                  <input 
-                    type="text" 
+                  <select
                     required
-                    placeholder="misal: Papua, Jawa Barat, Bali"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
-                  />
+                    value={selectedProvinceId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const name = e.target.options[e.target.selectedIndex].text;
+                      handleProvinceChange(id, id ? name : '');
+                    }}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium bg-white"
+                  >
+                    <option value="">-- Pilih Provinsi --</option>
+                    {provinces.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
                 </div>
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">
-                    KOTA / KABUPATEN
+                    KOTA / KABUPATEN <span className="text-red-500">*</span>
                   </label>
-                  <input 
-                    type="text" 
-                    placeholder="misal: Mimika, Bandung"
+                  <select
+                    required
                     value={newCityName}
                     onChange={(e) => setNewCityName(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">
-                    KECAMATAN
-                  </label>
-                  <input 
-                    type="text" 
-                    placeholder="misal: Mimika Baru"
-                    value={newDistrictName}
-                    onChange={(e) => setNewDistrictName(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
-                  />
+                    disabled={!selectedProvinceId}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium bg-white disabled:bg-gray-100"
+                  >
+                    <option value="">-- Pilih Kota/Kabupaten --</option>
+                    {cities.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">

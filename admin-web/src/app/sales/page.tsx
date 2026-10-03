@@ -98,6 +98,7 @@ export default function SalesPage() {
   const [regionModalOpen, setRegionModalOpen] = useState(false);
   const [activeSalesForRegion, setActiveSalesForRegion] = useState<SalesRep | null>(null);
   const [selectedNewRegion, setSelectedNewRegion] = useState('');
+  const [selectedEditProvince, setSelectedEditProvince] = useState('');
 
   // Modal: Add/Assign New Sales or SPV
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -110,6 +111,7 @@ export default function SalesPage() {
   const [availableProfiles, setAvailableProfiles] = useState<any[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState('');
   const [newAccountType, setNewAccountType] = useState<'SALES' | 'SPV'>('SALES');
+  const [selectedProvince, setSelectedProvince] = useState('');
   const [newSalesRegion, setNewSalesRegion] = useState('');
   const [newSpvParent, setNewSpvParent] = useState('');
   const [newBaseSalary, setNewBaseSalary] = useState('4500000');
@@ -748,6 +750,7 @@ export default function SalesPage() {
       alert(`Berhasil menetapkan akun ${isSpv ? 'Supervisor (SPV)' : 'Sales Lapangan'}!`);
       setAddModalOpen(false);
       setSelectedProfileId('');
+      setSelectedProvince('');
       setNewSalesRegion('');
       setNewAccountType('SALES');
       fetchData();
@@ -1053,6 +1056,12 @@ export default function SalesPage() {
                         onClick={() => {
                           setActiveSalesForRegion(sales);
                           setSelectedNewRegion(sales.region_id || '');
+                          if (sales.region_id) {
+                            const reg = regions.find(r => r.id === sales.region_id);
+                            setSelectedEditProvince(reg ? reg.name : '');
+                          } else {
+                            setSelectedEditProvince('');
+                          }
                           setRegionModalOpen(true);
                         }}
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all group cursor-pointer"
@@ -1270,20 +1279,39 @@ export default function SalesPage() {
               Atur wilayah operasional untuk: <b className="text-slate-800">{activeSalesForRegion.profiles?.full_name}</b>
             </p>
 
-            <div className="mb-6">
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-2">Daftar Wilayah</label>
-              <select
-                value={selectedNewRegion}
-                onChange={(e) => setSelectedNewRegion(e.target.value)}
-                className="w-full px-4 py-3 bg-slate-50 border border-gray-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-              >
-                <option value="">-- Belum Ditugaskan / Wilayah Bebas --</option>
-                {regions.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">PROVINSI</label>
+                <select
+                  value={selectedEditProvince}
+                  onChange={(e) => {
+                    setSelectedEditProvince(e.target.value);
+                    setSelectedNewRegion('');
+                  }}
+                  className="w-full px-4 py-3 bg-slate-50 border border-gray-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                >
+                  <option value="">-- Pilih Provinsi --</option>
+                  {Array.from(new Set(regions.map(r => r.name))).sort().map(prov => (
+                    <option key={prov} value={prov}>{prov}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">KOTA / KABUPATEN</label>
+                <select
+                  value={selectedNewRegion}
+                  onChange={(e) => setSelectedNewRegion(e.target.value)}
+                  disabled={!selectedEditProvince}
+                  className="w-full px-4 py-3 bg-slate-50 border border-gray-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-gray-200"
+                >
+                  <option value="">-- Belum Ditugaskan --</option>
+                  {regions.filter(r => r.name === selectedEditProvince).sort((a,b) => (a.city_name || '').localeCompare(b.city_name || '')).map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.city_name || r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2">
@@ -1487,20 +1515,39 @@ export default function SalesPage() {
               </div>
 
               {/* 3. Wilayah Kerja */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Wilayah Kerja</label>
-                <select
-                  value={newSalesRegion}
-                  onChange={(e) => setNewSalesRegion(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-gray-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                >
-                  <option value="">-- Pilih Wilayah (Opsional) --</option>
-                  {regions.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name} {r.city_name ? `- ${r.city_name}` : ''} {r.district_name ? `- ${r.district_name}` : ''}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">PROVINSI</label>
+                  <select
+                    value={selectedProvince}
+                    onChange={(e) => {
+                      setSelectedProvince(e.target.value);
+                      setNewSalesRegion('');
+                    }}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-gray-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  >
+                    <option value="">-- Pilih Provinsi --</option>
+                    {Array.from(new Set(regions.map(r => r.name))).sort().map(prov => (
+                      <option key={prov} value={prov}>{prov}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">KOTA / KABUPATEN</label>
+                  <select
+                    value={newSalesRegion}
+                    onChange={(e) => setNewSalesRegion(e.target.value)}
+                    disabled={!selectedProvince}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-gray-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-gray-200"
+                  >
+                    <option value="">-- Pilih Kota/Kabupaten --</option>
+                    {regions.filter(r => r.name === selectedProvince).sort((a,b) => (a.city_name || '').localeCompare(b.city_name || '')).map((reg) => (
+                      <option key={reg.id} value={reg.id}>
+                        {reg.city_name || reg.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* 4. Standar Kompensasi Berdasarkan Tipe Akun */}
