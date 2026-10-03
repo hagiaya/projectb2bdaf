@@ -214,6 +214,8 @@ export default function RegisterScreen() {
         throw new Error(authData?.error || authError?.message || 'OTP tidak valid');
       }
 
+      const normalizedPhone = normalizePhone(phone);
+
       if (authData.session) {
         await supabase.auth.setSession({
           access_token: authData.session.access_token,
@@ -250,7 +252,7 @@ export default function RegisterScreen() {
       const { error } = await supabase.from('profiles').upsert({
         id: user.id,
         full_name: ownerName,
-        phone_number: phone,
+        phone_number: normalizedPhone,
         company_name: storeName,
         address: address || 'Alamat dari peta',
         lat: location!.lat,
