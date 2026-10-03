@@ -139,6 +139,7 @@ export default function SalesPage() {
   const [editProfileModalOpen, setEditProfileModalOpen] = useState(false);
   const [activeSalesForEdit, setActiveSalesForEdit] = useState<SalesRep | null>(null);
   const [editFullName, setEditFullName] = useState('');
+  const [editRegionId, setEditRegionId] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [savingEditProfile, setSavingEditProfile] = useState(false);
@@ -568,14 +569,21 @@ export default function SalesPage() {
       if (digits.startsWith('62')) digits = '0' + digits.slice(2);
       if (!digits.startsWith('0')) digits = '0' + digits;
 
-      const { error } = await supabase.rpc('admin_update_sales_profile', {
+      const { error: rpcError } = await supabase.rpc('admin_update_sales_profile', {
         p_profile_id: activeSalesForEdit.profile_id,
         p_full_name: editFullName.trim(),
         p_phone_number: digits,
         p_password: editPassword.trim() || null
       });
 
-      if (error) throw error;
+      if (rpcError) throw rpcError;
+
+      const { error: salesError } = await supabase
+        .from('sales')
+        .update({ region_id: editRegionId || null })
+        .eq('id', activeSalesForEdit.id);
+
+      if (salesError) throw salesError;
 
       alert('Profil personil berhasil diperbarui.');
       setEditProfileModalOpen(false);
@@ -1118,6 +1126,7 @@ export default function SalesPage() {
                             setActiveSalesForEdit(sales);
                             setEditFullName(sales.profiles?.full_name || '');
                             setEditPhone(sales.profiles?.phone_number || '');
+                            setEditRegionId(sales.region_id || '');
                             setEditPassword('');
                             setEditProfileModalOpen(true);
                           }}
@@ -2166,6 +2175,22 @@ CREATE POLICY "Allow authenticated full access to returns" ON public.returns FOR
                   className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Lokasi Penempatan (Wilayah)</label>
+                <select
+                  value={editRegionId}
+                  onChange={(e) => setEditRegionId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
+                  <option value="">-- Tanpa Wilayah --</option>
+                  {regions.map((reg) => (
+                    <option key={reg.id} value={reg.id}>
+                      {reg.name} {reg.city_name ? `- ${reg.city_name}` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
