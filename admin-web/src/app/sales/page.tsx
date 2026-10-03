@@ -180,7 +180,7 @@ export default function SalesPage() {
           team_bonus_pct,
           created_at,
           profiles (id, full_name, phone_number, role, approval_status),
-          regions:regions!sales_region_id_fkey (id, name),
+          regions:regions!sales_region_id_fkey (id, name, city_name, district_name),
           spv:spv_id (
             profiles (full_name)
           )
@@ -201,7 +201,7 @@ export default function SalesPage() {
             status,
             created_at,
             profiles (id, full_name, phone_number, role, approval_status),
-            regions:regions!sales_region_id_fkey (id, name)
+            regions:regions!sales_region_id_fkey (id, name, city_name, district_name)
           `)
           .order('created_at', { ascending: false });
         sData = fallbackData;
@@ -269,7 +269,7 @@ export default function SalesPage() {
             direct_commission_pct,
             team_bonus_pct,
             profiles (id, full_name, phone_number, role, approval_status),
-            regions:regions!sales_region_id_fkey (id, name),
+            regions:regions!sales_region_id_fkey (id, name, city_name, district_name),
             spv:spv_id (
               profiles (full_name)
             )
@@ -1074,7 +1074,7 @@ export default function SalesPage() {
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all group cursor-pointer"
                       >
                         <MapPin size={12} className="text-emerald-600" />
-                        <span>{sales.regions?.name || 'Belum diatur'}</span>
+                        <span>{sales.regions?.name ? `${sales.regions.name} ${sales.regions.city_name ? '- ' + sales.regions.city_name : ''}` : 'Belum diatur'}</span>
                         <Edit2 size={11} className="opacity-0 group-hover:opacity-100 text-slate-400 ml-1" />
                       </button>
                     </td>
@@ -1576,7 +1576,7 @@ export default function SalesPage() {
                         .filter((s) => s.is_spv)
                         .map((spv) => (
                           <option key={spv.id} value={spv.id}>
-                            SPV {spv.profiles?.full_name} ({spv.regions?.name || 'Seluruh Area'})
+                            SPV {spv.profiles?.full_name} ({spv.regions?.name ? `${spv.regions.name} ${spv.regions.city_name ? '- ' + spv.regions.city_name : ''}` : 'Seluruh Area'})
                           </option>
                         ))}
                     </select>
@@ -1903,7 +1903,7 @@ CREATE POLICY "Allow authenticated full access to returns" ON public.returns FOR
 
             <form onSubmit={handleSaveSpvAndSalary} className="space-y-4">
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600">
-                Personil: <b className="text-slate-900">{activeSalesForSpv.profiles?.full_name}</b> ({activeSalesForSpv.regions?.name || 'Tanpa Wilayah'})
+                Personil: <b className="text-slate-900">{activeSalesForSpv.profiles?.full_name}</b> ({activeSalesForSpv.regions?.name ? `${activeSalesForSpv.regions.name} ${activeSalesForSpv.regions.city_name ? '- ' + activeSalesForSpv.regions.city_name : ''}` : 'Tanpa Wilayah'})
               </div>
 
               {/* Pilihan Jabatan */}
@@ -1960,7 +1960,7 @@ CREATE POLICY "Allow authenticated full access to returns" ON public.returns FOR
                         .filter((s) => s.is_spv && s.id !== activeSalesForSpv.id)
                         .map((spv) => (
                           <option key={spv.id} value={spv.id}>
-                            SPV {spv.profiles?.full_name} ({spv.regions?.name || 'Seluruh Area'})
+                            SPV {spv.profiles?.full_name} ({spv.regions?.name ? `${spv.regions.name} ${spv.regions.city_name ? '- ' + spv.regions.city_name : ''}` : 'Seluruh Area'})
                           </option>
                         ))}
                     </select>
