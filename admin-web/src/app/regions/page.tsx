@@ -4,10 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, Trash2, Map, Navigation, CheckCircle2, X, AlertTriangle, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-interface Region {
   id: string;
   code: string;
   name: string;
+  city_name?: string;
+  district_name?: string;
   manager_name: string;
   status: string;
   created_at?: string;
@@ -23,6 +24,8 @@ export default function RegionsPage() {
   const [editingRegion, setEditingRegion] = useState<Region | null>(null);
   const [newCode, setNewCode] = useState('');
   const [newName, setNewName] = useState('');
+  const [newCityName, setNewCityName] = useState('');
+  const [newDistrictName, setNewDistrictName] = useState('');
   const [newManager, setNewManager] = useState('');
   const [newStatus, setNewStatus] = useState('ACTIVE');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,6 +52,8 @@ export default function RegionsPage() {
     setEditingRegion(null);
     setNewCode('');
     setNewName('');
+    setNewCityName('');
+    setNewDistrictName('');
     setNewManager('');
     setNewStatus('ACTIVE');
     setErrorMessage(null);
@@ -59,6 +64,8 @@ export default function RegionsPage() {
     setEditingRegion(region);
     setNewCode(region.code);
     setNewName(region.name);
+    setNewCityName(region.city_name || '');
+    setNewDistrictName(region.district_name || '');
     setNewManager(region.manager_name || '');
     setNewStatus(region.status || 'ACTIVE');
     setErrorMessage(null);
@@ -81,6 +88,8 @@ export default function RegionsPage() {
     const payload = {
       code: newCode.trim().toUpperCase(),
       name: newName.trim(),
+      city_name: newCityName.trim() || null,
+      district_name: newDistrictName.trim() || null,
       manager_name: newManager.trim() || null,
       status: newStatus,
     };
@@ -193,6 +202,8 @@ export default function RegionsPage() {
             <tr className="bg-white text-gray-500 text-xs uppercase tracking-wider">
               <th className="p-5 font-semibold border-b border-gray-100">Kode</th>
               <th className="p-5 font-semibold border-b border-gray-100">Nama Wilayah</th>
+              <th className="p-5 font-semibold border-b border-gray-100">Kota / Kab</th>
+              <th className="p-5 font-semibold border-b border-gray-100">Kecamatan</th>
               <th className="p-5 font-semibold border-b border-gray-100">Regional Manager</th>
               <th className="p-5 font-semibold border-b border-gray-100">Status</th>
               <th className="p-5 font-semibold border-b border-gray-100 text-right">Aksi</th>
@@ -201,7 +212,7 @@ export default function RegionsPage() {
           <tbody className="text-sm divide-y divide-gray-50">
             {isLoading ? (
                <tr>
-                <td colSpan={5} className="p-8 text-center text-gray-500 font-medium">
+                <td colSpan={7} className="p-8 text-center text-gray-500 font-medium">
                   <div className="flex items-center justify-center gap-2">
                     <Loader2 size={18} className="animate-spin text-emerald-600" />
                     <span>Memuat data dari Supabase...</span>
@@ -210,7 +221,7 @@ export default function RegionsPage() {
               </tr>
             ) : filteredRegions.length === 0 ? (
                <tr>
-                <td colSpan={5} className="p-8 text-center text-gray-500 font-medium">
+                <td colSpan={7} className="p-8 text-center text-gray-500 font-medium">
                   {searchQuery ? 'Tidak ada wilayah yang cocok dengan pencarian.' : 'Belum ada wilayah ditemukan. Klik tombol "+ Tambah Wilayah" di atas.'}
                 </td>
               </tr>
@@ -223,6 +234,8 @@ export default function RegionsPage() {
                     {region.name}
                   </div>
                 </td>
+                <td className="p-5 font-medium text-slate-700">{region.city_name || '-'}</td>
+                <td className="p-5 font-medium text-slate-700">{region.district_name || '-'}</td>
                 <td className="p-5 font-medium text-slate-700">{region.manager_name || '-'}</td>
                 <td className="p-5">
                   <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${region.status === 'ACTIVE' ? 'bg-emerald-100/50 text-emerald-700 border border-emerald-200/50' : 'bg-slate-100/80 text-slate-600 border border-slate-200'}`}>
@@ -286,9 +299,33 @@ export default function RegionsPage() {
                   <input 
                     type="text" 
                     required
-                    placeholder="misal: Jabodetabek, Jawa Barat, Bali"
+                    placeholder="misal: Papua, Jawa Barat, Bali"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">
+                    KOTA / KABUPATEN
+                  </label>
+                  <input 
+                    type="text" 
+                    placeholder="misal: Mimika, Bandung"
+                    value={newCityName}
+                    onChange={(e) => setNewCityName(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">
+                    KECAMATAN
+                  </label>
+                  <input 
+                    type="text" 
+                    placeholder="misal: Mimika Baru"
+                    value={newDistrictName}
+                    onChange={(e) => setNewDistrictName(e.target.value)}
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
                   />
                 </div>

@@ -12,7 +12,8 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1); // 1 = Input identifier, 2 = Password/OTP Input
   const [authMode, setAuthMode] = useState<'otp' | 'password'>('password');
-  const [detectedRole, setDetectedRole] = useState<'SALES' | 'DEALER' | null>(null);
+  const [detectedRole, setDetectedRole] = useState<'SALES' | 'DEALER' | 'SPV' | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const normalizePhone = (p: string) => {
     let digits = p.replace(/\D/g, '');
@@ -118,9 +119,10 @@ export default function LoginScreen() {
       } else {
         // Password verification (Sales or Dealer)
         let loginEmail = raw;
+        const normalizedPhone = !raw.includes('@') ? normalizePhone(raw) : '';
+        
         if (!raw.includes('@')) {
-          const normalizedPhone = normalizePhone(raw);
-          if (detectedRole === 'SALES') {
+          if (detectedRole === 'SALES' || detectedRole === 'SPV') {
             loginEmail = `${normalizedPhone}@sales.b2b.app`;
           } else {
             loginEmail = `${normalizedPhone}@b2b-app.local`;
@@ -133,18 +135,40 @@ export default function LoginScreen() {
         });
 
         if (error) {
-          // If dealer login with default password failed, check if custom password
-          throw new Error('Kata sandi salah atau akun tidak ditemukan. (Kata sandi default: ' + (detectedRole === 'SALES' ? 'sales123' : 'dealer123') + ')');
+          // Try fallback email format for SPV/SALES (since some might be created via OTP) or just general fallback
+          if (!raw.includes('@')) {
+            let fallbackEmail = '';
+            if (detectedRole === 'SALES' || detectedRole === 'SPV') {
+              fallbackEmail = `${normalizedPhone}@b2b-app.local`;
+            } else {
+              fallbackEmail = `${normalizedPhone}@sales.b2b.app`;
+            }
+            
+            const { data: fallbackData, error: fallbackError } = await supabase.auth.signInWithPassword({
+              email: fallbackEmail,
+              password: otpOrPassword,
+            });
+            if (fallbackError) {
+              throw new Error('Kata sandi salah atau akun tidak ditemukan.');
+            }
+            // else success, we continue
+          } else {
+            throw new Error('Kata sandi salah atau akun tidak ditemukan.');
+          }
         }
 
         // Verify role of logged in user
+        if (!data.user) {
+          throw new Error('Gagal login: User tidak ditemukan');
+        }
+        
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', data.user.id)
           .single();
 
-        if (profile?.role === 'SALES') {
+        if (profile?.role === 'SALES' || profile?.role === 'SPV') {
           router.replace('/(sales)');
         } else {
           router.replace('/(dealer)/home');
@@ -228,16 +252,24 @@ export default function LoginScreen() {
           <>
             <View style={styles.inputWrapper}>
               <Feather name={authMode === 'otp' ? 'key' : 'lock'} size={20} color="#94a3b8" style={styles.icon} />
-              <TextInput
-                style={styles.inputIcon}
-                placeholder={authMode === 'otp' ? '6 Digit OTP' : 'Kata Sandi'}
-                placeholderTextColor="#94a3b8"
-                value={otpOrPassword}
-                onChangeText={setOtpOrPassword}
-                keyboardType={authMode === 'otp' ? 'number-pad' : 'default'}
-                secureTextEntry={authMode === 'password'}
-                maxLength={authMode === 'otp' ? 6 : 50}
-              />
+              <View style={[styles.inputIcon, { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 0, paddingVertical: 0 }]}>
+                <TextInput
+                  style={{ flex: 1, height: '100%', paddingHorizontal: 16, color: '#1e293b' }}
+                  placeholder={authMode === 'otp' ? '6 Digit OTP' : 'Kata Sandi'}
+                  placeholderTextColor="#94a3b8"
+                  value={otpOrPassword}
+                  onChangeText={setOtpOrPassword}
+                  keyboardType={authMode === 'otp' ? 'number-pad' : 'default'}
+                  secureTextEntry={authMode === 'password' && !showPassword}
+                  maxLength={authMode === 'otp' ? 6 : 50}
+                  autoCapitalize="none"
+                />
+                {authMode === 'password' && (
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: 12 }}>
+                    <Feather name={showPassword ? 'eye-off' : 'eye'} size={20} color="#94a3b8" />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
             
             {authMode === 'otp' && (

@@ -113,17 +113,9 @@ serve(async (req) => {
       if (createError) {
         // If it fails because user already exists (e.g. deleted from profiles but not auth.users)
         if (createError.message.includes('already exists') || createError.status === 422) {
-           // We can't easily get the ID, so let's fallback to listUsers for this edge case
-           const { data: { users } } = await supabase.auth.admin.listUsers()
-           const existingUser = users?.find(u => u.email === phoneEmail)
-           if (existingUser) {
-             userId = existingUser.id
-             await supabase.auth.admin.updateUserById(userId, { password: newPassword })
-           } else {
-             throw new Error("Gagal memulihkan akun lama. Hubungi admin.");
-           }
+           throw new Error("Akun ini sudah terdaftar sebelumnya namun data profil tidak ditemukan. Hubungi admin untuk memulihkan akun.");
         } else {
-          throw createError
+          throw new Error("Gagal membuat user baru: " + createError.message);
         }
       } else {
         userId = newUser.user.id

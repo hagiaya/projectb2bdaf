@@ -301,9 +301,52 @@ export default function RegisterScreen() {
     }
   };
 
-  const handleRegisterSales = async () => {
+  const handleSendOtpSales = async () => {
     if (!salesName || !salesPhone || !salesKtp || !salesPassword) {
       Alert.alert('Error', 'Harap isi semua kolom pendaftaran Sales.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const normalizedPhone = normalizePhone(salesPhone);
+      
+      const { data: profileCheck, error: checkError } = await supabase
+        .rpc('check_user_role', { p_phone: normalizedPhone });
+
+      if (checkError) {
+        throw new Error('Gagal mengecek nomor: ' + checkError.message);
+      }
+
+      if (profileCheck) {
+        const msg = 'Nomor ini sudah memiliki akun. Silakan login.';
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Nomor Sudah Terdaftar', msg, [{ text: 'Login Sekarang', onPress: () => router.push('/login') }]);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('send-otp', {
+        body: { phone: salesPhone },
+      });
+
+      if (error || !data?.success) {
+        throw new Error(data?.error || error?.message || 'Gagal mengirim OTP');
+      }
+
+      setStep(2);
+      if (Platform.OS === 'web') window.alert(`Kode OTP telah dikirim ke nomor WhatsApp ${salesPhone}.`);
+      else Alert.alert('OTP Terkirim', `Kode OTP telah dikirim ke nomor WhatsApp ${salesPhone}.`);
+    } catch (err: any) {
+      if (Platform.OS === 'web') window.alert(err.message);
+      else Alert.alert('Pengiriman Gagal', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyAndRegisterSales = async () => {
+    if (!otp || otp.length !== 6) {
+      Alert.alert('Error', 'Silakan masukkan 6 digit kode OTP.');
       return;
     }
     
@@ -311,45 +354,59 @@ export default function RegisterScreen() {
     try {
       const normalizedPhone = normalizePhone(salesPhone);
       
-      // Check if phone exists
-      const { data: profileCheck } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('phone_number', normalizedPhone)
-        .maybeSingle();
-
-      if (profileCheck) {
-        throw new Error('Nomor ini sudah terdaftar.');
-      }
-
-      // Create user using dummy email approach for "No OTP" phone login
-      const dummyEmail = `${normalizedPhone}@sales.b2b.app`;
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: dummyEmail,
-        password: salesPassword,
-        options: {
-          data: {
-            role: 'SALES',
-            full_name: salesName,
-            phone_number: normalizedPhone,
-            ktp_number: salesKtp
-          }
-        }
+      // Verify OTP and create user
+      const { data: authData, error: authError } = await supabase.functions.invoke('verify-otp', {
+        body: { phone: salesPhone, otp },
       });
 
-      if (authError) throw authError;
+      if (authError || !authData?.success) {
+        throw new Error(authData?.error || authError?.message || 'OTP tidak valid');
+      }
 
-      const user = authData.user;
-      if (!user) throw new Error("Gagal membuat akun.");
+      if (authData.session) {
+        await supabase.auth.setSession({
+          access_token: authData.session.access_token,
+          refresh_token: authData.session.refresh_token,
+        });
+      }
 
-      // Upload KTP if any (optional for Sales for now)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Gagal mengautentikasi user.");
+
+      // Set explicit password and name for the user
+      await supabase.auth.updateUser({
+        password: salesPassword,
+        data: { full_name: salesName }
+      });
+
+      // Upsert profile
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        id: user.id,
+        full_name: salesName,
+        phone_number: normalizedPhone,
+        ktp_number: salesKtp,
+        approval_status: 'PENDING',
+        role: 'SALES'
+      });
+      if (profileError) throw profileError;
+
+      // Insert to sales table
+      await supabase.from('sales').upsert({
+        profile_id: user.id,
+        status: 'PENDING',
+        is_spv: false,
+        balance: 0,
+      }, { onConflict: 'profile_id' });
 
       await supabase.auth.signOut();
 
-      
-      Alert.alert('Berhasil', 'Pendaftaran Sales berhasil. Menunggu persetujuan Admin.', [
-        { text: 'Login', onPress: () => router.replace('/login') }
-      ]);
+      const successMsg = 'Pendaftaran Sales Berhasil! 🎉\\n\\nMenunggu persetujuan Admin.';
+      if (Platform.OS === 'web') {
+        window.alert(successMsg);
+        router.replace('/login');
+      } else {
+        Alert.alert('Berhasil', successMsg, [{ text: 'Login', onPress: () => router.replace('/login') }]);
+      }
     } catch (error: any) {
       Alert.alert('Gagal Daftar', error.message);
     } finally {
@@ -364,26 +421,9 @@ export default function RegisterScreen() {
 
       <View style={styles.formContainer}>
         
-        {/* Role Toggle */}
-        <View style={styles.accountTypeContainer}>
-          <TouchableOpacity 
-            style={[styles.typeButton, roleType === 'dealer' && styles.typeButtonActive]}
-            onPress={() => { setRoleType('dealer'); setStep(1); }}
-          >
-            <Text style={[styles.typeButtonText, roleType === 'dealer' && styles.typeButtonTextActive]}>Dealer</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.typeButton, roleType === 'sales' && styles.typeButtonActive]}
-            onPress={() => { setRoleType('sales'); setStep(1); }}
-          >
-            <Text style={[styles.typeButtonText, roleType === 'sales' && styles.typeButtonTextActive]}>Sales</Text>
-          </TouchableOpacity>
-        </View>
-
-        {roleType === 'dealer' ? (
-          // DEALER FORM
-          step === 1 ? (
-            <>
+        {/* Dealer Form (Sales Registration is moved to Admin Web) */}
+        {step === 1 ? (
+          <>
               <View style={styles.accountTypeContainer}>
                 <TouchableOpacity 
                   style={[styles.typeButton, accountType === 'personal' && styles.typeButtonActive]}
@@ -512,19 +552,7 @@ export default function RegisterScreen() {
               </TouchableOpacity>
             </View>
           )
-        ) : (
-          // SALES FORM
-          <>
-            <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Nama Lengkap" value={salesName} onChangeText={setSalesName} />
-            <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Nomor Handphone (Aktif)" keyboardType="phone-pad" value={salesPhone} onChangeText={setSalesPhone} />
-            <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Nomor KTP (NIK)" keyboardType="number-pad" value={salesKtp} onChangeText={setSalesKtp} />
-            <TextInput style={styles.input} placeholderTextColor="#94a3b8" placeholder="Buat Password" secureTextEntry value={salesPassword} onChangeText={setSalesPassword} />
-            
-            <TouchableOpacity style={styles.button} onPress={handleRegisterSales} disabled={loading}>
-              {loading ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Daftar Sebagai Sales</Text>}
-            </TouchableOpacity>
-          </>
-        )}
+        }
 
         <View style={styles.loginContainer}>
           <Text style={styles.loginText}>Sudah punya akun? </Text>

@@ -83,6 +83,8 @@ interface PendingProfile {
 interface Region {
   id: string;
   name: string;
+  city_name?: string;
+  district_name?: string;
 }
 
 interface Profile {
@@ -204,7 +206,7 @@ export default function DealersPage() {
     if (user?.email) setAdminEmail(user.email);
     
     // Fetch regions
-    const { data: regData } = await supabase.from('regions').select('id, name');
+    const { data: regData } = await supabase.from('regions').select('id, name, city_name, district_name');
     if (regData) {
       setRegions(regData);
       if (regData.length > 0) setNewRegionId(regData[0].id);
@@ -1832,7 +1834,9 @@ export default function DealersPage() {
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-semibold text-gray-800"
                   >
                     {regions.map((reg) => (
-                      <option key={reg.id} value={reg.id}>{reg.name}</option>
+                      <option key={reg.id} value={reg.id}>
+                        {reg.name} {reg.city_name ? `- ${reg.city_name}` : ''} {reg.district_name ? `- ${reg.district_name}` : ''}
+                      </option>
                     ))}
                   </select>
                 </div>
