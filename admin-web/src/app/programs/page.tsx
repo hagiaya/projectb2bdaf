@@ -897,41 +897,21 @@ export default function ProgramsPage() {
                         {prog.title}
                       </h3>
 
-                      {/* Khusus BARANG_SUPPORT: Highlight Katalog Etalase & Display */}
-                      {prog.program_type === 'BARANG_SUPPORT' ? (
-                        <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 mb-4">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
-                              <Tag size={13} className="text-amber-600" /> Katalog Pilihan Dealer:
-                            </span>
-                            <span className="text-xs font-black bg-amber-400 text-slate-950 px-2 py-0.5 rounded">
-                              {itemsCount} Item Support
-                            </span>
-                          </div>
-                          <p className="text-xs text-amber-800 font-medium">
-                            Minimal Pembelian: <strong>500 Ribu s/d 25 Juta</strong>
-                          </p>
-                          <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">
-                            Etalase Showcase, Rak Jumbo, Rak Dinding, Running Text LED, Kursi, dll.
+                      {/* Target & Reward Box (Sama Untuk Semua Program) */}
+                      <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3.5 mb-4">
+                        <div className="flex justify-between items-center mb-1.5">
+                          <span className="text-[11px] font-semibold text-emerald-800">Target Belanja Toko:</span>
+                          <span className="text-sm font-black text-emerald-700">
+                            Rp {Number(prog.target_amount).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                        <div className="pt-2 border-t border-emerald-100/70">
+                          <span className="text-[11px] font-bold text-slate-700 block mb-0.5">Hadiah Reward:</span>
+                          <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                            🎁 {prog.reward_description}
                           </p>
                         </div>
-                      ) : (
-                        /* Target & Reward Box */
-                        <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-3.5 mb-4">
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-[11px] font-semibold text-emerald-800">Target Belanja Toko:</span>
-                            <span className="text-sm font-black text-emerald-700">
-                              Rp {Number(prog.target_amount).toLocaleString('id-ID')}
-                            </span>
-                          </div>
-                          <div className="pt-2 border-t border-emerald-100/70">
-                            <span className="text-[11px] font-bold text-slate-700 block mb-0.5">Hadiah Reward:</span>
-                            <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                              🎁 {prog.reward_description}
-                            </p>
-                          </div>
-                        </div>
-                      )}
+                      </div>
 
                       <p className="text-xs text-slate-500 line-clamp-2 mb-4 leading-relaxed">
                         {prog.description || 'Tidak ada deskripsi tambahan.'}
@@ -957,15 +937,6 @@ export default function ProgramsPage() {
                         </div>
                       </div>
 
-                      {/* KHUSUS PROGRAM SUPPORT: TOMBOL KELOLA PRODUK SUPPORT */}
-                      {prog.program_type === 'BARANG_SUPPORT' && adminRole === 'SUPER_ADMIN' && (
-                        <button
-                          onClick={() => openSupportModal(prog)}
-                          className="w-full mb-2.5 py-2 px-3 bg-amber-400 hover:bg-amber-500 text-slate-950 font-extrabold rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-                        >
-                          <Sliders size={14} /> Kelola Produk Support & Min. Pembelian ({itemsCount} Item)
-                        </button>
-                      )}
 
                       {/* Action Buttons */}
                       <div className="flex gap-2">
