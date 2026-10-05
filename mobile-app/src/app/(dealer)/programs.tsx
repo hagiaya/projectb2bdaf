@@ -1240,24 +1240,24 @@ export default function DealerProgramsScreen() {
                       <Text style={styles.rewardDesc}>{prog.reward_description}</Text>
                     </View>
 
-                    {/* KHUSUS PROGRAM BARANG_SUPPORT: Pilihan Interaktif 10 Item DAP */}
+                    {/* KHUSUS PROGRAM BARANG_SUPPORT: Pilihan Interaktif Item DAP */}
                     {prog.program_type === 'BARANG_SUPPORT' && (
                       <View style={styles.interactiveSelectorBox}>
                         <View style={styles.interactiveSelectorHeader}>
                           <Feather name="layers" size={16} color="#15803d" />
                           <View style={{ flex: 1 }}>
                             <Text style={styles.interactiveSelectorTitle}>
-                              🎁 Pilihan 10 Item Display & Etalase Resmi DAP
+                              🎁 Pilihan Produk Reward Target
                             </Text>
                             <Text style={styles.interactiveSelectorSub}>
                               {isEnrolledInThisProg
-                                ? 'Ketuk salah satu barang untuk mengganti pilihan display toko Anda:'
-                                : 'Pilih salah satu barang display. Target belanja toko Anda otomatis mengikuti minimal belanja item:'}
+                                ? 'Ketuk salah satu barang untuk mengganti pilihan reward Anda:'
+                                : 'Pilih salah satu reward. Target belanja toko Anda otomatis menyesuaikan dengan pilihan produk di bawah ini:'}
                             </Text>
                           </View>
                         </View>
 
-                        {/* Horizontal Scroll of 10 DAP Display Items */}
+                        {/* Horizontal Scroll of Reward Items */}
                         <ScrollView
                           horizontal
                           showsHorizontalScrollIndicator={false}

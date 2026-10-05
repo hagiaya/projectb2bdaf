@@ -1671,7 +1671,7 @@ export default function DealersPage() {
                         }`}
                       >
                         <ShieldAlert size={16} className="text-red-600" />
-                        Hapus Akses
+                        Jadikan Non-Kredit
                       </button>
                     </div>
                   </div>
