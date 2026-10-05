@@ -129,7 +129,7 @@ export const DEFAULT_SUPPORT_ITEMS: SupportItem[] = [
 interface DealerProgram {
   id: string;
   title: string;
-  program_type: 'BARANG_SUPPORT' | 'TRIP' | 'CASHBACK';
+  program_type: 'BARANG_SUPPORT' | 'TRIP' | 'CASHBACK' | 'HADIAH_DOORPRIZE';
   description: string;
   target_amount: number;
   reward_description: string;
@@ -170,7 +170,7 @@ export default function DealerProgramsScreen() {
   const [currentDealerId, setCurrentDealerId] = useState<string | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [currentDealerProfile, setCurrentDealerProfile] = useState<any>(null);
-  const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'BARANG_SUPPORT' | 'TRIP' | 'CASHBACK' | 'MY_PROGRAMS'>('ALL');
+  const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'BARANG_SUPPORT' | 'TRIP' | 'CASHBACK' | 'HADIAH_DOORPRIZE' | 'MY_PROGRAMS'>('ALL');
 
   // Support Item Form State (Pendaftaran / Pengajuan)
   const [applicationModalVisible, setApplicationModalVisible] = useState(false);
@@ -1056,6 +1056,14 @@ export default function DealerProgramsScreen() {
           bg: '#fef3c7',
           border: '#fde68a',
         };
+      case 'HADIAH_DOORPRIZE':
+        return {
+          label: 'Hadiah / Doorprize',
+          icon: 'gift',
+          color: '#7e22ce', // purple-700
+          bg: '#faf5ff', // purple-50
+          border: '#e9d5ff', // purple-200
+        };
       default:
         return {
           label: type,
@@ -1116,6 +1124,8 @@ export default function DealerProgramsScreen() {
             { key: 'ALL', label: 'Semua Program' },
             { key: 'BARANG_SUPPORT', label: '🎁 Display & Etalase' },
             { key: 'TRIP', label: '✈️ Trip Liburan' },
+            { key: 'CASHBACK', label: '💰 Cashback' },
+            { key: 'HADIAH_DOORPRIZE', label: '🎉 Doorprize' },
             { key: 'MY_PROGRAMS', label: `🏆 Program Saya (${myParticipants.length})` },
           ].map((tab) => (
             <TouchableOpacity

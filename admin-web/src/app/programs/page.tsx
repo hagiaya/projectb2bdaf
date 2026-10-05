@@ -132,7 +132,7 @@ const DEFAULT_SUPPORT_ITEMS: SupportItem[] = [
 interface DealerProgram {
   id: string;
   title: string;
-  program_type: 'BARANG_SUPPORT' | 'TRIP' | 'CASHBACK';
+  program_type: 'BARANG_SUPPORT' | 'TRIP' | 'CASHBACK' | 'HADIAH_DOORPRIZE';
   description: string;
   target_amount: number;
   reward_description: string;
@@ -190,7 +190,7 @@ export default function ProgramsPage() {
   const [isProgramModalOpen, setIsProgramModalOpen] = useState(false);
   const [editingProgramId, setEditingProgramId] = useState<string | null>(null);
   const [formTitle, setFormTitle] = useState('');
-  const [formType, setFormType] = useState<'BARANG_SUPPORT' | 'TRIP' | 'CASHBACK'>('BARANG_SUPPORT');
+  const [formType, setFormType] = useState<'BARANG_SUPPORT' | 'TRIP' | 'CASHBACK' | 'HADIAH_DOORPRIZE'>('BARANG_SUPPORT');
   const [formTarget, setFormTarget] = useState('');
   const [formReward, setFormReward] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -614,6 +614,14 @@ export default function ProgramsPage() {
           text: 'text-amber-800',
           border: 'border-amber-200',
         };
+      case 'HADIAH_DOORPRIZE':
+        return {
+          label: 'Hadiah / Doorprize',
+          icon: Gift,
+          bg: 'bg-purple-50',
+          text: 'text-purple-800',
+          border: 'border-purple-200',
+        };
       default:
         return {
           label: type,
@@ -809,6 +817,7 @@ export default function ProgramsPage() {
                 { key: 'BARANG_SUPPORT', label: '🎁 Barang Support (Etalase & Display)' },
                 { key: 'TRIP', label: '✈️ Trip Liburan' },
                 { key: 'CASHBACK', label: '💰 Program Cashback' },
+                { key: 'HADIAH_DOORPRIZE', label: '🎉 Hadiah / Doorprize' },
               ].map((filter) => (
                 <button
                   key={filter.key}
@@ -1520,12 +1529,13 @@ export default function ProgramsPage() {
                 </label>
                 <select
                   value={formType}
-                  onChange={(e) => setFormType(e.target.value as unknown as 'BARANG_SUPPORT' | 'TRIP' | 'CASHBACK')}
+                  onChange={(e) => setFormType(e.target.value as any)}
                   className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold bg-white"
                 >
                   <option value="BARANG_SUPPORT">🎁 Barang Support Toko (Etalase, Display, Rak, Signage)</option>
                   <option value="TRIP">✈️ Trip Jalan-jalan / Liburan Luar Negeri</option>
                   <option value="CASHBACK">💰 Program Cashback Tunai</option>
+                  <option value="HADIAH_DOORPRIZE">🎉 Program Hadiah / Doorprize</option>
                 </select>
               </div>
 
