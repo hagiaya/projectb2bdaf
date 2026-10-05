@@ -441,7 +441,15 @@ export default function OrdersPage() {
   };
 
   // ─── GENERATE INVOICE PDF ──────────────────────────────────────────────
-  const handleGenerateInvoicePDF = (order: Order, items: OrderItem[]) => {
+  const handleGenerateInvoicePDF = async (order: Order, items: OrderItem[]) => {
+    // Load Logo
+    const logoImg = new Image();
+    logoImg.src = '/logo.png';
+    await new Promise((resolve) => {
+      logoImg.onload = resolve;
+      logoImg.onerror = resolve; // Continue even if logo fails to load
+    });
+
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
     // Header
@@ -450,7 +458,24 @@ export default function OrdersPage() {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text(`INVOICE / ORDER DETAIL - ${order.order_number}`, 14, 14);
+
+    // Attempt to add logo
+    try {
+      if (logoImg.width > 0) {
+        // Logo successfully loaded
+        // Calculate aspect ratio
+        const imgRatio = logoImg.width / logoImg.height;
+        const targetHeight = 12;
+        const targetWidth = targetHeight * imgRatio;
+        
+        doc.addImage(logoImg, 'PNG', 14, 5, targetWidth, targetHeight);
+        doc.text(`INVOICE / ORDER DETAIL - ${order.order_number}`, 14 + targetWidth + 6, 14);
+      } else {
+        doc.text(`INVOICE / ORDER DETAIL - ${order.order_number}`, 14, 14);
+      }
+    } catch (e) {
+      doc.text(`INVOICE / ORDER DETAIL - ${order.order_number}`, 14, 14);
+    }
 
     doc.setTextColor(30, 41, 59);
     doc.setFontSize(10);
