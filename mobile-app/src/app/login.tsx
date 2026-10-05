@@ -114,8 +114,6 @@ export default function LoginScreen() {
         } else {
           throw new Error('Server tidak mengembalikan sesi login.');
         }
-
-        router.replace('/(dealer)/home');
       } else {
         // Password verification (Sales or Dealer)
         let loginEmail = raw;
@@ -157,24 +155,32 @@ export default function LoginScreen() {
             throw new Error('Kata sandi salah atau akun tidak ditemukan.');
           }
         }
-
-        // Verify role of logged in user
-        if (!loginResult.data.user) {
-          throw new Error('Gagal login: User tidak ditemukan');
-        }
-        
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', loginResult.data.user.id)
-          .single();
-
-        if (profile?.role === 'SALES' || profile?.role === 'SPV') {
-          router.replace('/(sales)');
-        } else {
-          router.replace('/(dealer)/home');
-        }
       }
+
+      // Verify role & approval status of logged in user (Applies to both OTP and Password)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error('Gagal mendapatkan sesi login.');
+      }
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, approval_status')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profile?.approval_status !== 'APPROVED') {
+        await supabase.auth.signOut();
+        const roleName = (profile?.role === 'SALES' || profile?.role === 'SPV') ? 'Sales' : 'Toko / Dealer';
+        throw new Error(`Akun ${roleName} Anda belum diverifikasi oleh admin. Harap tunggu verifikasi.`);
+      }
+
+      if (profile?.role === 'SALES' || profile?.role === 'SPV') {
+        router.replace('/(sales)');
+      } else {
+        router.replace('/(dealer)/home');
+      }
+
     } catch (err: any) {
       Alert.alert('Gagal Masuk', err.message);
     } finally {

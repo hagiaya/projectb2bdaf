@@ -79,7 +79,11 @@ BEGIN
         updated_at,
         raw_app_meta_data,
         raw_user_meta_data,
-        is_super_admin
+        is_super_admin,
+        confirmation_token,
+        recovery_token,
+        email_change_token_new,
+        email_change
       )
       VALUES (
         new_user_id,
@@ -93,7 +97,11 @@ BEGIN
         now(),
         '{"provider":"email","providers":["email"]}'::jsonb,
         json_build_object('role', upper(p_role), 'full_name', p_full_name, 'phone_number', v_clean_phone)::jsonb,
-        FALSE
+        FALSE,
+        '',
+        '',
+        '',
+        ''
       );
 
       -- Buat data identity agar bisa login dengan password
