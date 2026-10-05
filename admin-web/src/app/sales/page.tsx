@@ -68,7 +68,7 @@ interface SalesRep {
 interface Region {
   id: string;
   name: string;
-  city_name?: string;
+
   district_name?: string;
 }
 
@@ -152,7 +152,7 @@ export default function SalesPage() {
     setLoading(true);
     try {
       // 1. Fetch Regions
-      const { data: regData } = await supabase.from('regions').select('id, name, city_name, district_name').order('name');
+      const { data: regData } = await supabase.from('regions').select('id, name').order('name');
       if (regData) setRegions(regData);
 
       // 2. Fetch Dealers (including profile_id to exclude dealers from candidate list)
@@ -180,7 +180,7 @@ export default function SalesPage() {
           team_bonus_pct,
           created_at,
           profiles (id, full_name, phone_number, role, approval_status),
-          regions:regions!sales_region_id_fkey (id, name, city_name, district_name),
+          regions:regions!sales_region_id_fkey (id, name),
           spv:spv_id (
             profiles (full_name)
           )
@@ -201,7 +201,7 @@ export default function SalesPage() {
             status,
             created_at,
             profiles (id, full_name, phone_number, role, approval_status),
-            regions:regions!sales_region_id_fkey (id, name, city_name, district_name)
+            regions:regions!sales_region_id_fkey (id, name)
           `)
           .order('created_at', { ascending: false });
         sData = fallbackData;
@@ -269,7 +269,7 @@ export default function SalesPage() {
             direct_commission_pct,
             team_bonus_pct,
             profiles (id, full_name, phone_number, role, approval_status),
-            regions:regions!sales_region_id_fkey (id, name, city_name, district_name),
+            regions:regions!sales_region_id_fkey (id, name),
             spv:spv_id (
               profiles (full_name)
             )
@@ -1074,7 +1074,7 @@ export default function SalesPage() {
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all group cursor-pointer"
                       >
                         <MapPin size={12} className="text-emerald-600" />
-                        <span>{sales.regions?.name ? `${sales.regions.name} ${sales.regions.city_name ? '- ' + sales.regions.city_name : ''}` : 'Belum diatur'}</span>
+                        <span>{sales.regions?.name ? sales.regions.name : 'Belum diatur'}</span>
                         <Edit2 size={11} className="opacity-0 group-hover:opacity-100 text-slate-400 ml-1" />
                       </button>
                     </td>
@@ -1287,40 +1287,21 @@ export default function SalesPage() {
               Atur wilayah operasional untuk: <b className="text-slate-800">{activeSalesForRegion.profiles?.full_name}</b>
             </p>
 
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">PROVINSI</label>
-                <select
-                  value={selectedEditProvince}
-                  onChange={(e) => {
-                    setSelectedEditProvince(e.target.value);
-                    setSelectedNewRegion('');
-                  }}
-                  className="w-full px-4 py-3 bg-slate-50 border border-gray-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                >
-                  <option value="">-- Pilih Provinsi --</option>
-                  {Array.from(new Set(regions.map(r => r.name))).sort().map(prov => (
-                    <option key={prov} value={prov}>{prov}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">KOTA / KABUPATEN</label>
+              <div className="col-span-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-2">PILIH WILAYAH / AREA</label>
                 <select
                   value={selectedNewRegion}
                   onChange={(e) => setSelectedNewRegion(e.target.value)}
-                  disabled={!selectedEditProvince}
-                  className="w-full px-4 py-3 bg-slate-50 border border-gray-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-gray-200"
+                  className="w-full px-4 py-3 bg-slate-50 border border-gray-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 >
                   <option value="">-- Belum Ditugaskan --</option>
-                  {regions.filter(r => r.name === selectedEditProvince).sort((a,b) => (a.city_name || '').localeCompare(b.city_name || '')).map((r) => (
+                  {regions.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.city_name || r.name}
+                      {r.name}
                     </option>
                   ))}
                 </select>
               </div>
-            </div>
 
             <div className="flex justify-end gap-2">
               <button
@@ -1523,35 +1504,18 @@ export default function SalesPage() {
               </div>
 
               {/* 3. Wilayah Kerja */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 mb-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">PROVINSI</label>
-                  <select
-                    value={selectedProvince}
-                    onChange={(e) => {
-                      setSelectedProvince(e.target.value);
-                      setNewSalesRegion('');
-                    }}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-gray-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  >
-                    <option value="">-- Pilih Provinsi --</option>
-                    {Array.from(new Set(regions.map(r => r.name))).sort().map(prov => (
-                      <option key={prov} value={prov}>{prov}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">KOTA / KABUPATEN</label>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">PILIH WILAYAH / AREA</label>
                   <select
                     value={newSalesRegion}
                     onChange={(e) => setNewSalesRegion(e.target.value)}
-                    disabled={!selectedProvince}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-gray-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-gray-200"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-gray-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                   >
-                    <option value="">-- Pilih Kota/Kabupaten --</option>
-                    {regions.filter(r => r.name === selectedProvince).sort((a,b) => (a.city_name || '').localeCompare(b.city_name || '')).map((reg) => (
+                    <option value="">-- Tanpa Wilayah --</option>
+                    {regions.map((reg) => (
                       <option key={reg.id} value={reg.id}>
-                        {reg.city_name || reg.name}
+                        {reg.name}
                       </option>
                     ))}
                   </select>
@@ -1576,7 +1540,7 @@ export default function SalesPage() {
                         .filter((s) => s.is_spv)
                         .map((spv) => (
                           <option key={spv.id} value={spv.id}>
-                            SPV {spv.profiles?.full_name} ({spv.regions?.name ? `${spv.regions.name} ${spv.regions.city_name ? '- ' + spv.regions.city_name : ''}` : 'Seluruh Area'})
+                            SPV {spv.profiles?.full_name} ({spv.regions?.name ? spv.regions.name : 'Seluruh Area'})
                           </option>
                         ))}
                     </select>
@@ -1903,7 +1867,7 @@ CREATE POLICY "Allow authenticated full access to returns" ON public.returns FOR
 
             <form onSubmit={handleSaveSpvAndSalary} className="space-y-4">
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600">
-                Personil: <b className="text-slate-900">{activeSalesForSpv.profiles?.full_name}</b> ({activeSalesForSpv.regions?.name ? `${activeSalesForSpv.regions.name} ${activeSalesForSpv.regions.city_name ? '- ' + activeSalesForSpv.regions.city_name : ''}` : 'Tanpa Wilayah'})
+                Personil: <b className="text-slate-900">{activeSalesForSpv.profiles?.full_name}</b> ({activeSalesForSpv.regions?.name ? activeSalesForSpv.regions.name : 'Tanpa Wilayah'})
               </div>
 
               {/* Pilihan Jabatan */}
@@ -1960,7 +1924,7 @@ CREATE POLICY "Allow authenticated full access to returns" ON public.returns FOR
                         .filter((s) => s.is_spv && s.id !== activeSalesForSpv.id)
                         .map((spv) => (
                           <option key={spv.id} value={spv.id}>
-                            SPV {spv.profiles?.full_name} ({spv.regions?.name ? `${spv.regions.name} ${spv.regions.city_name ? '- ' + spv.regions.city_name : ''}` : 'Seluruh Area'})
+                            SPV {spv.profiles?.full_name} ({spv.regions?.name ? spv.regions.name : 'Seluruh Area'})
                           </option>
                         ))}
                     </select>
@@ -2187,7 +2151,7 @@ CREATE POLICY "Allow authenticated full access to returns" ON public.returns FOR
                   <option value="">-- Tanpa Wilayah --</option>
                   {regions.map((reg) => (
                     <option key={reg.id} value={reg.id}>
-                      {reg.name} {reg.city_name ? `- ${reg.city_name}` : ''}
+                      {reg.name}
                     </option>
                   ))}
                 </select>

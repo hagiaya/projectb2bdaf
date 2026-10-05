@@ -1,0 +1,3 @@
+ALTER TABLE public.regions
+ADD COLUMN IF NOT EXISTS city_name VARCHAR(100),
+ADD COLUMN IF NOT EXISTS district_name VARCHAR(100);

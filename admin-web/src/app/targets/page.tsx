@@ -96,8 +96,8 @@ export default function TargetsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   
   // Filters
-  const [periodMonth, setPeriodMonth] = useState('September');
-  const [periodYear, setPeriodYear] = useState(2026);
+  const [periodMonth, setPeriodMonth] = useState(MONTHS[new Date().getMonth()]);
+  const [periodYear, setPeriodYear] = useState(new Date().getFullYear());
   const [selectedSpvFilter, setSelectedSpvFilter] = useState('ALL');
 
   // Modal: Create/Edit Sales Target
@@ -137,7 +137,7 @@ export default function TargetsPage() {
           daily_visit_target,
           work_days_per_month,
           profiles (full_name, phone_number),
-          regions (id, name)
+          regions:regions!sales_region_id_fkey (id, name)
         `)
         .eq('status', 'ACTIVE');
 
@@ -161,7 +161,7 @@ export default function TargetsPage() {
             is_spv,
             spv_id,
             profiles (full_name, phone_number),
-            regions (id, name),
+            regions:regions!sales_region_id_fkey (id, name),
             spv:spv_id (
               profiles (full_name)
             )

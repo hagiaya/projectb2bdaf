@@ -94,7 +94,7 @@ serve(async (req) => {
     const { data: profileData } = await supabase
       .from('profiles')
       .select('id')
-      .eq('phone_number', phone) // or use phoneEmail if profiles doesn't have phone
+      .eq('phone_number', normalizedPhone) // or use phoneEmail if profiles doesn't have phone
       .maybeSingle();
 
     // If profile check doesn't work, let's try to query auth.users if possible (usually not allowed via standard client, but we can try to create user)

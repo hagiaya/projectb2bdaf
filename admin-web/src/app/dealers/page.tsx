@@ -83,7 +83,6 @@ interface PendingProfile {
 interface Region {
   id: string;
   name: string;
-  city_name?: string;
   district_name?: string;
 }
 
@@ -207,7 +206,7 @@ export default function DealersPage() {
     if (user?.email) setAdminEmail(user.email);
     
     // Fetch regions
-    const { data: regData } = await supabase.from('regions').select('id, name, city_name, district_name');
+    const { data: regData } = await supabase.from('regions').select('id, name');
     if (regData) {
       setRegions(regData);
       if (regData.length > 0) setNewRegionId(regData[0].id);
@@ -1831,34 +1830,17 @@ export default function DealersPage() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">PROVINSI WILAYAH <span className="text-red-500">*</span></label>
-                  <select 
-                    value={selectedProvince} 
-                    onChange={(e) => {
-                      setSelectedProvince(e.target.value);
-                      setNewRegionId('');
-                    }}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-semibold text-gray-800"
-                  >
-                    <option value="">-- Pilih Provinsi --</option>
-                    {Array.from(new Set(regions.map(r => r.name))).sort().map(prov => (
-                      <option key={prov} value={prov}>{prov}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">KOTA / KABUPATEN <span className="text-red-500">*</span></label>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">PILIH WILAYAH / AREA <span className="text-red-500">*</span></label>
                   <select 
                     value={newRegionId} 
                     onChange={(e) => setNewRegionId(e.target.value)}
-                    disabled={!selectedProvince}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-semibold text-gray-800 disabled:bg-gray-100"
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-semibold text-gray-800"
                   >
-                    <option value="">-- Pilih Kota/Kabupaten --</option>
-                    {regions.filter(r => r.name === selectedProvince).sort((a,b) => (a.city_name || '').localeCompare(b.city_name || '')).map((reg) => (
+                    <option value="">-- Pilih Wilayah --</option>
+                    {regions.map((reg) => (
                       <option key={reg.id} value={reg.id}>
-                        {reg.city_name || reg.name}
+                        {reg.name}
                       </option>
                     ))}
                   </select>

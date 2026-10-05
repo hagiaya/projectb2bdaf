@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { useWishlist } from '../../context/WishlistContext';
 import { useCart } from '../../context/CartContext';
 import NewBadge from '../../components/NewBadge';
+import ComingSoonBadge from '../../components/ComingSoonBadge';
 import { supabase } from '../../lib/supabase';
 import FallbackImage from '../../components/FallbackImage';
 import { useSafeBottom } from '../../hooks/useSafeBottom';

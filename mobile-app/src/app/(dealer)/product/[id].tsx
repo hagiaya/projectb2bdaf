@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, ActivityIndicator, TextInput, Modal, SafeAreaView } from 'react-native';
+import { Zoomable } from '@likashefqet/react-native-image-zoom';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../../lib/supabase';
@@ -379,7 +380,13 @@ export default function ProductDetailScreen() {
               >
                 {images.map((url: string, index: number) => (
                   <View key={index} style={{ width, justifyContent: 'center', alignItems: 'center' }}>
-                    <FallbackImage uri={url} style={{ width: width, height: width }} resizeMode="contain" />
+                    <Zoomable
+                      minScale={1}
+                      maxScale={4}
+                      isDoubleTapEnabled={true}
+                    >
+                      <FallbackImage uri={url} style={{ width: width, height: width }} resizeMode="contain" />
+                    </Zoomable>
                   </View>
                 ))}
               </ScrollView>
