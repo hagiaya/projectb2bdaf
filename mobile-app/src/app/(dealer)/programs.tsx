@@ -686,22 +686,8 @@ export default function DealerProgramsScreen() {
       return;
     }
 
-    if (program.program_type === 'BARANG_SUPPORT') {
-      const items =
-        program.support_items && program.support_items.length > 0
-          ? program.support_items
-          : DEFAULT_SUPPORT_ITEMS;
-      setProgramToEnroll(program);
-      setSelectedSupportItem(items[7]); // Default DLP17 Rak Jumbo
-      setBeforePhotoUri(null);
-      setBeforePhotoBase64(null);
-      setPlacementNotes('');
-      setApplicationModalVisible(true);
-      return;
-    }
-
-    // Direct enrollment for TRIP or CASHBACK
-    const confirmPrompt = `Konfirmasi Pendaftaran:\n\nAnda akan bergabung pada "${program.title}" dengan target belanja Rp ${Number(
+    // Direct enrollment for all program types
+    const confirmPrompt = `Konfirmasi Pendaftaran:\n\nAnda akan mengajukan program "${program.title}" dengan target belanja Rp ${Number(
       program.target_amount
     ).toLocaleString('id-ID')}.\n\nPerhatian: Anda hanya dapat mengikuti 1 program aktif. Lanjutkan?`;
     if (Platform.OS === 'web') {
@@ -709,9 +695,9 @@ export default function DealerProgramsScreen() {
         submitGeneralEnrollment(program);
       }
     } else {
-      Alert.alert('Konfirmasi Pendaftaran Program', confirmPrompt, [
+      Alert.alert('Konfirmasi Pengajuan Program', confirmPrompt, [
         { text: 'Batal', style: 'cancel' },
-        { text: 'Daftar Sekarang', style: 'default', onPress: () => submitGeneralEnrollment(program) },
+        { text: 'Ajukan Program', style: 'default', onPress: () => submitGeneralEnrollment(program) },
       ]);
     }
   };
@@ -1250,171 +1236,7 @@ export default function DealerProgramsScreen() {
                       <Text style={styles.rewardDesc}>{prog.reward_description}</Text>
                     </View>
 
-                    {/* KHUSUS PROGRAM BARANG_SUPPORT: Pilihan Interaktif Item DAP */}
-                    {prog.program_type === 'BARANG_SUPPORT' && (
-                      <View style={styles.interactiveSelectorBox}>
-                        <View style={styles.interactiveSelectorHeader}>
-                          <Feather name="layers" size={16} color="#15803d" />
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.interactiveSelectorTitle}>
-                              🎁 Pilihan Produk Reward Target
-                            </Text>
-                            <Text style={styles.interactiveSelectorSub}>
-                              {isEnrolledInThisProg
-                                ? 'Ketuk salah satu barang untuk mengganti pilihan reward Anda:'
-                                : 'Pilih salah satu reward. Target belanja toko Anda otomatis menyesuaikan dengan pilihan produk di bawah ini:'}
-                            </Text>
-                          </View>
-                        </View>
 
-                        {/* Horizontal Scroll of Reward Items */}
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          contentContainerStyle={styles.itemChipsScroll}
-                        >
-                          {(prog.support_items || DEFAULT_SUPPORT_ITEMS).map((item) => {
-                            const isCurrentChosen =
-                              chosenItem?.id === item.id ||
-                              (chosenItem?.name && chosenItem.name.toUpperCase().includes(item.code.toUpperCase()));
-
-                            return (
-                              <TouchableOpacity
-                                key={item.id}
-                                activeOpacity={0.8}
-                                style={[
-                                  styles.itemChipCard,
-                                  isCurrentChosen && styles.itemChipCardActive,
-                                ]}
-                                onPress={() => handleSelectSupportItem(prog, item, participant)}
-                              >
-                                <View style={styles.itemChipTop}>
-                                  <Text
-                                    style={[
-                                      styles.itemChipCode,
-                                      isCurrentChosen && styles.itemChipCodeActive,
-                                    ]}
-                                  >
-                                    {item.code}
-                                  </Text>
-                                  {isCurrentChosen && (
-                                    <View style={styles.itemChipActiveBadge}>
-                                      <Feather name="check" size={10} color="white" />
-                                      <Text style={styles.itemChipActiveBadgeText}>Dipilih</Text>
-                                    </View>
-                                  )}
-                                </View>
-
-                                {item.image_url && (
-                                  <Image 
-                                    source={{ uri: item.image_url }} 
-                                    style={{ width: '100%', height: 70, borderRadius: 6, marginBottom: 8, backgroundColor: '#f1f5f9' }} 
-                                    contentFit="cover" 
-                                  />
-                                )}
-
-                                <Text
-                                  style={[
-                                    styles.itemChipName,
-                                    isCurrentChosen && styles.itemChipNameActive,
-                                  ]}
-                                  numberOfLines={2}
-                                >
-                                  {item.name}
-                                </Text>
-
-                                <View
-                                  style={[
-                                    styles.itemChipPriceBadge,
-                                    isCurrentChosen && styles.itemChipPriceBadgeActive,
-                                  ]}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.itemChipPriceText,
-                                      isCurrentChosen && styles.itemChipPriceTextActive,
-                                    ]}
-                                  >
-                                    Min. Rp {(item.min_purchase / 1000000).toFixed(item.min_purchase % 1000000 === 0 ? 0 : 1)} Jt
-                                  </Text>
-                                </View>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </ScrollView>
-
-                        {/* Action buttons row under chips */}
-                        <View style={styles.itemSelectorActionRow}>
-                          <TouchableOpacity
-                            style={styles.openItemModalBtn}
-                            onPress={() => {
-                              setActiveProgramForChangeItem(prog);
-                              setActiveParticipantForChangeItem(participant || null);
-                              const cur = (prog.support_items || DEFAULT_SUPPORT_ITEMS).find(
-                                (i) =>
-                                  i.id === chosenItem?.id ||
-                                  (chosenItem?.name && chosenItem.name.toUpperCase().includes(i.code.toUpperCase()))
-                              );
-                              setSelectedItemInModal(cur || DEFAULT_SUPPORT_ITEMS[0]);
-                              setModalItemQty(chosenItem?.qty || 1);
-                              setChangeItemModalVisible(true);
-                            }}
-                          >
-                            <Feather name="grid" size={14} color="#15803d" />
-                            <Text style={styles.openItemModalBtnText}>
-                              {isEnrolledInThisProg ? 'Ganti / Buka Rincian 10 Item' : 'Lihat Rincian & Spesifikasi 10 Item'}
-                            </Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={styles.openPosterMiniBtn}
-                            onPress={() => setPosterModalVisible(true)}
-                          >
-                            <Feather name="image" size={14} color="#047857" />
-                            <Text style={styles.openPosterMiniBtnText}>Poster Brosur</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    )}
-
-                    {/* CHOSEN ITEM DISPLAY (IF ENROLLED) */}
-                    {isEnrolledInThisProg && chosenItem?.name && (
-                      <View style={styles.chosenItemBox}>
-                        <View style={styles.chosenItemHeader}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                            <Feather name="check-circle" size={15} color="#16a34a" />
-                            <Text style={styles.chosenItemHeaderTitle}>Item Support Pilihan Toko Anda:</Text>
-                          </View>
-                          <TouchableOpacity
-                            style={styles.changeItemQuickBtn}
-                            onPress={() => {
-                              setActiveProgramForChangeItem(prog);
-                              setActiveParticipantForChangeItem(participant);
-                              const cur = (prog.support_items || DEFAULT_SUPPORT_ITEMS).find(
-                                (i) =>
-                                  i.id === chosenItem?.id ||
-                                  (chosenItem?.name && chosenItem.name.toUpperCase().includes(i.code.toUpperCase()))
-                              );
-                              setSelectedItemInModal(cur || DEFAULT_SUPPORT_ITEMS[0]);
-                              setModalItemQty(chosenItem?.qty || 1);
-                              setChangeItemModalVisible(true);
-                            }}
-                          >
-                            <Feather name="refresh-cw" size={11} color="#15803d" />
-                            <Text style={styles.changeItemQuickBtnText}>Ganti Pilihan</Text>
-                          </TouchableOpacity>
-                        </View>
-                        <Text style={styles.chosenItemName}>
-                          {chosenItem.name} {chosenItem.qty && chosenItem.qty > 1 ? `(${chosenItem.qty} Unit)` : ''}
-                        </Text>
-                        <View style={styles.chosenItemTargetRow}>
-                          <Text style={styles.chosenItemTargetLabel}>Target Khusus Item Ini:</Text>
-                          <Text style={styles.chosenItemTargetValue}>
-                            Rp {Number(effectiveTarget).toLocaleString('id-ID')}
-                          </Text>
-                        </View>
-                      </View>
-                    )}
 
                     {/* DOKUMENTASI FOTO SECTION (BEFORE & AFTER) IF ENROLLED */}
                     {isEnrolledInThisProg && (participant?.photo_before_url || participant?.photo_after_url) && (
@@ -1694,9 +1516,7 @@ export default function DealerProgramsScreen() {
                         >
                           <Feather name="plus-circle" size={16} color="white" />
                           <Text style={styles.enrollBtnText}>
-                            {prog.program_type === 'BARANG_SUPPORT'
-                              ? 'Ajukan Program Support (Rak / Etalase)'
-                              : 'Ikuti Program Ini'}
+                            Ajukan Program
                           </Text>
                         </TouchableOpacity>
                       )}
