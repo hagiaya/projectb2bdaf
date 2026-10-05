@@ -8,6 +8,8 @@ interface Region {
   id: string;
   code: string;
   name: string;
+  city_name?: string;
+  district_name?: string;
   manager_name: string;
   status: string;
   created_at?: string;
@@ -21,16 +23,58 @@ export default function RegionsPage() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRegion, setEditingRegion] = useState<Region | null>(null);
+  const [regionType, setRegionType] = useState<'SALES' | 'SPV'>('SALES');
   const [newCode, setNewCode] = useState('');
   const [newName, setNewName] = useState('');
+  const [newCityName, setNewCityName] = useState('');
+  const [newDistrictName, setNewDistrictName] = useState('');
   const [newManager, setNewManager] = useState('');
   const [newStatus, setNewStatus] = useState('ACTIVE');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // API Data
+  const [provinces, setProvinces] = useState<{id: string, name: string}[]>([]);
+  const [cities, setCities] = useState<{id: string, name: string}[]>([]);
+  const [selectedProvinceId, setSelectedProvinceId] = useState('');
+
   useEffect(() => {
     fetchData();
+    fetchProvinces();
   }, []);
+
+  const fetchProvinces = async () => {
+    try {
+      const res = await fetch('https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json');
+      const data = await res.json();
+      setProvinces(data);
+    } catch (err) {
+      console.error('Failed to fetch provinces', err);
+    }
+  };
+
+  const fetchCities = async (provinceId: string) => {
+    try {
+      const res = await fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${provinceId}.json`);
+      const data = await res.json();
+      setCities(data);
+    } catch (err) {
+      console.error('Failed to fetch cities', err);
+    }
+  };
+
+  // Handle province change
+  const handleProvinceChange = (provinceId: string, provinceName: string) => {
+    setSelectedProvinceId(provinceId);
+    setNewName(provinceName); // 'name' acts as province
+    setNewCityName(''); // reset city
+    if (provinceId) {
+      fetchCities(provinceId);
+    } else {
+      setCities([]);
+    }
+  };
+
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -47,21 +91,39 @@ export default function RegionsPage() {
 
   const handleOpenAdd = () => {
     setEditingRegion(null);
+    setRegionType('SALES');
     setNewCode('');
     setNewName('');
+    setNewCityName('');
+    setNewDistrictName('');
     setNewManager('');
     setNewStatus('ACTIVE');
     setErrorMessage(null);
+    setSelectedProvinceId('');
+    setCities([]);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (region: Region) => {
     setEditingRegion(region);
+    setRegionType(region.city_name ? 'SALES' : 'SPV');
     setNewCode(region.code);
     setNewName(region.name);
+    setNewCityName(region.city_name || '');
+    setNewDistrictName(region.district_name || '');
     setNewManager(region.manager_name || '');
     setNewStatus(region.status || 'ACTIVE');
     setErrorMessage(null);
+    
+    // Find province ID by name to load cities
+    const prov = provinces.find(p => p.name === region.name);
+    if (prov) {
+      setSelectedProvinceId(prov.id);
+      fetchCities(prov.id);
+    } else {
+      setSelectedProvinceId('');
+      setCities([]);
+    }
     
     setIsModalOpen(true);
   };
@@ -82,6 +144,8 @@ export default function RegionsPage() {
     const payload = {
       code: newCode.trim().toUpperCase(),
       name: newName.trim(),
+      city_name: newCityName.trim() || null,
+      district_name: newDistrictName.trim() || null,
       manager_name: newManager.trim() || null,
       status: newStatus,
     };
@@ -193,7 +257,8 @@ export default function RegionsPage() {
           <thead>
             <tr className="bg-white text-gray-500 text-xs uppercase tracking-wider">
               <th className="p-5 font-semibold border-b border-gray-100">Kode</th>
-              <th className="p-5 font-semibold border-b border-gray-100">Nama Wilayah</th>
+              <th className="p-5 font-semibold border-b border-gray-100">Provinsi</th>
+              <th className="p-5 font-semibold border-b border-gray-100">Kota / Kabupaten</th>
               <th className="p-5 font-semibold border-b border-gray-100">Regional Manager</th>
               <th className="p-5 font-semibold border-b border-gray-100">Status</th>
               <th className="p-5 font-semibold border-b border-gray-100 text-right">Aksi</th>
@@ -224,6 +289,7 @@ export default function RegionsPage() {
                     {region.name}
                   </div>
                 </td>
+                <td className="p-5 font-medium text-slate-700">{region.city_name || '-'}</td>
                 <td className="p-5 font-medium text-slate-700">{region.manager_name || '-'}</td>
                 <td className="p-5">
                   <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${region.status === 'ACTIVE' ? 'bg-emerald-100/50 text-emerald-700 border border-emerald-200/50' : 'bg-slate-100/80 text-slate-600 border border-slate-200'}`}>
@@ -280,19 +346,98 @@ export default function RegionsPage() {
               )}
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2 sm:col-span-1">
+                <div className="col-span-2">
                   <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">
-                    NAMA WILAYAH / AREA <span className="text-red-500">*</span>
+                    TIPE WILAYAH
                   </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="misal: Jabodetabek, Jawa Barat"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium bg-white"
-                  />
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRegionType('SALES');
+                        setNewName('');
+                        setNewCityName('');
+                        setSelectedProvinceId('');
+                      }}
+                      className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+                        regionType === 'SALES' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      Untuk Sales (Provinsi & Kota)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRegionType('SPV');
+                        setNewName('');
+                        setNewCityName('');
+                        setSelectedProvinceId('');
+                      }}
+                      className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+                        regionType === 'SPV' ? 'bg-white shadow-sm text-blue-700' : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      Untuk SPV (Area Bebas)
+                    </button>
+                  </div>
                 </div>
+
+                {regionType === 'SALES' ? (
+                  <>
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">
+                        PROVINSI <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        required
+                        value={selectedProvinceId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          const name = e.target.options[e.target.selectedIndex].text;
+                          handleProvinceChange(id, id ? name : '');
+                        }}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium bg-white"
+                      >
+                        <option value="">-- Pilih Provinsi --</option>
+                        {provinces.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">
+                        KOTA / KABUPATEN <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        required
+                        value={newCityName}
+                        onChange={(e) => setNewCityName(e.target.value)}
+                        disabled={!selectedProvinceId}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium bg-white disabled:bg-gray-100"
+                      >
+                        <option value="">-- Pilih Kota/Kabupaten --</option>
+                        {cities.map(c => (
+                          <option key={c.id} value={c.name}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">
+                      NAMA AREA SPV <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="misal: Jabodetabek, Jawa Barat, Area Timur"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-medium bg-white"
+                    />
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">
                     KODE WILAYAH <span className="text-red-500">*</span>
