@@ -978,7 +978,7 @@ export default function DealersPage() {
           </div>
           
           <div className="p-4 border-t border-slate-100 text-xs text-slate-500 flex justify-between items-center bg-white">
-            <span>Menampilkan <b>{filteredDealers.length}</b> dari total {dealers.length} dealer</span>
+            <span>Menampilkan <b>{filteredDealers.length}</b> dari total {dealers.filter(d => d.status !== 'INACTIVE').length} dealer</span>
           </div>
         </div>
       )}
