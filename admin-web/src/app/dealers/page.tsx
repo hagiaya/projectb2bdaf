@@ -67,7 +67,7 @@ interface Dealer {
   email?: string;
   sales_id?: string | null;
   sales?: { id: string; profiles?: { full_name: string } };
-  profiles?: { full_name: string; approval_status?: string; phone_number?: string };
+  profiles?: { full_name: string; approval_status?: string; phone_number?: string; ktp_url?: string; npwp_url?: string };
   regions?: { name: string };
 }
 
@@ -167,7 +167,7 @@ export default function DealersPage() {
 
   // Dealer Khusus & Credit Limit Management Modal State
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
-  const [modalSubTab, setModalSubTab] = useState<'info' | 'special' | 'credit' | 'logs'>('info');
+  const [modalSubTab, setModalSubTab] = useState<'info' | 'special' | 'credit' | 'logs' | 'docs'>('info');
   const [selectedDealerCredit, setSelectedDealerCredit] = useState<Dealer | null>(null);
   const [creditAction, setCreditAction] = useState<'keep' | 'increase' | 'decrease' | 'set' | 'disable'>('keep');
   const [creditAmountInput, setCreditAmountInput] = useState('');
@@ -251,7 +251,7 @@ export default function DealersPage() {
     // Fetch dealers (APPROVED) with sales relation
     const { data: dlrData, error } = await supabase
       .from('dealers')
-      .select('*, profiles(full_name, approval_status, phone_number), regions(name), sales(id, profiles(full_name))')
+      .select('*, profiles(full_name, approval_status, phone_number, ktp_url, npwp_url), regions(name), sales(id, profiles(full_name))')
       .order('created_at', { ascending: false });
       
     if (!error && dlrData) {
@@ -260,7 +260,7 @@ export default function DealersPage() {
       // Fallback if app_version column doesn't exist yet
       const { data: fallbackData } = await supabase
         .from('dealers')
-        .select('*, profiles(full_name, approval_status, phone_number), regions(name), sales(id, profiles(full_name))')
+        .select('*, profiles(full_name, approval_status, phone_number, ktp_url, npwp_url), regions(name), sales(id, profiles(full_name))')
         .order('created_at', { ascending: false });
       if (fallbackData) {
         setDealers(fallbackData as any);
@@ -1472,9 +1472,60 @@ export default function DealersPage() {
                 <History size={14} />
                 📜 Riwayat Mutasi ({creditLogs.length})
               </button>
+              <button
+                type="button"
+                onClick={() => setModalSubTab('docs')}
+                className={`pb-3 px-3.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                  modalSubTab === 'docs'
+                    ? 'border-indigo-600 text-indigo-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <FileText size={14} />
+                📄 Dokumen
+              </button>
             </div>
 
             <form onSubmit={handleSaveCreditLimit} className="flex-1 overflow-y-auto flex flex-col">
+              {modalSubTab === 'docs' && (
+                <div className="p-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">FOTO KTP</label>
+                      {selectedDealerCredit.profiles?.ktp_url ? (
+                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white p-2">
+                          <img src={selectedDealerCredit.profiles.ktp_url} alt="KTP" className="w-full h-auto object-contain max-h-64 rounded-lg" />
+                          <a href={selectedDealerCredit.profiles.ktp_url} target="_blank" rel="noreferrer" className="mt-3 block text-center text-xs font-bold text-blue-600 hover:text-blue-800">
+                            Lihat Gambar Penuh
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="border border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-white">
+                          <FileText size={24} className="text-slate-300 mb-2" />
+                          <p className="text-sm text-slate-500 font-medium">KTP tidak tersedia</p>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">FOTO NPWP</label>
+                      {selectedDealerCredit.profiles?.npwp_url ? (
+                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white p-2">
+                          <img src={selectedDealerCredit.profiles.npwp_url} alt="NPWP" className="w-full h-auto object-contain max-h-64 rounded-lg" />
+                          <a href={selectedDealerCredit.profiles.npwp_url} target="_blank" rel="noreferrer" className="mt-3 block text-center text-xs font-bold text-blue-600 hover:text-blue-800">
+                            Lihat Gambar Penuh
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="border border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-white">
+                          <FileText size={24} className="text-slate-300 mb-2" />
+                          <p className="text-sm text-slate-500 font-medium">NPWP tidak tersedia</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* TAB 0: INFORMASI DASAR */}
               {modalSubTab === 'info' && (
                 <div className="p-6 space-y-4">
