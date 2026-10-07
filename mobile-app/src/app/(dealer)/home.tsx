@@ -1021,7 +1021,7 @@ const styles = StyleSheet.create({
   bannerSubtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginBottom: 14 },
   bannerBtn: { backgroundColor: 'rgba(255,255,255,0.25)', alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   bannerBtnText: { color: 'white', fontWeight: '700', fontSize: 13 },
-  dots: { flexDirection: 'row', justifyContent: 'center', marginTop: 10, gap: 6 },
+  dots: { flexDirection: 'row', justifyContent: 'center', marginTop: 10, gap: 6, flexWrap: 'wrap', paddingHorizontal: 16 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#dcf0c3' },
   dotActive: { backgroundColor: '#8ec44a', width: 18 },
 

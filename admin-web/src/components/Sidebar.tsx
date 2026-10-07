@@ -36,7 +36,7 @@ const menuItems = [
   { name: 'Master Wilayah', href: '/regions', icon: Map },
   { name: 'Manajemen Order', href: '/orders', icon: ShoppingCart },
   { name: 'Manajemen Retur', href: '/returns', icon: ArrowLeftRight, badgeKey: 'returns' },
-  { name: 'Promo & Diskon', href: '/promo', icon: Gift },
+  { name: 'Informasi & Promo', href: '/promo', icon: Gift },
   { name: 'Pengaturan Pembayaran', href: '/payment', icon: CreditCard },
   { name: 'Laporan', href: '/reports', icon: FileText },
   { name: 'Pengguna & Role', href: '/users', icon: Settings },

@@ -26,6 +26,7 @@ export default function PromoPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newCategory, setNewCategory] = useState<'PROMO' | 'INFORMASI'>('PROMO');
   const [newTitle, setNewTitle] = useState('');
   const [newCode, setNewCode] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -166,9 +167,9 @@ export default function PromoPage() {
 
       const payload: any = {
         title: newTitle.trim(),
-        code: newCode.trim().toUpperCase() || `BNR${Date.now().toString().slice(-6)}`,
+        code: newCategory === 'INFORMASI' ? `INFO-${Date.now().toString().slice(-6)}` : (newCode.trim().toUpperCase() || `BNR${Date.now().toString().slice(-6)}`),
         description: newDesc.trim() || null,
-        discount_percent: parseFloat(newDiscount) || 0,
+        discount_percent: newCategory === 'INFORMASI' ? 0 : (parseFloat(newDiscount) || 0),
       };
 
       if (finalBannerUrl) {
@@ -270,7 +271,7 @@ export default function PromoPage() {
             <div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl">
               <Tag size={24} />
             </div>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Manajemen Promo & Diskon</h1>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Informasi & Promo</h1>
           </div>
           <p className="text-sm text-slate-500 font-medium">
             Kelola kode voucher diskon dan periode promosi belanja untuk dealer terhubung ke Supabase.
@@ -460,23 +461,56 @@ export default function PromoPage() {
             </div>
 
             <form onSubmit={handleAddPromo} className="p-6 space-y-4 overflow-y-auto">
+              {/* Kategori */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide uppercase">
+                  Pilih Kategori <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 cursor-pointer transition-all ${newCategory === 'INFORMASI' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-200 hover:border-emerald-200'}`}>
+                    <input type="radio" name="category" value="INFORMASI" checked={newCategory === 'INFORMASI'} onChange={() => setNewCategory('INFORMASI')} className="sr-only" />
+                    <span className="font-bold">Hanya Informasi (Banner)</span>
+                  </label>
+                  <label className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 cursor-pointer transition-all ${newCategory === 'PROMO' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-200 hover:border-emerald-200'}`}>
+                    <input type="radio" name="category" value="PROMO" checked={newCategory === 'PROMO'} onChange={() => setNewCategory('PROMO')} className="sr-only" />
+                    <span className="font-bold">Promo Voucher Diskon</span>
+                  </label>
+                </div>
+              </div>
+
               {/* Judul Promo */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide uppercase">
-                  Judul / Nama Promo Atau Banner <span className="text-red-500">*</span>
+                  Judul / Nama {newCategory === 'INFORMASI' ? 'Informasi' : 'Promo'} <span className="text-red-500">*</span>
                 </label>
                 <input 
                   type="text" 
                   required 
                   value={newTitle} 
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Misal: Promo Spesial atau Banner Info"
+                  placeholder={newCategory === 'INFORMASI' ? 'Misal: Info Libur Lebaran' : 'Misal: Promo Spesial Akhir Tahun'}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-semibold text-slate-800"
                 />
               </div>
 
-              {/* Kode Promo & Diskon */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Keterangan */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide uppercase">
+                  Deskripsi / Keterangan <span className="text-slate-400 lowercase normal-case text-[10px]">(opsional)</span>
+                </label>
+                <textarea 
+                  rows={3}
+                  value={newDesc} 
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  placeholder="Deskripsi singkat..."
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-medium text-slate-800"
+                />
+              </div>
+
+              {/* Fields Khusus Promo */}
+              {newCategory === 'PROMO' && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide uppercase">
                     Kode Promo <span className="text-slate-400 lowercase normal-case text-[10px]">(opsional)</span>
@@ -546,6 +580,9 @@ export default function PromoPage() {
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-medium text-slate-800"
                 />
               </div>
+
+                </>
+              )}
 
               {/* Upload Banner JPG / Poster */}
               <div>
