@@ -466,13 +466,41 @@ export default function OrdersPage() {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(logoImg, 0, 0, width, height);
-          const imgData = canvas.toDataURL('image/png');
           
-          const imgRatio = width / height;
-          const targetHeight = 45;
-          const targetWidth = targetHeight * imgRatio;
-          doc.addImage(imgData, 'PNG', 14, currentY, targetWidth, targetHeight);
-          currentY += 25; // Don't push text down too much because of logo padding
+          // Auto crop transparent padding
+          const imgDataObj = ctx.getImageData(0, 0, width, height);
+          const data = imgDataObj.data;
+          let minX = width, minY = height, maxX = 0, maxY = 0;
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const alpha = data[(y * width + x) * 4 + 3];
+              if (alpha > 10) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+              }
+            }
+          }
+          
+          if (maxX >= minX && maxY >= minY) {
+            const cropW = maxX - minX;
+            const cropH = maxY - minY;
+            const cropCanvas = document.createElement('canvas');
+            cropCanvas.width = cropW;
+            cropCanvas.height = cropH;
+            const cropCtx = cropCanvas.getContext('2d');
+            if (cropCtx) {
+              cropCtx.putImageData(ctx.getImageData(minX, minY, cropW, cropH), 0, 0);
+              const croppedImgData = cropCanvas.toDataURL('image/png');
+              
+              const imgRatio = cropW / cropH;
+              const targetHeight = 18; // 1.8 cm tall (pure logo)
+              const targetWidth = targetHeight * imgRatio;
+              doc.addImage(croppedImgData, 'PNG', 14, currentY, targetWidth, targetHeight);
+              currentY += targetHeight + 8;
+            }
+          }
         }
       }
     } catch (e) {
