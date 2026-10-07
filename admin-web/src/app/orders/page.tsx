@@ -456,14 +456,27 @@ export default function OrdersPage() {
     
     // Attempt to add logo
     try {
-      if (logoImg.width > 0) {
-        const imgRatio = logoImg.width / logoImg.height;
-        const targetHeight = 16;
-        const targetWidth = targetHeight * imgRatio;
-        doc.addImage(logoImg, 'PNG', 14, currentY, targetWidth, targetHeight);
-        currentY += targetHeight + 8;
+      if (logoImg.width > 0 || logoImg.naturalWidth > 0) {
+        const width = logoImg.naturalWidth || logoImg.width || 1000;
+        const height = logoImg.naturalHeight || logoImg.height || 1000;
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(logoImg, 0, 0, width, height);
+          const imgData = canvas.toDataURL('image/png');
+          
+          const imgRatio = width / height;
+          const targetHeight = 16;
+          const targetWidth = targetHeight * imgRatio;
+          doc.addImage(imgData, 'PNG', 14, currentY, targetWidth, targetHeight);
+          currentY += targetHeight + 8;
+        }
       }
     } catch (e) {
+      console.error("Gagal menambahkan logo ke PDF:", e);
       // ignore
     }
 
