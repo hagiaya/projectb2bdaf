@@ -673,10 +673,6 @@ export default function DealerProgramsScreen() {
         dealer_id: currentDealerId || 'demo-dealer-id',
         current_progress_amount: 0,
         status: 'ENROLLED',
-        applicant_name: currentUserProfile?.full_name || 'Dealer',
-        applicant_store_name: currentDealerProfile?.store_name || 'Toko',
-        applicant_location: currentDealerProfile?.address || '',
-        applicant_phone: currentUserProfile?.phone_number || currentDealerProfile?.phone || '',
       };
 
       if (!currentDealerId) {
@@ -756,10 +752,6 @@ export default function DealerProgramsScreen() {
           selected_item_qty: qty,
           custom_target_amount: targetAmount,
           photo_before_url: uploadedBeforeUrl || beforePhotoUri,
-          applicant_name: applicantName,
-          applicant_store_name: storeName,
-          applicant_location: storeLocation,
-          applicant_phone: storePhone,
           claim_notes: snapshotNotes,
         };
         setMyParticipants([newRecord, ...myParticipants]);
@@ -781,10 +773,6 @@ export default function DealerProgramsScreen() {
         selected_item_qty: qty,
         custom_target_amount: targetAmount,
         photo_before_url: uploadedBeforeUrl,
-        applicant_name: applicantName,
-        applicant_store_name: storeName,
-        applicant_location: storeLocation,
-        applicant_phone: storePhone,
         claim_notes: snapshotNotes,
       };
 
