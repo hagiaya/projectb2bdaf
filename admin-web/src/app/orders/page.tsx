@@ -398,7 +398,7 @@ export default function OrdersPage() {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
     // Header
-    doc.setFillColor(22, 163, 74); // emerald-600
+    doc.setFillColor(142, 196, 74); // DAP Logo green
     doc.rect(0, 0, 297, 22, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(14);
@@ -425,7 +425,7 @@ export default function OrdersPage() {
       head: [['No', 'Nomor Order', 'Tanggal', 'Toko Dealer', 'PIC', 'Metode Bayar', 'Total', 'Status', 'Status Bayar']],
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      headStyles: { fillColor: [142, 196, 74], textColor: 255, fontStyle: 'bold', fontSize: 8 },
       bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
       alternateRowStyles: { fillColor: [240, 247, 230] },
       columnStyles: {
@@ -452,58 +452,74 @@ export default function OrdersPage() {
 
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-    // Header
-    doc.setFillColor(22, 163, 74); // emerald-600
-    doc.rect(0, 0, 210, 22, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-
+    let currentY = 14;
+    
     // Attempt to add logo
     try {
       if (logoImg.width > 0) {
-        // Logo successfully loaded
-        // Calculate aspect ratio
         const imgRatio = logoImg.width / logoImg.height;
-        const targetHeight = 12;
+        const targetHeight = 16;
         const targetWidth = targetHeight * imgRatio;
-        
-        doc.addImage(logoImg, 'PNG', 14, 5, targetWidth, targetHeight);
-        doc.text(`INVOICE / ORDER DETAIL - ${order.order_number}`, 14 + targetWidth + 6, 14);
-      } else {
-        doc.text(`INVOICE / ORDER DETAIL - ${order.order_number}`, 14, 14);
+        doc.addImage(logoImg, 'PNG', 14, currentY, targetWidth, targetHeight);
+        currentY += targetHeight + 8;
       }
     } catch (e) {
-      doc.text(`INVOICE / ORDER DETAIL - ${order.order_number}`, 14, 14);
+      // ignore
     }
 
+    // Left side: Penjual
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139); // slate-500
+    doc.setFont('helvetica', 'normal');
+    doc.text('Penjual', 14, currentY);
+    
+    doc.setTextColor(30, 41, 59); // slate-800
+    doc.text(':', 30, currentY);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PT. RAJA AKSESORIS INDONESIA', 32, currentY);
+
+    // Right side: Order Receipt / INVOICE
+    doc.setTextColor(30, 41, 59); // slate-800
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('ORDER RECEIPT', 196, 20, { align: 'right' });
+    
+    doc.setTextColor(142, 196, 74); // DAP Logo green
+    doc.setFontSize(12);
+    doc.text(order.order_number, 196, 26, { align: 'right' });
+    
+    // Line separator
+    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.line(14, currentY + 6, 196, currentY + 6);
+    
+    // Reset for Store Info
+    const infoY = currentY + 16;
     doc.setTextColor(30, 41, 59);
     doc.setFontSize(10);
     
     // Store Info
     doc.setFont('helvetica', 'bold');
-    doc.text('Informasi Toko:', 14, 32);
+    doc.text('Pembeli:', 110, infoY);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Nama Toko: ${order.dealers?.store_name || '-'}`, 14, 38);
-    doc.text(`PIC: ${order.dealers?.profiles?.full_name || '-'}`, 14, 44);
-    doc.text(`Telepon: ${order.dealers?.profiles?.phone_number || '-'}`, 14, 50);
+    doc.text(`Toko: ${order.dealers?.store_name || '-'}`, 110, infoY + 6);
+    doc.text(`PIC: ${order.dealers?.profiles?.full_name || '-'}`, 110, infoY + 12);
     
     // Order Info
     doc.setFont('helvetica', 'bold');
-    doc.text('Informasi Order:', 110, 32);
+    doc.text('Informasi Order:', 14, infoY);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Tanggal: ${new Date(order.created_at).toLocaleString('id-ID')}`, 110, 38);
-    doc.text(`Status: ${order.status}`, 110, 44);
-    doc.text(`Metode Pembayaran: ${order.payment_method || '-'}`, 110, 50);
+    doc.text(`Tanggal: ${new Date(order.created_at).toLocaleString('id-ID')}`, 14, infoY + 6);
+    doc.text(`Status: ${order.status}`, 14, infoY + 12);
+    doc.text(`Metode Pembayaran: ${order.payment_method || '-'}`, 14, infoY + 18);
 
     // Shipping Address
     doc.setFont('helvetica', 'bold');
-    doc.text('Alamat Pengiriman:', 14, 60);
+    doc.text('Alamat Pengiriman:', 110, infoY + 18);
     doc.setFont('helvetica', 'normal');
-    const splitAddress = doc.splitTextToSize(order.dealers?.address || '-', 180);
-    doc.text(splitAddress, 14, 66);
+    const splitAddress = doc.splitTextToSize(order.dealers?.address || '-', 86);
+    doc.text(splitAddress, 110, infoY + 24);
 
-    let startY = 70 + (splitAddress.length * 5);
+    let startY = infoY + 24 + (splitAddress.length * 5) + 6;
 
     const tableData = items.map((item, idx) => [
       idx + 1,
@@ -519,7 +535,7 @@ export default function OrdersPage() {
       head: [['No', 'Nama Produk', 'SKU', 'Qty', 'Harga Satuan', 'Total']],
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+      headStyles: { fillColor: [142, 196, 74], textColor: 255, fontStyle: 'bold', fontSize: 9 },
       bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
       columnStyles: {
         0: { cellWidth: 10, halign: 'center' },

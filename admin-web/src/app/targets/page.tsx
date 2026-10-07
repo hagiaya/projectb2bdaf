@@ -288,7 +288,7 @@ export default function TargetsPage() {
   const handleOpenEdit = (t: SalesTarget) => {
     setEditingTarget(t);
     setSelectedSalesId(t.sales_id);
-    setTargetAmount(String(t.target_amount || 100000000));
+    setTargetAmount(String(t.target_amount ?? 100000000));
     setTargetDailyVisits(String(t.daily_visit_target || 6));
     setTargetWorkDays(String(t.work_days || 26));
     setNotes(t.notes || '');
@@ -308,7 +308,7 @@ export default function TargetsPage() {
       const dVisits = Number(targetDailyVisits) || 6;
       const wDays = Number(targetWorkDays) || 26;
       const monthlyVisits = dVisits * wDays;
-      const tAmount = Number(targetAmount) || 100000000;
+      const tAmount = targetAmount === '' ? 100000000 : Number(targetAmount);
 
       const payload = {
         sales_id: selectedSalesId,

@@ -60,6 +60,7 @@ interface Dealer {
     vip_support?: boolean;
   };
   special_dealer_notes?: string;
+  app_version?: string;
   status: string;
   created_at: string;
   sales_id?: string | null;
@@ -237,6 +238,15 @@ export default function DealersPage() {
       
     if (!error && dlrData) {
       setDealers(dlrData as any);
+    } else if (error && error.code === '42703' && error.message?.includes('app_version')) {
+      // Fallback if app_version column doesn't exist yet
+      const { data: fallbackData } = await supabase
+        .from('dealers')
+        .select('*, profiles(full_name, approval_status, phone_number), regions(name), sales(id, profiles(full_name))')
+        .order('created_at', { ascending: false });
+      if (fallbackData) {
+        setDealers(fallbackData as any);
+      }
     }
 
     // Fetch pending profiles
@@ -610,10 +620,11 @@ export default function DealersPage() {
     return matchesRegion && matchesSearch && matchesCredit && matchesType;
   });
 
+  const activeDealersList = dealers.filter(d => d.status !== 'INACTIVE');
   const totalActiveDealers = dealers.filter(d => d.status === 'ACTIVE').length;
-  const totalSpecialDealers = dealers.filter(d => d.is_special_dealer).length;
-  const totalCreditEligible = dealers.filter(d => d.is_credit_eligible || d.credit_status === 'ACTIVE' || (d.credit_limit && d.credit_limit > 0)).length;
-  const totalPlafonKredit = dealers.reduce((sum, d) => sum + (d.credit_limit || 0), 0);
+  const totalSpecialDealers = activeDealersList.filter(d => d.is_special_dealer).length;
+  const totalCreditEligible = activeDealersList.filter(d => d.is_credit_eligible || d.credit_status === 'ACTIVE' || (d.credit_limit && d.credit_limit > 0)).length;
+  const totalPlafonKredit = activeDealersList.reduce((sum, d) => sum + (d.credit_limit || 0), 0);
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/50 p-8">
@@ -814,6 +825,7 @@ export default function DealersPage() {
                 <tr className="bg-slate-50/80 text-slate-500 text-xs uppercase tracking-wider font-bold border-b border-slate-200/70">
                   <th className="p-4 pl-6">ID / Toko</th>
                   <th className="p-4">Pemilik & Wilayah</th>
+                  <th className="p-4">Versi App</th>
                   <th className="p-4">Ketentuan Khusus</th>
                   <th className="p-4">Termin Kredit (TOP)</th>
                   <th className="p-4">Plafon & Sisa Limit</th>
@@ -822,9 +834,9 @@ export default function DealersPage() {
               </thead>
               <tbody className="text-sm divide-y divide-slate-100">
                 {isLoading ? (
-                  <tr><td colSpan={6} className="p-10 text-center text-slate-400">Memuat data dealer...</td></tr>
+                  <tr><td colSpan={7} className="p-10 text-center text-slate-400">Memuat data dealer...</td></tr>
                 ) : filteredDealers.length === 0 ? (
-                  <tr><td colSpan={6} className="p-10 text-center text-slate-400">Tidak ada dealer yang sesuai kriteria.</td></tr>
+                  <tr><td colSpan={7} className="p-10 text-center text-slate-400">Tidak ada dealer yang sesuai kriteria.</td></tr>
                 ) : filteredDealers.map((dealer) => {
                   const isSpecial = Boolean(dealer.is_special_dealer);
                   const hasCredit = Boolean(dealer.is_credit_eligible || dealer.credit_status === 'ACTIVE' || (dealer.credit_limit && dealer.credit_limit > 0));
@@ -868,6 +880,15 @@ export default function DealersPage() {
                             PIC: {dealer.sales.profiles.full_name}
                           </span>
                         )}
+                      </td>
+
+                      {/* Versi Aplikasi */}
+                      <td className="p-4">
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-bold ${
+                          dealer.app_version ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-slate-50 text-slate-400 border border-slate-200'
+                        }`}>
+                          {dealer.app_version || 'Belum Diketahui'}
+                        </span>
                       </td>
 
                       {/* Ketentuan Khusus & Akses */}

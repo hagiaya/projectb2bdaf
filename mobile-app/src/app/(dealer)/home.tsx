@@ -6,6 +6,7 @@ import {
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
+import * as Updates from 'expo-updates';
 import FallbackImage from '../../components/FallbackImage';
 import { useCart } from '../../context/CartContext';
 import { useSafeBottom } from '../../hooks/useSafeBottom';
@@ -246,11 +247,12 @@ export default function DealerHome() {
   // Real Notifications State
   const [notifications, setNotifications] = useState<any[]>([]);
   const unreadCount = notifications.filter(n => !n.is_read).length;
+  const [activeOrder, setActiveOrder] = useState<any>(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   useEffect(() => {
     fetchProducts();
     fetchProfile();
-    fetchNotifications();
   }, []);
 
   const fetchProducts = async () => {
@@ -292,14 +294,97 @@ export default function DealerHome() {
     const { data: dealerData } = await supabase.from('dealers').select('*').eq('profile_id', user.id).single();
     
     if (profileData) setProfile(profileData);
-    if (dealerData) setDealer(dealerData);
+    if (dealerData) {
+      setDealer(dealerData);
+      fetchActiveOrder(dealerData.id);
+      fetchNotifications(dealerData.id);
+
+      // Save App Version silently
+      const appVersion = Updates.updateId ? `OTA: ${Updates.updateId.substring(0, 8)}` : 'App Bawaan';
+      supabase.from('dealers').update({ app_version: appVersion }).eq('profile_id', user.id).then(({error}) => {
+        if (error) console.log("Failed updating app version:", error);
+      });
+    }
   };
 
-  const fetchNotifications = async () => {
+  const handleCheckUpdate = async () => {
+    try {
+      setIsCheckingUpdate(true);
+      const update = await Updates.checkForUpdateAsync();
+      if (update.isAvailable) {
+        Alert.alert('Update Tersedia', 'Aplikasi akan mendownload versi terbaru. Mohon tunggu...', [
+          { text: 'Batal', style: 'cancel' },
+          { 
+            text: 'Download & Install', 
+            onPress: async () => {
+              try {
+                await Updates.fetchUpdateAsync();
+                Alert.alert('Sukses', 'Aplikasi akan dimuat ulang untuk mengaplikasikan update.', [
+                  { text: 'OK', onPress: () => Updates.reloadAsync() }
+                ]);
+              } catch (e: any) {
+                Alert.alert('Gagal Download', e.message);
+              }
+            }
+          }
+        ]);
+      } else {
+        Alert.alert('Info', 'Anda sudah menggunakan versi terbaru.');
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Gagal mengecek update OTA.');
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const fetchActiveOrder = async (dealerId: string) => {
+    const { data } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('dealer_id', dealerId)
+      .in('status', ['PENDING', 'PROCESSING', 'PACKING', 'SHIPPED'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    if (data) {
+      setActiveOrder(data);
+    } else {
+      // Check if there's any recent completed order
+      const { data: recent } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('dealer_id', dealerId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (recent) setActiveOrder(recent);
+    }
+  };
+
+  const fetchNotifications = async (dealerId: string) => {
+    // Get all order numbers and return numbers for this dealer to filter notifications
+    const { data: orders } = await supabase.from('orders').select('order_number').eq('dealer_id', dealerId);
+    const { data: returns } = await supabase.from('returns').select('return_number').eq('dealer_id', dealerId);
+    
+    const references = [
+      ...(orders || []).map(o => o.order_number),
+      ...(returns || []).map(r => r.return_number)
+    ];
+
+    if (references.length === 0) {
+      setNotifications([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
+      .in('reference_id', references)
+      .eq('target_role', 'DEALER')
       .order('created_at', { ascending: false });
+      
     if (data && !error) {
       setNotifications(data);
     }
@@ -751,6 +836,17 @@ export default function DealerHome() {
               )}
 
               <TouchableOpacity 
+                style={[styles.logoutBtn, { backgroundColor: '#f1f5f9', marginBottom: 12 }]} 
+                onPress={handleCheckUpdate}
+                disabled={isCheckingUpdate}
+              >
+                <Feather name="refresh-cw" size={18} color="#475569" />
+                <Text style={[styles.logoutBtnText, { color: '#475569' }]}>
+                  {isCheckingUpdate ? 'Mengecek Update...' : 'Cek Update Aplikasi (OTA)'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
                 style={styles.logoutBtn} 
                 onPress={handleLogout}
               >
@@ -774,23 +870,33 @@ export default function DealerHome() {
             </View>
 
             <View style={{ paddingVertical: 12 }}>
-              <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#4a6b22' }}>No. Invoice: INV-20231024-001</Text>
-              <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Tanggal: 24 Oktober 2026</Text>
+              {!activeOrder ? (
+                 <Text style={{ fontSize: 14, color: '#64748b', textAlign: 'center', paddingVertical: 20 }}>Belum ada riwayat pesanan.</Text>
+              ) : (
+                <>
+                  <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#4a6b22' }}>No. Invoice: {activeOrder.order_number}</Text>
+                  <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Tanggal: {new Date(activeOrder.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</Text>
 
-              <View style={styles.trackSteps}>
-                <View style={styles.trackStepItem}>
-                  <View style={[styles.stepDot, styles.stepDotDone]} />
-                  <Text style={styles.stepTextDone}>Pesanan Dibuat (24 Oct 09:00)</Text>
-                </View>
-                <View style={styles.trackStepItem}>
-                  <View style={[styles.stepDot, styles.stepDotDone]} />
-                  <Text style={styles.stepTextDone}>Dikonfirmasi Gudang (24 Oct 10:30)</Text>
-                </View>
-                <View style={styles.trackStepItem}>
-                  <View style={[styles.stepDot, styles.stepDotActive]} />
-                  <Text style={styles.stepTextActive}>Dalam Kurir Pengiriman (Sukur Logistics)</Text>
-                </View>
-              </View>
+                  <View style={styles.trackSteps}>
+                    <View style={styles.trackStepItem}>
+                      <View style={[styles.stepDot, styles.stepDotDone]} />
+                      <Text style={styles.stepTextDone}>Pesanan Dibuat</Text>
+                    </View>
+                    <View style={styles.trackStepItem}>
+                      <View style={[styles.stepDot, ['PACKING', 'PROCESSING', 'SHIPPED', 'RECEIVED', 'COMPLETED'].includes(activeOrder.status) ? styles.stepDotDone : styles.stepDotActive]} />
+                      <Text style={['PACKING', 'PROCESSING', 'SHIPPED', 'RECEIVED', 'COMPLETED'].includes(activeOrder.status) ? styles.stepTextDone : styles.stepTextActive}>Dalam Proses / Pengemasan</Text>
+                    </View>
+                    <View style={styles.trackStepItem}>
+                      <View style={[styles.stepDot, ['SHIPPED', 'RECEIVED', 'COMPLETED'].includes(activeOrder.status) ? styles.stepDotDone : (['PACKING', 'PROCESSING'].includes(activeOrder.status) ? styles.stepDotActive : { backgroundColor: '#e2e8f0', borderWidth: 0 })]} />
+                      <Text style={['SHIPPED', 'RECEIVED', 'COMPLETED'].includes(activeOrder.status) ? styles.stepTextDone : (['PACKING', 'PROCESSING'].includes(activeOrder.status) ? styles.stepTextActive : { color: '#94a3b8', fontSize: 13 })}>Dalam Pengiriman Kurir</Text>
+                    </View>
+                    <View style={styles.trackStepItem}>
+                      <View style={[styles.stepDot, ['RECEIVED', 'COMPLETED'].includes(activeOrder.status) ? styles.stepDotDone : (activeOrder.status === 'SHIPPED' ? styles.stepDotActive : { backgroundColor: '#e2e8f0', borderWidth: 0 })]} />
+                      <Text style={['RECEIVED', 'COMPLETED'].includes(activeOrder.status) ? styles.stepTextDone : (activeOrder.status === 'SHIPPED' ? styles.stepTextActive : { color: '#94a3b8', fontSize: 13 })}>Pesanan Diterima</Text>
+                    </View>
+                  </View>
+                </>
+              )}
 
               <TouchableOpacity 
                 style={styles.fullOrdersBtn}

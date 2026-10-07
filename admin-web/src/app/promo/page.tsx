@@ -29,7 +29,7 @@ export default function PromoPage() {
   const [newTitle, setNewTitle] = useState('');
   const [newCode, setNewCode] = useState('');
   const [newDesc, setNewDesc] = useState('');
-  const [newDiscount, setNewDiscount] = useState('10');
+  const [newDiscount, setNewDiscount] = useState('');
   const [newMinPurchase, setNewMinPurchase] = useState('');
   const [newMaxDiscount, setNewMaxDiscount] = useState('');
   const [newExpiresAt, setNewExpiresAt] = useState('');
@@ -144,8 +144,8 @@ export default function PromoPage() {
 
   const handleAddPromo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newCode.trim() || !newDiscount) {
-      alert("Harap lengkapi Judul Promo, Kode Promo, dan Persentase Diskon.");
+    if (!newTitle.trim()) {
+      alert("Harap lengkapi Judul / Nama Promo atau Banner.");
       return;
     }
 
@@ -166,7 +166,7 @@ export default function PromoPage() {
 
       const payload: any = {
         title: newTitle.trim(),
-        code: newCode.trim().toUpperCase(),
+        code: newCode.trim().toUpperCase() || `BNR${Date.now().toString().slice(-6)}`,
         description: newDesc.trim() || null,
         discount_percent: parseFloat(newDiscount) || 0,
       };
@@ -214,7 +214,7 @@ export default function PromoPage() {
         setNewTitle('');
         setNewCode('');
         setNewDesc('');
-        setNewDiscount('10');
+        setNewDiscount('');
         setNewMinPurchase('');
         setNewMaxDiscount('');
         setNewExpiresAt('');
@@ -463,14 +463,14 @@ export default function PromoPage() {
               {/* Judul Promo */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide uppercase">
-                  Judul / Nama Promo <span className="text-red-500">*</span>
+                  Judul / Nama Promo Atau Banner <span className="text-red-500">*</span>
                 </label>
                 <input 
                   type="text" 
                   required 
                   value={newTitle} 
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Misal: Promo Spesial Dealer Baru"
+                  placeholder="Misal: Promo Spesial atau Banner Info"
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-semibold text-slate-800"
                 />
               </div>
@@ -479,30 +479,28 @@ export default function PromoPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide uppercase">
-                    Kode Promo <span className="text-red-500">*</span>
+                    Kode Promo <span className="text-slate-400 lowercase normal-case text-[10px]">(opsional)</span>
                   </label>
                   <input 
                     type="text" 
-                    required 
                     value={newCode} 
                     onChange={(e) => setNewCode(e.target.value.toUpperCase().replace(/\s/g, ''))}
-                    placeholder="HEMAT10"
+                    placeholder="Misal: HEMAT10"
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none uppercase font-extrabold text-emerald-800 tracking-wider"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide uppercase">
-                    Diskon (%) <span className="text-red-500">*</span>
+                    Diskon (%) <span className="text-slate-400 lowercase normal-case text-[10px]">(opsional)</span>
                   </label>
                   <input 
                     type="number" 
-                    required 
                     step="0.5"
-                    min="1"
+                    min="0"
                     max="100"
                     value={newDiscount} 
                     onChange={(e) => setNewDiscount(e.target.value)}
-                    placeholder="10"
+                    placeholder="0"
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-extrabold text-emerald-700"
                   />
                 </div>
@@ -582,7 +580,7 @@ export default function PromoPage() {
                   <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-xl bg-emerald-50/40 hover:bg-emerald-50/80 transition-all cursor-pointer group">
                     <Upload size={24} className="text-emerald-600 group-hover:scale-110 transition-transform mb-1.5" />
                     <span className="text-xs font-bold text-emerald-900">Pilih Foto Banner Promo (JPG / PNG)</span>
-                    <span className="text-[10px] text-slate-400 mt-0.5">Rekomendasi rasio lebar 16:9 (JPG, WebP, PNG)</span>
+                    <span className="text-[10px] text-slate-500 mt-0.5">Rekomendasi ukuran: <strong>1280x720 pixel</strong> (rasio 16:9)</span>
                     <input 
                       type="file" 
                       accept="image/jpeg,image/png,image/webp,image/jpg" 

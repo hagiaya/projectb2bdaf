@@ -275,47 +275,9 @@ export default function DealerProgramsScreen() {
       if (!progErr && progData && progData.length > 0) {
         loadedPrograms = progData.map((p: any) => ({
           ...p,
-          support_items:
-            p.support_items && p.support_items.length > 0
-              ? p.support_items
-              : p.program_type === 'BARANG_SUPPORT'
-              ? DEFAULT_SUPPORT_ITEMS
-              : undefined,
         }));
-      } else {
-        // Fallback default programs
-        loadedPrograms = [
-          {
-            id: '11111111-1111-1111-1111-111111111111',
-            title: 'Katalog Program Support DAP (Etalase & Display Toko)',
-            program_type: 'BARANG_SUPPORT',
-            description:
-              'Program bantuan etalase kaca & display resmi DAP! Pilih hadiah display toko Anda (Kursi, Rak Mini Kasir, Logo Gantung LED, Rak Putar, Rak Dinding, Rak Besar, Running Text LED, Rak Jumbo, Rak Island, hingga Etalase Showcase DAP) dengan akumulasi belanja pesanan.',
-            target_amount: 8000000,
-            reward_description:
-              '1 Unit Display/Etalase Pilihan Resmi DAP (Sesuai minimal akumulasi belanja yang dipilih)',
-            banner_url: 'https://images.unsplash.com/photo-1555421689-491a97ff2040?w=600',
-            start_date: '2026-09-01',
-            end_date: '2026-12-31',
-            status: 'ACTIVE',
-            support_items: DEFAULT_SUPPORT_ITEMS,
-          },
-          {
-            id: '22222222-2222-2222-2222-222222222222',
-            title: 'Mega Trip Liburan Eksklusif ke Bangkok 4D3N',
-            program_type: 'TRIP',
-            description:
-              'Kumpulkan omset belanja aksesoris Anda dan nikmati liburan mewah ke Bangkok Thailand bersama seluruh dealer terbaik DAP. Seluruh tiket pesawat PP, hotel bintang 5 & tur ditanggung penuh!',
-            target_amount: 120000000,
-            reward_description:
-              '1 Tiket All-In Tour Bangkok 4H3M (Tiket PP, Hotel Bintang 5, Full Board Meals, City Tour & Visa)',
-            banner_url: 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600',
-            start_date: '2026-09-01',
-            end_date: '2027-02-28',
-            status: 'ACTIVE',
-          },
-        ];
       }
+
       setPrograms(loadedPrograms);
 
       // 3. Fetch Participants for current dealer

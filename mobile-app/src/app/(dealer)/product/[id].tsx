@@ -19,6 +19,7 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isImageFullscreen, setIsImageFullscreen] = useState(false);
+  const [rotation, setRotation] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [variantQuantities, setVariantQuantities] = useState<Record<string, number>>({});
@@ -119,7 +120,7 @@ export default function ProductDetailScreen() {
                 style={styles.imageSlider}
               >
                 {images.map((url: string, index: number) => (
-                  <TouchableOpacity key={index} activeOpacity={0.9} onPress={() => setIsImageFullscreen(true)}>
+                  <TouchableOpacity key={index} activeOpacity={0.9} onPress={() => { setActiveImageIndex(index); setRotation(0); setIsImageFullscreen(true); }}>
                     <FallbackImage uri={url} style={styles.productImage} resizeMode="cover" />
                   </TouchableOpacity>
                 ))}
@@ -365,31 +366,41 @@ export default function ProductDetailScreen() {
               <Text style={styles.fullscreenTitle}>
                 {images.length > 1 ? `${activeImageIndex + 1} / ${images.length}` : ''}
               </Text>
-              <View style={{ width: 40 }} />
+              <TouchableOpacity onPress={() => setRotation(r => r + 90)} style={styles.fullscreenCloseBtn}>
+                <Feather name="rotate-cw" size={24} color="white" />
+              </TouchableOpacity>
             </View>
             
             <View style={styles.fullscreenImageContainer}>
-              <ScrollView 
-                horizontal 
-                pagingEnabled 
-                showsHorizontalScrollIndicator={false}
-                onScroll={onScroll}
-                scrollEventThrottle={16}
-                contentOffset={{ x: activeImageIndex * width, y: 0 }}
-                style={{ flex: 1 }}
-              >
-                {images.map((url: string, index: number) => (
-                  <View key={index} style={{ width, justifyContent: 'center', alignItems: 'center' }}>
-                    <Zoomable
-                      minScale={1}
-                      maxScale={4}
-                      isDoubleTapEnabled={true}
-                    >
-                      <FallbackImage uri={url} style={{ width: width, height: width }} resizeMode="contain" />
-                    </Zoomable>
+              {images.length > 1 && activeImageIndex > 0 && (
+                <TouchableOpacity 
+                  style={styles.fullscreenNavLeft}
+                  onPress={() => { setActiveImageIndex(i => i - 1); setRotation(0); }}
+                >
+                  <Feather name="chevron-left" size={32} color="white" />
+                </TouchableOpacity>
+              )}
+              
+              <View style={{ width, flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Zoomable
+                  minScale={1}
+                  maxScale={4}
+                  isDoubleTapEnabled={true}
+                >
+                  <View style={{ transform: [{ rotate: `${rotation}deg` }] }}>
+                    <FallbackImage uri={images[activeImageIndex]} style={{ width: width, height: width }} resizeMode="contain" />
                   </View>
-                ))}
-              </ScrollView>
+                </Zoomable>
+              </View>
+
+              {images.length > 1 && activeImageIndex < images.length - 1 && (
+                <TouchableOpacity 
+                  style={styles.fullscreenNavRight}
+                  onPress={() => { setActiveImageIndex(i => i + 1); setRotation(0); }}
+                >
+                  <Feather name="chevron-right" size={32} color="white" />
+                </TouchableOpacity>
+              )}
             </View>
           </SafeAreaView>
         </View>
@@ -590,5 +601,25 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  fullscreenNavLeft: {
+    position: 'absolute',
+    left: 16,
+    top: '50%',
+    marginTop: -24,
+    zIndex: 10,
+    padding: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 24,
+  },
+  fullscreenNavRight: {
+    position: 'absolute',
+    right: 16,
+    top: '50%',
+    marginTop: -24,
+    zIndex: 10,
+    padding: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 24,
   },
 });

@@ -1,0 +1,1 @@
+ALTER TABLE dealers ADD COLUMN IF NOT EXISTS app_version TEXT;

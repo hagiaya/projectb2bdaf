@@ -101,16 +101,18 @@ export default function OrdersScreen() {
         .eq('profile_id', user.id)
         .maybeSingle();
 
-      let query = supabase
-        .from('orders')
-        .select('*, order_items(*, products(name, sku)), dealers(address, store_name)')
-        .order('created_at', { ascending: false });
-
-      if (dealer?.id) {
-        query = query.eq('dealer_id', dealer.id);
+      // Jika user tidak punya dealer record, jangan query orders sama sekali
+      if (!dealer?.id) {
+        setOrders([]);
+        setLoading(false);
+        return;
       }
 
-      const { data, error } = await query;
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*, order_items(*, products(name, sku)), dealers(address, store_name)')
+        .eq('dealer_id', dealer.id)
+        .order('created_at', { ascending: false });
       if (!error && data) {
         setOrders(data as unknown as Order[]);
       }

@@ -14,6 +14,13 @@
   atau `npm start` di dalam direktori `mobile-app`.
 - Berlaku untuk semua project.
 
+## OTA Update (EAS)
+- **Selalu gunakan channel production** untuk publikasi OTA update secara default (kecuali diminta lain), agar perubahan langsung masuk ke APK yang sedang dipakai user.
+- Command yang digunakan:
+  ```bash
+  export $(xargs < .env) && export EAS_SKIP_AUTO_FINGERPRINT=1 && npx --yes eas-cli update --channel production --environment production --message "Deskripsi update" --non-interactive
+  ```
+
 ## Admin Web
 - Jalankan admin web menggunakan:
   ```bash
