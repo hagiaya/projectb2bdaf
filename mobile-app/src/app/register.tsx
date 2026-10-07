@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert,
 import { Link, router } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { decode } from 'base64-arraybuffer';
 import { Feather } from '@expo/vector-icons';
 import React, { useState, useEffect } from 'react';
@@ -27,6 +28,8 @@ export default function RegisterScreen() {
   const [ktpBase64, setKtpBase64] = useState<string | null>(null);
   const [npwpImage, setNpwpImage] = useState<string | null>(null);
   const [npwpBase64, setNpwpBase64] = useState<string | null>(null);
+  const [storeImage, setStoreImage] = useState<string | null>(null);
+  const [storeBase64, setStoreBase64] = useState<string | null>(null);
   const [salesList, setSalesList] = useState<{ id: string; name: string; phone?: string }[]>([]);
   const [selectedSalesId, setSelectedSalesId] = useState<string>('');
   const [salesModalVisible, setSalesModalVisible] = useState(false);
@@ -77,13 +80,13 @@ export default function RegisterScreen() {
   const [salesKtp, setSalesKtp] = useState('');
   const [salesPassword, setSalesPassword] = useState('');
 
-  const pickImage = async (type: 'KTP' | 'NPWP') => {
+  const pickImage = async (type: 'KTP' | 'NPWP' | 'Store') => {
     try {
       let result;
       if (Platform.OS === 'web') {
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          quality: 0.5,
+          quality: 0.2,
           base64: true,
         });
       } else {
@@ -94,18 +97,35 @@ export default function RegisterScreen() {
         }
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          quality: 0.5,
-          base64: true,
+          quality: 0.2, // Early compression
+          base64: false, // Don't do base64 yet to save memory
         });
       }
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
+        let uri = result.assets[0].uri;
+        let base64 = result.assets[0].base64;
+
+        // Force resize image to max 800px width/height and heavy compress to save egress
+        if (Platform.OS !== 'web') {
+          const manipResult = await ImageManipulator.manipulateAsync(
+            uri,
+            [{ resize: { width: 800 } }],
+            { compress: 0.3, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+          uri = manipResult.uri;
+          base64 = manipResult.base64;
+        }
+
         if (type === 'KTP') {
-          setKtpImage(result.assets[0].uri);
-          setKtpBase64(result.assets[0].base64 || null);
-        } else {
-          setNpwpImage(result.assets[0].uri);
-          setNpwpBase64(result.assets[0].base64 || null);
+          setKtpImage(uri);
+          setKtpBase64(base64 || null);
+        } else if (type === 'NPWP') {
+          setNpwpImage(uri);
+          setNpwpBase64(base64 || null);
+        } else if (type === 'Store') {
+          setStoreImage(uri);
+          setStoreBase64(base64 || null);
         }
       }
     } catch (error) {
@@ -154,8 +174,8 @@ export default function RegisterScreen() {
   };
 
   const handleSendOtpDealer = async () => {
-    if (!storeName || !ownerName || !phone || !location || !ktpBase64 || (accountType === 'perusahaan' && !npwpBase64)) {
-      const msg = 'Harap isi semua kolom (Toko, Nama, HP), lokasi peta, serta foto dokumen yang diwajibkan.';
+    if (!storeName || !ownerName || !phone || !location || !ktpBase64 || !storeBase64 || (accountType === 'perusahaan' && !npwpBase64)) {
+      const msg = 'Harap isi semua kolom (Toko, Nama, HP), lokasi peta, serta foto toko dan dokumen yang diwajibkan.';
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('Error', msg);
       return;
@@ -249,6 +269,17 @@ export default function RegisterScreen() {
         npwpUrl = supabase.storage.from('dealer_documents').getPublicUrl(npwpFilePath).data.publicUrl;
       }
 
+      let storeUrl = null;
+      if (storeBase64) {
+        const storeFilePath = `${user.id}/store_${Date.now()}.jpg`;
+        const cleanStoreBase64 = storeBase64.replace(/^data:image\/\w+;base64,/, "");
+        const { error: storeError } = await supabase.storage
+          .from('dealer_documents')
+          .upload(storeFilePath, decode(cleanStoreBase64), { contentType: 'image/jpeg', upsert: true });
+        if (storeError) throw storeError;
+        storeUrl = supabase.storage.from('dealer_documents').getPublicUrl(storeFilePath).data.publicUrl;
+      }
+
       const { error } = await supabase.from('profiles').upsert({
         id: user.id,
         full_name: ownerName,
@@ -260,6 +291,7 @@ export default function RegisterScreen() {
         approval_status: 'PENDING',
         ktp_url: ktpUrl,
         npwp_url: npwpUrl,
+        store_photo_url: storeUrl,
         role: 'DEALER'
       });
       if (error) throw error;
@@ -484,6 +516,18 @@ export default function RegisterScreen() {
                   </TouchableOpacity>
                 </View>
               )}
+
+              <View style={styles.locationContainer}>
+                <Text style={styles.locationLabel}>Foto Toko Tampak Depan (Wajib)</Text>
+                <TouchableOpacity style={styles.mapButton} onPress={() => pickImage('Store')}>
+                  {storeImage ? <Image source={{ uri: storeImage }} style={styles.previewImage} /> : (
+                    <View style={styles.uploadPlaceholder}>
+                      <Feather name="camera" size={24} color="#8ec44a" />
+                      <Text style={styles.uploadText}>Ambil Foto Toko</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
 
               {/* Didaftarkan Oleh Sales (Toko Binaan) */}
               <View style={styles.salesReferralCard}>
