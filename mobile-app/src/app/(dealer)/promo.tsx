@@ -12,6 +12,7 @@ interface Promo {
   code: string;
   expire: string;
   banner_url?: string | null;
+  is_banner_only?: boolean;
 }
 
 export default function PromoScreen() {
@@ -37,16 +38,20 @@ export default function PromoScreen() {
       // Filter out expired promos if expires_at is set
       const activeData = data.filter(p => !p.expires_at || new Date(p.expires_at).getTime() >= now);
 
-      const mappedPromos: Promo[] = activeData.map(p => ({
-        id: p.id,
-        title: p.title || `Diskon ${p.discount_percent}%`,
-        desc: p.description || `Diskon ${p.discount_percent}% untuk seluruh pembelanjaan produk.`,
-        code: p.code,
-        banner_url: p.banner_url || null,
-        expire: p.expires_at 
-          ? new Date(p.expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-          : 'Berlaku Permanen'
-      }));
+      const mappedPromos: Promo[] = activeData.map(p => {
+        const isBannerOnly = p.discount_percent === 0 || p.code === '-' || p.code.toUpperCase().startsWith('INFO');
+        return {
+          id: p.id,
+          title: p.title || (isBannerOnly ? 'Info Promo' : `Diskon ${p.discount_percent}%`),
+          desc: p.description || (isBannerOnly ? 'Informasi promo terbaru.' : `Diskon ${p.discount_percent}% untuk seluruh pembelanjaan produk.`),
+          code: p.code,
+          banner_url: p.banner_url || null,
+          is_banner_only: isBannerOnly,
+          expire: p.expires_at 
+            ? new Date(p.expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+            : 'Berlaku Permanen'
+        };
+      });
 
       setPromos(mappedPromos);
     }
@@ -105,29 +110,36 @@ export default function PromoScreen() {
                   </View>
                 )}
                 <View style={styles.cardBody}>
-                  <View style={styles.badge}><Feather name="percent" size={18} color="white" /></View>
-                  <View style={{ marginLeft: 50, flex: 1 }}>
+                  {!promo.is_banner_only && (
+                    <View style={styles.badge}><Feather name="percent" size={18} color="white" /></View>
+                  )}
+                  <View style={{ marginLeft: promo.is_banner_only ? 0 : 50, flex: 1 }}>
                     <Text style={styles.title}>{promo.title}</Text>
                     <Text style={styles.desc}>{promo.desc}</Text>
-                    <View style={styles.footer}>
-                      <View>
-                        <Text style={styles.codeLabel}>Kode Voucher:</Text>
-                        <Text style={styles.code}>{promo.code}</Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={styles.expireLabel}>Berakhir:</Text>
-                        <Text style={styles.expire}>{promo.expire}</Text>
-                      </View>
-                    </View>
-                    <TouchableOpacity 
-                      style={[styles.useBtn, isApplied && styles.useBtnDisabled]} 
-                      onPress={() => handleUsePromo(promo)}
-                      disabled={isApplied}
-                    >
-                      <Text style={styles.useBtnText}>
-                        {isApplied ? '✓ Voucher Terpakai' : 'Gunakan Promo'}
-                      </Text>
-                    </TouchableOpacity>
+                    
+                    {!promo.is_banner_only && (
+                      <>
+                        <View style={styles.footer}>
+                          <View>
+                            <Text style={styles.codeLabel}>Kode Voucher:</Text>
+                            <Text style={styles.code}>{promo.code}</Text>
+                          </View>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={styles.expireLabel}>Berakhir:</Text>
+                            <Text style={styles.expire}>{promo.expire}</Text>
+                          </View>
+                        </View>
+                        <TouchableOpacity 
+                          style={[styles.useBtn, isApplied && styles.useBtnDisabled]} 
+                          onPress={() => handleUsePromo(promo)}
+                          disabled={isApplied}
+                        >
+                          <Text style={styles.useBtnText}>
+                            {isApplied ? '✓ Voucher Terpakai' : 'Gunakan Promo'}
+                          </Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
                   </View>
                 </View>
               </View>
