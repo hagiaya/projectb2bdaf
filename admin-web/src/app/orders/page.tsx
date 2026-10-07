@@ -469,10 +469,10 @@ export default function OrdersPage() {
           const imgData = canvas.toDataURL('image/png');
           
           const imgRatio = width / height;
-          const targetHeight = 16;
+          const targetHeight = 28;
           const targetWidth = targetHeight * imgRatio;
-          doc.addImage(imgData, 'PNG', 14, currentY, targetWidth, targetHeight);
-          currentY += targetHeight + 8;
+          doc.addImage(imgData, 'PNG', 12, currentY, targetWidth, targetHeight);
+          currentY += targetHeight + 2;
         }
       }
     } catch (e) {
