@@ -115,7 +115,7 @@ export default function RegisterScreen() {
   };
 
   const normalizePhone = (p: string) => {
-    let digits = p.replace(/\\D/g, '');
+    let digits = p.replace(/\D/g, '');
     if (digits.startsWith('62')) digits = '0' + digits.slice(2);
     if (!digits.startsWith('0')) digits = '0' + digits;
     return digits;

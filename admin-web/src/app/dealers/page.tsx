@@ -64,6 +64,7 @@ interface Dealer {
   region_id?: string;
   status: string;
   created_at: string;
+  email?: string;
   sales_id?: string | null;
   sales?: { id: string; profiles?: { full_name: string } };
   profiles?: { full_name: string; approval_status?: string; phone_number?: string };
@@ -189,6 +190,10 @@ export default function DealersPage() {
   });
   const [specialDealerNotesInput, setSpecialDealerNotesInput] = useState('');
   const [editRegionId, setEditRegionId] = useState('');
+  const [editStoreName, setEditStoreName] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editFullName, setEditFullName] = useState('');
+  const [editPhoneNumber, setEditPhoneNumber] = useState('');
 
   // Payment & Bank CBD / COD Settings State
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>({
@@ -311,6 +316,13 @@ export default function DealersPage() {
     });
     setSpecialDealerNotesInput(dealer.special_dealer_notes || '');
     setEditRegionId(dealer.region_id || '');
+    setEditStoreName(dealer.store_name || '');
+    setEditAddress(dealer.address || '');
+    setEditFullName(dealer.profiles?.full_name || '');
+    setEditPhoneNumber(dealer.profiles?.phone_number || '');
+    setEditEmail(dealer.email || '');
+    setEditPassword('');
+    setEditSalesId(dealer.sales_id || '');
 
     setIsLoadingLogs(true);
     try {
@@ -386,6 +398,8 @@ export default function DealersPage() {
       special_access_permissions: isSpecialDealerInput ? specialPermissions : null,
       special_dealer_notes: isSpecialDealerInput ? specialDealerNotesInput.trim() : null,
       region_id: editRegionId || null,
+      store_name: editStoreName,
+      address: editAddress,
     };
 
     // 1. Update ke tabel dealers
@@ -410,6 +424,37 @@ export default function DealersPage() {
       alert("Gagal memperbarui data dealer: " + updateError.message);
       setIsSavingCredit(false);
       return;
+    }
+
+    if (editFullName !== selectedDealerCredit.profiles?.full_name || editPhoneNumber !== selectedDealerCredit.profiles?.phone_number) {
+      const { error: profileError } = await supabase.from('profiles').update({
+        full_name: editFullName,
+        phone_number: editPhoneNumber,
+      }).eq('id', selectedDealerCredit.profile_id);
+      
+      if (profileError) {
+        console.error("Gagal update profile:", profileError);
+      }
+    }
+
+    if (editPassword.trim() !== '' || (editEmail && editEmail !== selectedDealerCredit.email)) {
+      try {
+        const res = await fetch('/api/dealers/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            profile_id: selectedDealerCredit.profile_id,
+            email: editEmail.trim(),
+            password: editPassword.trim()
+          })
+        });
+        const resData = await res.json();
+        if (!res.ok) {
+          alert("Info: " + (resData.error || 'Gagal update kredensial sandi/email'));
+        }
+      } catch (err) {
+         console.warn("API Error:", err);
+      }
     }
 
     // 2. Insert ke credit_limit_logs jika limit berubah atau ada mutasi
@@ -445,6 +490,13 @@ export default function DealersPage() {
       special_dealer_notes: isSpecialDealerInput ? specialDealerNotesInput.trim() : undefined,
       region_id: editRegionId || undefined,
       regions: editRegionId ? { name: regions.find(r => r.id === editRegionId)?.name || 'Unknown' } : undefined,
+      store_name: editStoreName,
+      address: editAddress,
+      profiles: {
+        ...selectedDealerCredit.profiles,
+        full_name: editFullName,
+        phone_number: editPhoneNumber,
+      } as any,
     };
 
     setDealers(prev => prev.map(d => d.id === selectedDealerCredit.id ? updatedDealer : d));
@@ -891,8 +943,14 @@ export default function DealersPage() {
                           <Users size={14} className="text-slate-400" /> {dealer.profiles?.full_name || 'Tanpa Pemilik'}
                         </div>
                         <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium">
-                          <MapPin size={12} className="text-emerald-500" /> {dealer.regions?.name || 'Belum Diatur'}
+                          <MapPin size={12} className={dealer.regions?.name ? "text-emerald-500" : "text-amber-500"} /> 
+                          {dealer.regions?.name ? `Reg: ${dealer.regions.name}` : 'Reg: Belum Diatur'}
                         </div>
+                        {dealer.address && (
+                          <div className="mt-0.5 text-[10px] text-slate-400 line-clamp-1 max-w-[150px]" title={dealer.address}>
+                            {dealer.address}
+                          </div>
+                        )}
                         {dealer.sales?.profiles?.full_name && (
                           <span className="inline-block mt-1 text-[11px] font-semibold text-blue-700">
                             PIC: {dealer.sales.profiles.full_name}
@@ -905,7 +963,7 @@ export default function DealersPage() {
                         <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-bold ${
                           dealer.app_version ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-slate-50 text-slate-400 border border-slate-200'
                         }`}>
-                          {dealer.app_version || 'Belum Diketahui'}
+                          {dealer.app_version || 'Belum Login / App Lama'}
                         </span>
                       </td>
 
@@ -1417,22 +1475,105 @@ export default function DealersPage() {
               {/* TAB 0: INFORMASI DASAR */}
               {modalSubTab === 'info' && (
                 <div className="p-6 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">NAMA TOKO</label>
+                      <input
+                        type="text"
+                        value={editStoreName}
+                        onChange={(e) => setEditStoreName(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">NAMA PEMILIK / PIC</label>
+                      <input
+                        type="text"
+                        value={editFullName}
+                        onChange={(e) => setEditFullName(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">NOMOR HP / WA</label>
+                      <input
+                        type="text"
+                        value={editPhoneNumber}
+                        onChange={(e) => setEditPhoneNumber(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">WILAYAH / REGION</label>
+                      <select
+                        value={editRegionId}
+                        onChange={(e) => setEditRegionId(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                      >
+                        <option value="">-- Belum Diatur --</option>
+                        {regions.map((reg) => (
+                          <option key={reg.id} value={reg.id}>
+                            {reg.name} {reg.city_name ? `(${reg.city_name})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">WILAYAH / REGION</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">ALAMAT LENGKAP</label>
+                    <textarea
+                      value={editAddress}
+                      onChange={(e) => setEditAddress(e.target.value)}
+                      rows={3}
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                      required
+                    ></textarea>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 mt-2 border-t border-slate-100 pt-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">EMAIL LOGIN (OPSIONAL)</label>
+                      <input
+                        type="email"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        placeholder="Contoh: toko@email.com"
+                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">UBAH SANDI (OPSIONAL)</label>
+                      <input
+                        type="text"
+                        value={editPassword}
+                        onChange={(e) => setEditPassword(e.target.value)}
+                        placeholder="Ketik sandi baru..."
+                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">SALES PIC</label>
                     <select
-                      value={editRegionId}
-                      onChange={(e) => setEditRegionId(e.target.value)}
+                      value={editSalesId}
+                      onChange={(e) => setEditSalesId(e.target.value)}
                       className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                     >
-                      <option value="">-- Belum Diatur --</option>
-                      {regions.map((reg) => (
-                        <option key={reg.id} value={reg.id}>
-                          {reg.name} {reg.city_name ? `(${reg.city_name})` : ''}
-                        </option>
+                      <option value="">-- Tanpa Sales PIC --</option>
+                      {salesList.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </select>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Pilih wilayah operasional untuk toko ini. Penting agar dealer muncul pada filter wilayah.
+                  </div>
+
+                  <div className="pt-1">
+                    <p className="text-[11px] text-slate-500">
+                      Ubah data dasar toko. Pilih wilayah operasional agar dealer muncul pada filter wilayah.
                     </p>
                   </div>
                 </div>

@@ -12,6 +12,7 @@ import { useCart } from '../../context/CartContext';
 import { useSafeBottom } from '../../hooks/useSafeBottom';
 import NewBadge from '../../components/NewBadge';
 import ComingSoonBadge from '../../components/ComingSoonBadge';
+import Constants from 'expo-constants';
 
 const WA_NUMBER = '628114981666'; // 08114981666 → format internasional
 
@@ -300,7 +301,15 @@ export default function DealerHome() {
       fetchNotifications(dealerData.id);
 
       // Save App Version silently
-      const appVersion = Updates.updateId ? `OTA: ${Updates.updateId.substring(0, 8)}` : 'App Bawaan';
+      const baseVersion = Constants.expoConfig?.version || '1.0';
+      let otaDateStr = '';
+      if (Updates.createdAt) {
+        try {
+          const dateObj = typeof Updates.createdAt === 'string' ? new Date(Updates.createdAt) : Updates.createdAt;
+          otaDateStr = ` - ${dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}`;
+        } catch (e) {}
+      }
+      const appVersion = Updates.updateId ? `v${baseVersion} (OTA: ${Updates.updateId.substring(0, 6)}${otaDateStr})` : `v${baseVersion} (Bawaan)`;
       supabase.from('dealers').update({ app_version: appVersion }).eq('profile_id', user.id).then(({error}) => {
         if (error) console.log("Failed updating app version:", error);
       });
@@ -834,6 +843,17 @@ export default function DealerHome() {
                   </View>
                 </View>
               )}
+
+              <TouchableOpacity 
+                style={[styles.logoutBtn, { backgroundColor: '#e2e8f0', marginBottom: 12 }]} 
+                onPress={() => {
+                  setIsProfileVisible(false);
+                  router.push('/(dealer)/profile-edit');
+                }}
+              >
+                <Feather name="edit-3" size={18} color="#475569" />
+                <Text style={[styles.logoutBtnText, { color: '#475569' }]}>Edit Profil</Text>
+              </TouchableOpacity>
 
               <TouchableOpacity 
                 style={[styles.logoutBtn, { backgroundColor: '#f1f5f9', marginBottom: 12 }]} 
