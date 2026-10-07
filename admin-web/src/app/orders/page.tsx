@@ -444,7 +444,7 @@ export default function OrdersPage() {
   const handleGenerateInvoicePDF = async (order: Order, items: OrderItem[]) => {
     // Load Logo
     const logoImg = new Image();
-    logoImg.src = '/LOGO DAP.svg';
+    logoImg.src = encodeURI('/LOGO DAP.svg');
     await new Promise((resolve) => {
       logoImg.onload = resolve;
       logoImg.onerror = resolve; // Continue even if logo fails to load
