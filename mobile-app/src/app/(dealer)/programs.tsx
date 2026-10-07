@@ -648,7 +648,22 @@ export default function DealerProgramsScreen() {
       return;
     }
 
-    // Direct enrollment for all program types
+    // Khusus untuk barang support / display etalase, wajib foto before
+    if (program.program_type === 'BARANG_SUPPORT') {
+      setProgramToEnroll(program);
+      const firstItem = (program.support_items && program.support_items.length > 0)
+        ? program.support_items[0]
+        : DEFAULT_SUPPORT_ITEMS[0];
+      setSelectedSupportItem(firstItem);
+      setSupportItemQty(1);
+      setBeforePhotoUri(null);
+      setBeforePhotoBase64(null);
+      setPlacementNotes('');
+      setApplicationModalVisible(true);
+      return;
+    }
+
+    // Direct enrollment for all other program types
     const confirmPrompt = `Konfirmasi Pendaftaran:\n\nAnda akan mengajukan program "${program.title}" dengan target belanja Rp ${Number(
       program.target_amount
     ).toLocaleString('id-ID')}.\n\nPerhatian: Anda hanya dapat mengikuti 1 program aktif. Lanjutkan?`;
