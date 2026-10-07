@@ -170,6 +170,7 @@ export default function DealerProgramsScreen() {
   const [currentDealerId, setCurrentDealerId] = useState<string | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [currentDealerProfile, setCurrentDealerProfile] = useState<any>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'BARANG_SUPPORT' | 'TRIP' | 'CASHBACK' | 'HADIAH_DOORPRIZE' | 'MY_PROGRAMS'>('ALL');
 
   // Support Item Form State (Pendaftaran / Pengajuan)
@@ -985,7 +986,7 @@ export default function DealerProgramsScreen() {
     switch (type) {
       case 'BARANG_SUPPORT':
         return {
-          label: 'Display & Etalase Support',
+          label: 'Barang Support',
           icon: 'package',
           color: '#15803d',
           bg: '#dcfce7',
@@ -1073,7 +1074,7 @@ export default function DealerProgramsScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabContent}>
           {[
             { key: 'ALL', label: 'Semua Program' },
-            { key: 'BARANG_SUPPORT', label: '🎁 Display & Etalase' },
+            { key: 'BARANG_SUPPORT', label: '🎁 Barang Support' },
             { key: 'TRIP', label: '✈️ Trip Liburan' },
             { key: 'CASHBACK', label: '💰 Cashback' },
             { key: 'HADIAH_DOORPRIZE', label: '🎉 Doorprize' },
@@ -1154,19 +1155,31 @@ export default function DealerProgramsScreen() {
                 >
                   {/* Banner Image */}
                   <View style={styles.bannerWrapper}>
-                    <Image
-                      source={{
-                        uri:
-                          prog.banner_url ||
-                          (prog.program_type === 'BARANG_SUPPORT'
-                            ? 'https://images.unsplash.com/photo-1555421689-491a97ff2040?w=600'
-                            : prog.program_type === 'TRIP'
-                            ? 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600'
-                            : 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600'),
-                      }}
-                      style={styles.bannerImage}
-                      contentFit="cover"
-                    />
+                    <TouchableOpacity 
+                      activeOpacity={0.9} 
+                      onPress={() => setPreviewImage(
+                        prog.banner_url ||
+                        (prog.program_type === 'BARANG_SUPPORT'
+                          ? 'https://images.unsplash.com/photo-1555421689-491a97ff2040?w=600'
+                          : prog.program_type === 'TRIP'
+                          ? 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600'
+                          : 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600')
+                      )}
+                    >
+                      <Image
+                        source={{
+                          uri:
+                            prog.banner_url ||
+                            (prog.program_type === 'BARANG_SUPPORT'
+                              ? 'https://images.unsplash.com/photo-1555421689-491a97ff2040?w=600'
+                              : prog.program_type === 'TRIP'
+                              ? 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600'
+                              : 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600'),
+                        }}
+                        style={styles.bannerImage}
+                        contentFit="cover"
+                      />
+                    </TouchableOpacity>
                     <View style={[styles.typeBadgeWrapper, { backgroundColor: badge.bg, borderColor: badge.border }]}>
                       <Feather name={badge.icon as any} size={13} color={badge.color} />
                       <Text style={[styles.typeBadgeText, { color: badge.color }]}>{badge.label}</Text>
@@ -2313,6 +2326,34 @@ export default function DealerProgramsScreen() {
                 </ScrollView>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL 5: FULLSCREEN IMAGE PREVIEW */}
+      <Modal visible={!!previewImage} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { padding: 10, backgroundColor: '#000', maxHeight: '100%', borderRadius: 0 }]}>
+            <TouchableOpacity
+              style={{ position: 'absolute', top: 40, right: 20, zIndex: 10, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 }}
+              onPress={() => setPreviewImage(null)}
+            >
+              <Feather name="x" size={24} color="white" />
+            </TouchableOpacity>
+            <ScrollView
+              style={{ flex: 1, width: '100%' }}
+              maximumZoomScale={3}
+              minimumZoomScale={1}
+              contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
+            >
+              {previewImage && (
+                <Image
+                  source={{ uri: previewImage }}
+                  style={{ width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.2 }}
+                  contentFit="contain"
+                />
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
