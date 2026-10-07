@@ -56,6 +56,7 @@ interface SalesRep {
   regions?: {
     id: string;
     name: string;
+    city_name?: string;
   };
   spv?: {
     profiles?: {
