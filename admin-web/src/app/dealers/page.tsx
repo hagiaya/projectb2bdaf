@@ -61,6 +61,7 @@ interface Dealer {
   };
   special_dealer_notes?: string;
   app_version?: string;
+  region_id?: string;
   status: string;
   created_at: string;
   sales_id?: string | null;
@@ -140,6 +141,14 @@ export default function DealersPage() {
   const [selectedCreditFilter, setSelectedCreditFilter] = useState('ALL'); // 'ALL' | 'CREDIT_ONLY' | 'REGULAR_ONLY'
   const [selectedTypeFilter, setSelectedTypeFilter] = useState('ALL'); // 'ALL' | 'SPECIAL_ONLY' | 'REGULAR_ONLY'
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedRegionFilter, selectedCreditFilter, selectedTypeFilter]);
+
   // Add Dealer Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newStoreName, setNewStoreName] = useState('');
@@ -157,7 +166,7 @@ export default function DealersPage() {
 
   // Dealer Khusus & Credit Limit Management Modal State
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
-  const [modalSubTab, setModalSubTab] = useState<'special' | 'credit' | 'logs'>('special');
+  const [modalSubTab, setModalSubTab] = useState<'info' | 'special' | 'credit' | 'logs'>('info');
   const [selectedDealerCredit, setSelectedDealerCredit] = useState<Dealer | null>(null);
   const [creditAction, setCreditAction] = useState<'keep' | 'increase' | 'decrease' | 'set' | 'disable'>('keep');
   const [creditAmountInput, setCreditAmountInput] = useState('');
@@ -179,6 +188,7 @@ export default function DealersPage() {
     vip_support: true,
   });
   const [specialDealerNotesInput, setSpecialDealerNotesInput] = useState('');
+  const [editRegionId, setEditRegionId] = useState('');
 
   // Payment & Bank CBD / COD Settings State
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>({
@@ -279,7 +289,7 @@ export default function DealersPage() {
   };
 
   // Open Credit & Special Dealer Modal
-  const openCreditModal = async (dealer: Dealer, initialTab: 'special' | 'credit' | 'logs' = 'special') => {
+  const openCreditModal = async (dealer: Dealer, initialTab: 'info' | 'special' | 'credit' | 'logs' = 'special') => {
     setSelectedDealerCredit(dealer);
     setIsCreditModalOpen(true);
     setModalSubTab(initialTab);
@@ -300,6 +310,7 @@ export default function DealersPage() {
       vip_support: dealer.special_access_permissions?.vip_support ?? true,
     });
     setSpecialDealerNotesInput(dealer.special_dealer_notes || '');
+    setEditRegionId(dealer.region_id || '');
 
     setIsLoadingLogs(true);
     try {
@@ -374,6 +385,7 @@ export default function DealersPage() {
       special_pricing_notes: isSpecialDealerInput ? specialPricingNotesInput.trim() : null,
       special_access_permissions: isSpecialDealerInput ? specialPermissions : null,
       special_dealer_notes: isSpecialDealerInput ? specialDealerNotesInput.trim() : null,
+      region_id: editRegionId || null,
     };
 
     // 1. Update ke tabel dealers
@@ -386,6 +398,7 @@ export default function DealersPage() {
     if (updateError && (updateError.message?.includes('is_special_dealer') || updateError.message?.includes('is_credit_eligible') || updateError.code === '42703')) {
       const fallbackPayload: any = { credit_limit: newLimit };
       if (!updateError.message?.includes('credit_term_days')) fallbackPayload.credit_term_days = termDays;
+      if (editRegionId) fallbackPayload.region_id = editRegionId;
       const fallback = await supabase
         .from('dealers')
         .update(fallbackPayload)
@@ -430,6 +443,8 @@ export default function DealersPage() {
       special_pricing_notes: isSpecialDealerInput ? specialPricingNotesInput.trim() : undefined,
       special_access_permissions: isSpecialDealerInput ? specialPermissions : undefined,
       special_dealer_notes: isSpecialDealerInput ? specialDealerNotesInput.trim() : undefined,
+      region_id: editRegionId || undefined,
+      regions: editRegionId ? { name: regions.find(r => r.id === editRegionId)?.name || 'Unknown' } : undefined,
     };
 
     setDealers(prev => prev.map(d => d.id === selectedDealerCredit.id ? updatedDealer : d));
@@ -619,6 +634,9 @@ export default function DealersPage() {
 
     return matchesRegion && matchesSearch && matchesCredit && matchesType;
   });
+
+  const totalPages = Math.ceil(filteredDealers.length / itemsPerPage) || 1;
+  const paginatedDealers = filteredDealers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const activeDealersList = dealers.filter(d => d.status !== 'INACTIVE');
   const totalActiveDealers = dealers.filter(d => d.status === 'ACTIVE').length;
@@ -837,7 +855,7 @@ export default function DealersPage() {
                   <tr><td colSpan={7} className="p-10 text-center text-slate-400">Memuat data dealer...</td></tr>
                 ) : filteredDealers.length === 0 ? (
                   <tr><td colSpan={7} className="p-10 text-center text-slate-400">Tidak ada dealer yang sesuai kriteria.</td></tr>
-                ) : filteredDealers.map((dealer) => {
+                ) : paginatedDealers.map((dealer) => {
                   const isSpecial = Boolean(dealer.is_special_dealer);
                   const hasCredit = Boolean(dealer.is_credit_eligible || dealer.credit_status === 'ACTIVE' || (dealer.credit_limit && dealer.credit_limit > 0));
                   const limit = Number(dealer.credit_limit || 0);
@@ -999,7 +1017,26 @@ export default function DealersPage() {
           </div>
           
           <div className="p-4 border-t border-slate-100 text-xs text-slate-500 flex justify-between items-center bg-white">
-            <span>Menampilkan <b>{filteredDealers.length}</b> dari total {dealers.filter(d => d.status !== 'INACTIVE').length} dealer</span>
+            <span>Menampilkan <b>{filteredDealers.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(currentPage * itemsPerPage, filteredDealers.length)}</b> dari total {filteredDealers.length} dealer (Total Aktif: {dealers.filter(d => d.status !== 'INACTIVE').length})</span>
+            {totalPages > 1 && (
+              <div className="flex gap-1 items-center">
+                <button 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-50 hover:bg-slate-50 font-medium cursor-pointer"
+                >
+                  Prev
+                </button>
+                <span className="px-3 font-bold text-slate-700 bg-slate-100 rounded-lg py-1.5">{currentPage} / {totalPages}</span>
+                <button 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-50 hover:bg-slate-50 font-medium cursor-pointer"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1319,6 +1356,19 @@ export default function DealersPage() {
             <div className="flex border-b border-slate-200 bg-white px-6 pt-2 gap-2">
               <button
                 type="button"
+                onClick={() => setModalSubTab('info')}
+                className={`pb-3 px-3.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
+                  modalSubTab === 'info'
+                    ? 'border-blue-600 text-blue-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Store size={14} />
+                ℹ️ Info Dasar
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setModalSubTab('special')}
                 className={`pb-3 px-3.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer ${
                   modalSubTab === 'special'
@@ -1364,6 +1414,30 @@ export default function DealersPage() {
             </div>
 
             <form onSubmit={handleSaveCreditLimit} className="flex-1 overflow-y-auto flex flex-col">
+              {/* TAB 0: INFORMASI DASAR */}
+              {modalSubTab === 'info' && (
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">WILAYAH / REGION</label>
+                    <select
+                      value={editRegionId}
+                      onChange={(e) => setEditRegionId(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    >
+                      <option value="">-- Belum Diatur --</option>
+                      {regions.map((reg) => (
+                        <option key={reg.id} value={reg.id}>
+                          {reg.name} {reg.city_name ? `(${reg.city_name})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Pilih wilayah operasional untuk toko ini. Penting agar dealer muncul pada filter wilayah.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* TAB 1: DEALER KHUSUS & KETENTUAN */}
               {modalSubTab === 'special' && (
                 <div className="p-6 space-y-4">
