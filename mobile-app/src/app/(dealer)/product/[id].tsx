@@ -371,36 +371,39 @@ export default function ProductDetailScreen() {
               </TouchableOpacity>
             </View>
             
-            <View style={styles.fullscreenImageContainer}>
-              {images.length > 1 && activeImageIndex > 0 && (
-                <TouchableOpacity 
-                  style={styles.fullscreenNavLeft}
-                  onPress={() => { setActiveImageIndex(i => i - 1); setRotation(0); }}
-                >
-                  <Feather name="chevron-left" size={32} color="white" />
-                </TouchableOpacity>
-              )}
-              
-              <View style={{ width, flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <Zoomable
-                  minScale={1}
-                  maxScale={4}
-                  isDoubleTapEnabled={true}
-                >
-                  <View style={{ transform: [{ rotate: `${rotation}deg` }] }}>
-                    <FallbackImage uri={images[activeImageIndex]} style={{ width: width, height: width }} resizeMode="contain" />
+            <View style={[styles.fullscreenImageContainer, { flex: 1 }]}>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                contentOffset={{ x: activeImageIndex * width, y: 0 }}
+                onScroll={(event) => {
+                  const slideSize = event.nativeEvent.layoutMeasurement.width;
+                  const index = event.nativeEvent.contentOffset.x / slideSize;
+                  const roundIndex = Math.round(index);
+                  if (roundIndex !== activeImageIndex) {
+                    setActiveImageIndex(roundIndex);
+                    setRotation(0);
+                  }
+                }}
+                scrollEventThrottle={16}
+                style={{ flex: 1, width }}
+              >
+                {images.map((url: string, index: number) => (
+                  <View key={index} style={{ width, flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <Zoomable 
+                      minScale={1} 
+                      maxScale={4} 
+                      isDoubleTapEnabled={true}
+                      style={{ flex: 1, width, justifyContent: 'center', alignItems: 'center' }}
+                    >
+                      <View style={{ transform: [{ rotate: `${rotation}deg` }] }}>
+                        <FallbackImage uri={url} style={{ width: width, height: width }} resizeMode="contain" />
+                      </View>
+                    </Zoomable>
                   </View>
-                </Zoomable>
-              </View>
-
-              {images.length > 1 && activeImageIndex < images.length - 1 && (
-                <TouchableOpacity 
-                  style={styles.fullscreenNavRight}
-                  onPress={() => { setActiveImageIndex(i => i + 1); setRotation(0); }}
-                >
-                  <Feather name="chevron-right" size={32} color="white" />
-                </TouchableOpacity>
-              )}
+                ))}
+              </ScrollView>
             </View>
           </SafeAreaView>
         </View>

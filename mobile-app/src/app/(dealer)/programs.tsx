@@ -39,9 +39,9 @@ export const DEFAULT_SUPPORT_ITEMS: SupportItem[] = [
     code: 'DLP13',
     name: 'KURSI PLASTIK DAP',
     min_purchase: 500000,
-    dimensions: 'Standar Kursi Toko',
+    dimensions: 'Standar Kursi Plastik Toko',
     category: 'Fasilitas Toko',
-    description: 'Kursi plastik hijau branding DAP resmi untuk ruang tunggu pelanggan toko Anda.',
+    description: 'Kursi plastik hijau branding DAP resmi untuk kenyamanan ruang tunggu pelanggan toko Anda.',
   },
   {
     id: 'dlp16',
@@ -50,12 +50,12 @@ export const DEFAULT_SUPPORT_ITEMS: SupportItem[] = [
     min_purchase: 2500000,
     dimensions: 'Display Meja Kasir Akrilik',
     category: 'Display Meja',
-    description: 'Rak display meja akrilik hijau DAP untuk gantungan kabel data, charger, dan earphone.',
+    description: 'Rak display meja akrilik hijau DAP untuk gantungan aksesoris kabel, charger, dan earphone di depan kasir.',
   },
   {
     id: 'logo-gantung',
     code: 'LOGO GANTUNG',
-    name: 'LOGO GANTUNG DAP LED',
+    name: 'LOGO GANTUNG DAP',
     min_purchase: 3500000,
     dimensions: '120cm x 30.5cm',
     category: 'Signage Plafon',
@@ -64,16 +64,16 @@ export const DEFAULT_SUPPORT_ITEMS: SupportItem[] = [
   {
     id: 'dlp30',
     code: 'DLP30',
-    name: 'RAK PUTAR AKSESORIS',
+    name: 'RAK PUTAR',
     min_purchase: 4500000,
     dimensions: 'Rak Putar Multi-Sisi Portable',
     category: 'Display Lantai',
-    description: 'Rak display putar modern untuk gantungan handsfree, case, dan tempered glass 360 derajat.',
+    description: 'Rak display putar modern untuk gantungan produk handsfree, case, dan tempered glass 360 derajat.',
   },
   {
     id: 'dlp09',
     code: 'DLP09',
-    name: 'RAK DINDING TOKO',
+    name: 'RAK DINDING',
     min_purchase: 5000000,
     dimensions: 'Tinggi 100cm x Lebar 100cm',
     category: 'Display Dinding',
@@ -82,7 +82,7 @@ export const DEFAULT_SUPPORT_ITEMS: SupportItem[] = [
   {
     id: 'dlp01',
     code: 'DLP01',
-    name: 'RAK BESAR 220cm',
+    name: 'RAK BESAR',
     min_purchase: 6000000,
     dimensions: 'Tinggi 220cm x Lebar 100cm',
     category: 'Display Lantai',
@@ -95,21 +95,21 @@ export const DEFAULT_SUPPORT_ITEMS: SupportItem[] = [
     min_purchase: 6000000,
     dimensions: '130cm x 20cm',
     category: 'Signage Digital',
-    description: 'Layar running text digital LED merah terang 130cm x 20cm bertuliskan NOW OPEN & DAP DAY DAY UP.',
+    description: 'Layar display running text digital LED merah terang 130cm x 20cm bertuliskan NOW OPEN & DAP DAY DAY UP.',
   },
   {
     id: 'dlp17',
     code: 'DLP17',
-    name: 'RAK JUMBO 240cm',
+    name: 'RAK JUMBO',
     min_purchase: 8000000,
     dimensions: 'Tinggi 240cm x Lebar 100cm',
     category: 'Display Lantai',
-    description: 'Rak display jumbo tertinggi 240cm dengan kapasitas terlengkap dan ambalan display produk.',
+    description: 'Rak display jumbo tertinggi 240cm dengan kapasitas display aksesoris terlengkap dan ambalan display produk.',
   },
   {
     id: 'dlp18',
     code: 'DLP18',
-    name: 'RAK TENGAH ISLAND 5 TINGKAT',
+    name: 'RAK TENGAH',
     min_purchase: 10000000,
     dimensions: '1280mm x 900mm x 750mm',
     category: 'Display Island',
@@ -118,7 +118,7 @@ export const DEFAULT_SUPPORT_ITEMS: SupportItem[] = [
   {
     id: 'etalase-showcase',
     code: 'ETALASE SHOWCASE',
-    name: 'ETALASE SHOWCASE DISPLAY',
+    name: 'ETALASE SHOWCASE DAP',
     min_purchase: 25000000,
     dimensions: '110cm x 120cm x 50cm',
     category: 'Etalase Showcase',
@@ -1258,7 +1258,6 @@ export default function DealerProgramsScreen() {
                       </Text>
                       <Text style={styles.targetAmount}>
                         Rp {Number(effectiveTarget).toLocaleString('id-ID')}
-                        {prog.program_type === 'BARANG_SUPPORT' && !isEnrolledInThisProg && ' (s/d 25 Jt)'}
                       </Text>
                     </View>
 
