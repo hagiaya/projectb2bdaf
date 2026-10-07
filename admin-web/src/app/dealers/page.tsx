@@ -194,6 +194,9 @@ export default function DealersPage() {
   const [editAddress, setEditAddress] = useState('');
   const [editFullName, setEditFullName] = useState('');
   const [editPhoneNumber, setEditPhoneNumber] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editSalesId, setEditSalesId] = useState('');
 
   // Payment & Bank CBD / COD Settings State
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>({
