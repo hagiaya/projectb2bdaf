@@ -63,13 +63,13 @@ export default function LoginScreen() {
         return;
       }
 
-      if (profileCheck.role === 'SALES') {
+      if (profileCheck.role === 'SALES' || profileCheck.role === 'SPV') {
         if (profileCheck.approval_status === 'PENDING') {
-          Alert.alert('Akun Belum Aktif', 'Akun Sales Anda masih menunggu persetujuan Admin.');
+          Alert.alert('Akun Belum Aktif', 'Akun Anda masih menunggu persetujuan Admin.');
           setLoading(false);
           return;
         }
-        setDetectedRole('SALES');
+        setDetectedRole(profileCheck.role);
         setAuthMode('password');
         setStep(2);
       } else {
@@ -215,8 +215,8 @@ export default function LoginScreen() {
       <Text style={styles.title}>
         {step === 1
           ? 'Masuk ke Akun B2B'
-          : detectedRole === 'SALES'
-          ? 'Login Sales'
+          : (detectedRole === 'SALES' || detectedRole === 'SPV')
+          ? 'Login ' + detectedRole
           : 'Login Dealer'}
       </Text>
       <Text style={styles.subtitle}>
