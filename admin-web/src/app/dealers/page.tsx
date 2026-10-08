@@ -401,6 +401,7 @@ export default function DealersPage() {
       special_access_permissions: isSpecialDealerInput ? specialPermissions : null,
       special_dealer_notes: isSpecialDealerInput ? specialDealerNotesInput.trim() : null,
       region_id: editRegionId || null,
+      sales_id: editSalesId || null,
       store_name: editStoreName,
       address: editAddress,
     };
@@ -495,6 +496,8 @@ export default function DealersPage() {
       regions: editRegionId ? { name: regions.find(r => r.id === editRegionId)?.name || 'Unknown' } : undefined,
       store_name: editStoreName,
       address: editAddress,
+      sales_id: editSalesId || null,
+      sales: editSalesId ? { id: editSalesId, profiles: { full_name: salesList.find(s => s.id === editSalesId)?.name || 'Unknown' } } : undefined,
       profiles: {
         ...selectedDealerCredit.profiles,
         full_name: editFullName,
