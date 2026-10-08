@@ -44,8 +44,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
           return;
         }
 
-        // Verify role (bypass for Dito)
-        if (session.user.email?.toLowerCase() !== 'ditoapp@atomicmail.io') {
+        // Verify role (bypass for Dito & Admin)
+        const userEmail = session.user.email?.toLowerCase();
+        if (userEmail !== 'ditoapp@atomicmail.io' && userEmail !== 'admin@dap.com') {
           const { data: profile } = await supabase
             .from('profiles')
             .select('role')
@@ -76,7 +77,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       if (event === 'SIGNED_OUT') {
         router.push('/login');
       } else if (event === 'SIGNED_IN' && session) {
-        if (session.user.email?.toLowerCase() !== 'ditoapp@atomicmail.io') {
+        const userEmail = session.user.email?.toLowerCase();
+        if (userEmail !== 'ditoapp@atomicmail.io' && userEmail !== 'admin@dap.com') {
           const { data: profile } = await supabase
             .from('profiles')
             .select('role')
