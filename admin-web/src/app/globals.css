@@ -10,6 +10,19 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  
+  /* Override emerald with neon green (lime) to match the DAP logo */
+  --color-emerald-50: #f7fee7;
+  --color-emerald-100: #ecfccb;
+  --color-emerald-200: #d9f99d;
+  --color-emerald-300: #bef264;
+  --color-emerald-400: #a3e635;
+  --color-emerald-500: #84cc16;
+  --color-emerald-600: #65a30d;
+  --color-emerald-700: #4d7c0f;
+  --color-emerald-800: #3f6212;
+  --color-emerald-900: #365314;
+  --color-emerald-950: #1a2e05;
 }
 
 body {
