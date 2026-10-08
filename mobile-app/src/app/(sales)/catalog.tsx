@@ -50,7 +50,7 @@ export default function SalesCatalogScreen() {
 
     if (catError && (catError.message?.includes('sort_order') || catError.code === '42703')) {
       const fb = await supabase.from('categories').select('id, name').order('name');
-      catData = fb.data;
+      catData = fb.data?.map(c => ({ ...c, sort_order: 0 })) || null;
     }
 
     if (catData) {
@@ -389,7 +389,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   outOfStockOverlayGrid: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: 'rgba(255,255,255,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -434,7 +438,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   outOfStockOverlayList: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: 'rgba(255,255,255,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
