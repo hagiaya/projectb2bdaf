@@ -90,7 +90,7 @@ export default function Sidebar() {
   };
 
   return (
-    <div className="w-64 bg-[#064e3b] text-white min-h-screen flex flex-col shadow-xl z-10 relative">
+    <div className="w-64 bg-black text-white min-h-screen flex flex-col shadow-xl z-10 relative">
       <div className="p-6">
         <h1 className="text-2xl font-black tracking-wider text-emerald-300 drop-shadow-sm flex items-center gap-2">
           <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain rounded-lg" />
@@ -101,7 +101,7 @@ export default function Sidebar() {
         </p>
       </div>
       <nav className="flex-1 px-4 pb-4 space-y-1.5 overflow-y-auto">
-        <div className="mb-2 px-3 text-[10px] font-bold text-emerald-300/50 tracking-widest uppercase">General</div>
+        <div className="mb-2 px-3 text-[10px] font-bold text-white/40 tracking-widest uppercase">General</div>
         {menuItems.filter(item => {
           if (adminRole === 'SUPER_ADMIN') return true;
           // Restricted ADMIN role access
@@ -117,8 +117,8 @@ export default function Sidebar() {
               href={item.href}
               className={`flex items-center justify-between px-3 py-2.5 rounded-xl transition-all group ${
                 isActive 
-                  ? 'bg-emerald-800 text-white font-bold shadow-sm' 
-                  : 'text-emerald-100/80 hover:bg-emerald-900/50 hover:text-white'
+                  ? 'bg-[#a3e635] text-black font-extrabold shadow-sm' 
+                  : 'text-zinc-400 hover:bg-zinc-800/80 hover:text-white font-medium'
               }`}
             >
               <div className="flex items-center gap-3">
@@ -136,7 +136,7 @@ export default function Sidebar() {
         })}
 
         {adminRole === 'SUPER_ADMIN' && (
-          <div className="mt-8 mb-2 px-3 text-[10px] font-bold text-emerald-300/50 tracking-widest uppercase flex items-center gap-2">
+          <div className="mt-8 mb-2 px-3 text-[10px] font-bold text-white/40 tracking-widest uppercase flex items-center gap-2">
             ADVANCED FEATURES
           </div>
         )}
@@ -149,8 +149,8 @@ export default function Sidebar() {
               href={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group ${
                 isActive 
-                  ? 'bg-emerald-800 text-white font-bold shadow-sm' 
-                  : 'text-emerald-100/80 hover:bg-emerald-900/50 hover:text-white'
+                  ? 'bg-[#a3e635] text-black font-extrabold shadow-sm' 
+                  : 'text-zinc-400 hover:bg-zinc-800/80 hover:text-white font-medium'
               }`}
             >
               <Icon size={20} className="group-hover:scale-110 transition-transform" />
@@ -159,16 +159,16 @@ export default function Sidebar() {
           );
         })}
       </nav>
-      <div className="p-4 border-t border-emerald-800/50 bg-[#022c22]/30 m-4 rounded-2xl">
+      <div className="p-4 border-t border-zinc-800/50 bg-zinc-900 m-4 rounded-2xl">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center font-bold text-[#064e3b] shadow-inner shadow-emerald-200/50">
+          <div className="w-10 h-10 rounded-full bg-[#a3e635] flex items-center justify-center font-black text-black shadow-inner shadow-white/20">
             A
           </div>
           <div>
             <p className="text-sm font-bold text-white">
               {adminRole === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin Operasional'}
             </p>
-            <p className="text-xs text-emerald-200/80 font-medium">{adminRole}</p>
+            <p className="text-xs text-[#a3e635] font-medium">{adminRole}</p>
           </div>
         </div>
       </div>
