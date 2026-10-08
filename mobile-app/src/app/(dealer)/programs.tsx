@@ -750,10 +750,10 @@ export default function DealerProgramsScreen() {
       const storePhone =
         currentUserProfile?.phone_number || currentDealerProfile?.phone || '-';
 
-      const qty = Math.max(1, supportItemQty || 1);
-      const targetAmount = selectedSupportItem.min_purchase * qty;
-      const itemName = `${selectedSupportItem.code} - ${selectedSupportItem.name}`;
-      const snapshotNotes = `[PENGAJUAN PROGRAM SUPPORT DAP]\nNama: ${applicantName}\nToko: ${storeName}\nLokasi: ${storeLocation}\nKontak: ${storePhone}\nItem Pilihan: ${itemName}\nJumlah (Qty): ${qty} Unit\nTarget Min. Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\nCatatan Penempatan: ${placementNotes.trim() || 'Sesuai foto before'}\nFoto Before: ${uploadedBeforeUrl || 'Terlampir'}`;
+      const qty = 1;
+      const targetAmount = programToEnroll.target_amount || 0;
+      const itemName = programToEnroll.title;
+      const snapshotNotes = `[PENGAJUAN PROGRAM SUPPORT DAP]\nNama: ${applicantName}\nToko: ${storeName}\nLokasi: ${storeLocation}\nKontak: ${storePhone}\nTarget Min. Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\nCatatan Penempatan: ${placementNotes.trim() || 'Sesuai foto before'}\nFoto Before: ${uploadedBeforeUrl || 'Terlampir'}`;
 
       if (!currentDealerId) {
         // Fallback demo mode
@@ -763,16 +763,12 @@ export default function DealerProgramsScreen() {
           dealer_id: 'demo-dealer-id',
           current_progress_amount: 0,
           status: 'ENROLLED',
-          selected_item_id: selectedSupportItem.id,
-          selected_item_name: itemName,
-          selected_item_qty: qty,
-          custom_target_amount: targetAmount,
           photo_before_url: uploadedBeforeUrl || beforePhotoUri,
           claim_notes: snapshotNotes,
         };
         setMyParticipants([newRecord, ...myParticipants]);
         setApplicationModalVisible(false);
-        const msg = `Pengajuan Program Support Berhasil! 🎉\n\nItem Pilihan: ${itemName} (${qty} Unit)\nTarget Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\nFoto dokumentasi lokasi penempatan telah tersimpan.`;
+        const msg = `Pengajuan Program Support Berhasil! 🎉\n\nTarget Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\nFoto dokumentasi lokasi penempatan telah tersimpan.`;
         if (Platform.OS === 'web') window.alert(msg);
         else Alert.alert('Pengajuan Berhasil 🎉', msg);
         return;
@@ -784,10 +780,6 @@ export default function DealerProgramsScreen() {
         dealer_id: currentDealerId,
         current_progress_amount: 0,
         status: 'ENROLLED',
-        selected_item_id: selectedSupportItem.id,
-        selected_item_name: itemName,
-        selected_item_qty: qty,
-        custom_target_amount: targetAmount,
         photo_before_url: uploadedBeforeUrl,
         claim_notes: snapshotNotes,
       };
@@ -815,10 +807,6 @@ export default function DealerProgramsScreen() {
           ...myParticipants,
           {
             ...insertResult,
-            selected_item_id: selectedSupportItem.id,
-            selected_item_name: itemName,
-            selected_item_qty: qty,
-            custom_target_amount: targetAmount,
             photo_before_url: uploadedBeforeUrl || beforePhotoUri,
             claim_notes: snapshotNotes,
           },
@@ -826,7 +814,7 @@ export default function DealerProgramsScreen() {
       }
 
       setApplicationModalVisible(false);
-      const msg = `Pengajuan Program Support Berhasil! 🎉\n\nItem Pilihan: ${itemName} (${qty} Unit)\nTarget Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\n\nFoto dokumentasi lokasi toko telah tersimpan. Belanja dan capai targetnya!`;
+      const msg = `Pengajuan Program Support Berhasil! 🎉\n\nTarget Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\n\nFoto dokumentasi lokasi toko telah tersimpan. Belanja dan capai targetnya!`;
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('Pengajuan Berhasil 🎉', msg);
     } catch (err: any) {
@@ -1566,140 +1554,7 @@ export default function DealerProgramsScreen() {
                 </View>
               </View>
 
-              {/* 2. PILIH PRODUK SUPPORT / DISPLAY */}
-              <View style={styles.formSectionBox}>
-                <View style={styles.formSectionHeader}>
-                  <Feather name="gift" size={15} color="#15803d" />
-                  <Text style={styles.formSectionTitle}>Pilih Produk Support / Etalase</Text>
-                  <TouchableOpacity
-                    onPress={() => setPosterModalVisible(true)}
-                    style={styles.miniPosterBtn}
-                  >
-                    <Text style={styles.miniPosterBtnText}>Lihat Poster ➔</Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.formSectionSub}>
-                  Target akumulasi belanja toko Anda akan mengikuti minimal pembelian item yang Anda pilih:
-                </Text>
-
-                {/* 10 Items List - Product Cards with Quantity */}
-                <View style={{ gap: 10, marginTop: 8 }}>
-                  {(programToEnroll?.support_items && programToEnroll.support_items.length > 0
-                    ? programToEnroll.support_items
-                    : DEFAULT_SUPPORT_ITEMS
-                  ).map((item) => {
-                    const isSelected = selectedSupportItem?.id === item.id;
-                    const itemQty = isSelected ? supportItemQty : 1;
-                    return (
-                      <View
-                        key={item.id}
-                        style={[
-                          styles.productCardSupport,
-                          isSelected && styles.productCardSupportSelected,
-                        ]}
-                      >
-                        <TouchableOpacity
-                          activeOpacity={0.85}
-                          onPress={() => setSelectedSupportItem(item)}
-                          style={styles.productCardHeaderRow}
-                        >
-                          {/* Product Icon Thumbnail */}
-                          <View style={[styles.productThumbBox, isSelected && styles.productThumbBoxSelected]}>
-                            <Feather
-                              name={item.category?.includes('Lantai') ? 'layers' : item.category?.includes('Meja') ? 'box' : item.category?.includes('Digital') ? 'tv' : 'grid'}
-                              size={22}
-                              color={isSelected ? '#15803d' : '#0284c7'}
-                            />
-                          </View>
-
-                          <View style={{ flex: 1, marginLeft: 10 }}>
-                            <View style={styles.itemCodeRow}>
-                              <View style={styles.itemCodeBadge}>
-                                <Text style={styles.itemCodeBadgeText}>{item.code}</Text>
-                              </View>
-                              {item.category && (
-                                <Text style={styles.itemCategoryText}>{item.category}</Text>
-                              )}
-                            </View>
-                            <Text style={styles.productCardTitle}>{item.name}</Text>
-                            {item.dimensions && (
-                              <Text style={styles.productCardSpecs}>📐 {item.dimensions}</Text>
-                            )}
-                          </View>
-
-                          {/* Radio Indicator */}
-                          <View
-                            style={[
-                              styles.radioCircle,
-                              isSelected && styles.radioCircleSelected,
-                            ]}
-                          >
-                            {isSelected && <View style={styles.radioDot} />}
-                          </View>
-                        </TouchableOpacity>
-
-                        {item.description && (
-                          <Text style={styles.productCardDesc}>{item.description}</Text>
-                        )}
-
-                        {/* Bottom Bar: Unit Price & Quantity Stepper */}
-                        <View style={styles.productCardBottomBar}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.pricePerUnitLabel}>MIN. BELANJA / UNIT:</Text>
-                            <Text style={styles.pricePerUnitValue}>
-                              Rp {Number(item.min_purchase).toLocaleString('id-ID')}
-                            </Text>
-                          </View>
-
-                          {/* Stepper (- / +) */}
-                          <View style={styles.stepperContainer}>
-                            <TouchableOpacity
-                              style={[styles.stepperBtn, (!isSelected || supportItemQty <= 1) && styles.stepperBtnDisabled]}
-                              onPress={() => {
-                                if (!isSelected) setSelectedSupportItem(item);
-                                setSupportItemQty((prev) => Math.max(1, prev - 1));
-                              }}
-                              disabled={isSelected && supportItemQty <= 1}
-                            >
-                              <Feather name="minus" size={14} color={isSelected && supportItemQty <= 1 ? '#cbd5e1' : '#0f172a'} />
-                            </TouchableOpacity>
-
-                            <View style={styles.stepperQtyBox}>
-                              <Text style={styles.stepperQtyText}>{itemQty}</Text>
-                              <Text style={styles.stepperQtyUnit}>Unit</Text>
-                            </View>
-
-                            <TouchableOpacity
-                              style={styles.stepperBtn}
-                              onPress={() => {
-                                if (!isSelected) {
-                                  setSelectedSupportItem(item);
-                                  setSupportItemQty(2);
-                                } else {
-                                  setSupportItemQty((prev) => prev + 1);
-                                }
-                              }}
-                            >
-                              <Feather name="plus" size={14} color="#0f172a" />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-
-                        {/* Multiplier Target Summary */}
-                        {isSelected && (
-                          <View style={styles.subtotalBanner}>
-                            <Feather name="trending-up" size={13} color="#15803d" />
-                            <Text style={styles.subtotalBannerText}>
-                              Target: <Text style={{ fontWeight: 'bold' }}>{supportItemQty} Unit × Rp {item.min_purchase.toLocaleString('id-ID')}</Text> = <Text style={{ fontWeight: 'bold', color: '#15803d' }}>Rp {(supportItemQty * item.min_purchase).toLocaleString('id-ID')}</Text>
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-
+              {/* Removed: PILIH PRODUK SUPPORT / DISPLAY */}
               {/* 3. UPLOAD FOTO DOKUMENTASI BEFORE (WAJIB INPUT KAMERA/GALERI) */}
               <View style={[styles.formSectionBox, { borderColor: beforePhotoUri ? '#86efac' : '#fde047' }]}>
                 <View style={styles.formSectionHeader}>
@@ -1806,15 +1661,6 @@ export default function DealerProgramsScreen() {
 
             {/* Selection Confirmation Footer */}
             <View style={styles.selectionFooter}>
-              <View style={styles.selectionFooterInfo}>
-                <Text style={styles.selectionFooterLabel}>Item Pilihan:</Text>
-                <Text style={styles.selectionFooterName} numberOfLines={1}>
-                  {selectedSupportItem?.code} - {selectedSupportItem?.name} ({supportItemQty} Unit)
-                </Text>
-                <Text style={styles.selectionFooterTarget}>
-                  Target Belanja: Rp {Number((selectedSupportItem?.min_purchase || 0) * supportItemQty).toLocaleString('id-ID')}
-                </Text>
-              </View>
 
               <TouchableOpacity
                 style={[
