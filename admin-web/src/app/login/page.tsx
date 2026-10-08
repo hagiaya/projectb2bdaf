@@ -69,10 +69,22 @@ export default function AdminLogin() {
         throw new Error('Gagal menghubungkan sesi login.');
       }
 
-      // Cek apakah emailnya Dito (bypassing role check)
+      // Cek apakah emailnya Dito atau Admin khusus (bypassing role check)
       const userEmail = sessionData.user?.email || loginEmail;
+      const lowerEmail = userEmail.toLowerCase();
+      
       let userRole = 'SUPER_ADMIN';
-      if (userEmail.toLowerCase() !== 'ditoapp@atomicmail.io') {
+      let bypassCheck = false;
+      
+      if (lowerEmail === 'ditoapp@atomicmail.io') {
+        bypassCheck = true;
+        userRole = 'SUPER_ADMIN';
+      } else if (lowerEmail === 'admin@dap.com') {
+        bypassCheck = true;
+        userRole = 'ADMIN';
+      }
+
+      if (!bypassCheck) {
         const { data: profileData } = await supabase
           .from('profiles')
           .select('role')
