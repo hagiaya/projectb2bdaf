@@ -47,6 +47,13 @@ export default function SalesLayout() {
         }}
       />
       <Tabs.Screen
+        name="catalog"
+        options={{
+          title: 'Katalog',
+          tabBarIcon: ({ color, size }) => <Feather name="grid" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="create-order"
         options={{
           title: 'Order Toko',
