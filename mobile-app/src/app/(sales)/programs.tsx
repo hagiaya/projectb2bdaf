@@ -765,7 +765,7 @@ export default function DealerProgramsScreen() {
 
       insertResult = data && data[0] ? data[0] : null;
       if (insertResult) {
-        setMyParticipants([]);//
+        setMyParticipants([
           ...myParticipants,
           {
             ...insertResult,
