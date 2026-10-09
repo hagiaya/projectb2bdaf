@@ -30,26 +30,38 @@ export default function RegisterScreen() {
   const [npwpBase64, setNpwpBase64] = useState<string | null>(null);
   const [storeImage, setStoreImage] = useState<string | null>(null);
   const [storeBase64, setStoreBase64] = useState<string | null>(null);
-  const [salesList, setSalesList] = useState<{ id: string; name: string; phone?: string }[]>([]);
+  const [salesList, setSalesList] = useState<{ id: string; name: string; phone?: string; region_id?: string }[]>([]);
   const [selectedSalesId, setSelectedSalesId] = useState<string>('');
   const [salesModalVisible, setSalesModalVisible] = useState(false);
+  const [regions, setRegions] = useState<{id: string, name: string}[]>([]);
 
   useEffect(() => {
     fetchSalesList();
+    fetchRegions();
   }, []);
+
+  const fetchRegions = async () => {
+    try {
+      const { data } = await supabase.from('regions').select('id, name');
+      if (data) setRegions(data);
+    } catch (err) {
+      console.log('Error fetching regions:', err);
+    }
+  };
 
   const fetchSalesList = async () => {
     try {
       const { data: sData, error: sErr } = await supabase
         .from('sales')
-        .select('id, profile_id, status, profiles(id, full_name, phone_number)')
+        .select('id, profile_id, status, region_id, profiles(id, full_name, phone_number)')
         .eq('status', 'ACTIVE');
 
       if (!sErr && sData && sData.length > 0) {
         setSalesList(sData.map((s: any) => ({
           id: s.id,
           name: s.profiles?.full_name || 'Sales Staff',
-          phone: s.profiles?.phone_number
+          phone: s.profiles?.phone_number,
+          region_id: s.region_id
         })));
         return;
       }
@@ -297,6 +309,27 @@ export default function RegisterScreen() {
       if (error) throw error;
 
       let finalSalesId = selectedSalesId || null;
+      let detectedRegionId = null;
+
+      // Auto detect region
+      if (address) {
+        const addressUpper = address.toUpperCase();
+        for (const reg of regions) {
+          if (addressUpper.includes(reg.name.toUpperCase())) {
+            detectedRegionId = reg.id;
+            break;
+          }
+        }
+      }
+
+      // If no sales selected, try to auto-assign based on region
+      if (!finalSalesId && detectedRegionId) {
+        const regionalSales = salesList.filter(s => s.region_id === detectedRegionId);
+        if (regionalSales.length > 0) {
+          finalSalesId = regionalSales[0].id;
+        }
+      }
+
       if (finalSalesId) {
         const { data: sMatch } = await supabase
           .from('sales')
@@ -317,6 +350,7 @@ export default function RegisterScreen() {
         credit_limit: 0,
         status: 'PENDING',
         sales_id: finalSalesId,
+        region_id: detectedRegionId,
       }, { onConflict: 'profile_id' });
 
       await supabase.auth.signOut();
