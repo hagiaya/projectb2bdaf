@@ -2158,33 +2158,31 @@ export default function DealerProgramsScreen() {
         </View>
       </Modal>
 
-      {/* MODAL 5: FULLSCREEN IMAGE PREVIEW */}
+      {/* FULLSCREEN IMAGE PREVIEW */}
       <Modal visible={!!previewImage} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { padding: 10, backgroundColor: '#000', maxHeight: '100%', borderRadius: 0 }]}>
-            <TouchableOpacity
-              style={{ position: 'absolute', top: 40, right: 20, zIndex: 10, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 }}
-              onPress={() => setPreviewImage(null)}
-            >
-              <Feather name="x" size={24} color="white" />
-            </TouchableOpacity>
-            <ScrollView
+        <View style={styles.lightboxOverlay}>
+          <TouchableOpacity
+            style={styles.lightboxCloseBtn}
+            onPress={() => setPreviewImage(null)}
+          >
+            <Feather name="x" size={24} color="white" />
+          </TouchableOpacity>
+          
+          {previewImage && (
+            <ScrollView 
               style={{ flex: 1, width: '100%' }}
               maximumZoomScale={3}
               minimumZoomScale={1}
               contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
             >
-              {previewImage && (
-                <Image
-                  source={{ uri: previewImage }}
-                  style={{ width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.2 }}
-                  contentFit="contain"
-                />
-              )}
+              <Image
+                source={{ uri: previewImage }}
+                style={{ width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.2 }}
+                contentFit="contain"
+              />
             </ScrollView>
-          </View>
+          )}
         </View>
-      </Modal>
     </View>
   );
 }
