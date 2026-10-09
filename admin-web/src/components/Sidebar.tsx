@@ -94,7 +94,7 @@ export default function Sidebar() {
     <div className="w-64 bg-white dark:bg-black text-gray-900 dark:text-white min-h-screen flex flex-col shadow-xl z-10 relative border-r border-gray-200 dark:border-zinc-800">
       <div className="p-6">
         <h1 className="text-2xl font-black tracking-wider text-emerald-600 dark:text-emerald-300 drop-shadow-sm flex items-center gap-2">
-          <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain rounded-lg" />
+          <img src="/LOGO%20DAP.svg" alt="Logo" className="h-8 object-contain" />
           DAP APP
         </h1>
         <p className="text-xs text-emerald-700/80 dark:text-emerald-200/70 mt-1.5 font-medium tracking-wide">

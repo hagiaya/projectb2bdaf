@@ -122,8 +122,8 @@ export default function AdminLogin() {
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
         <div className="bg-[#8ec44a] p-8 text-center relative overflow-hidden">
           <div className="absolute top-0 right-0 translate-x-8 -translate-y-8 w-32 h-32 bg-white/10 rounded-full pointer-events-none" />
-          <div className="bg-white/20 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm overflow-hidden p-2 shadow-inner">
-            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+          <div className="bg-white w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm overflow-hidden p-2 shadow-inner">
+            <img src="/LOGO%20DAP.svg" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight">B2B Admin Panel</h1>
           <p className="text-white/90 text-sm mt-1">Masuk untuk mengelola sistem katalog & pesanan</p>
