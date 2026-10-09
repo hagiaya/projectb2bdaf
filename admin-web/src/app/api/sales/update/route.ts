@@ -55,11 +55,17 @@ export async function POST(req: NextRequest) {
       if (profileError) throw profileError;
     }
 
-    // 2. Update password di Supabase Auth (jika diisi)
+    // 2. Update password & email di Supabase Auth
+    let authUpdateData: any = {};
     if (password && password.trim() !== '') {
-      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(profile_id, {
-        password: password.trim(),
-      });
+      authUpdateData.password = password.trim();
+    }
+    if (updateData.phone_number) {
+      authUpdateData.email = `${updateData.phone_number}@sales.b2b.app`;
+    }
+
+    if (Object.keys(authUpdateData).length > 0) {
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(profile_id, authUpdateData);
       if (authError) throw authError;
     }
 
