@@ -723,6 +723,14 @@ export default function SalesHome() {
             <Text style={styles.menuTitle}>Cuti & Izin</Text>
             <Text style={styles.menuSub}>Pengajuan sakit/izin</Text>
           </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.menuCard} onPress={() => router.push('/(sales)/programs' as any)}>
+            <View style={[styles.menuIcon, { backgroundColor: '#e0e7ff' }]}>
+              <Feather name="award" size={24} color="#4f46e5" />
+            </View>
+            <Text style={styles.menuTitle}>Program</Text>
+            <Text style={styles.menuSub}>Katalog Reward</Text>
+          </TouchableOpacity>
         </View>
       </View>
 

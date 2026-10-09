@@ -4,6 +4,7 @@ import { Search, Plus, TrendingUp, Users, ShoppingBag, Package, ChevronRight, Cl
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface RecentOrder {
   id: string;
@@ -142,6 +143,7 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <ThemeToggle />
           <button 
             onClick={() => router.push('/orders')}
             className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-all shadow-sm flex items-center gap-2 text-sm hover:shadow-md active:scale-95 cursor-pointer"

@@ -306,10 +306,10 @@ export default function DealerProgramsScreen() {
           });
           setMyParticipants(enrichedParts);
         } else {
-          setMyParticipants([]);
+          setMyParticipants([]);//]);
         }
       } else {
-        // Fallback for no dealer profile
+        // No dealer profile, so empty participants for Sales users
         setMyParticipants([]);
       }
     } catch (err) {
@@ -674,14 +674,7 @@ export default function DealerProgramsScreen() {
       };
 
       if (!currentDealerId) {
-        setMyParticipants([
-          {
-            id: 'part-' + Date.now(),
-            ...payload,
-          },
-          ...myParticipants,
-        ]);
-        Alert.alert('Pendaftaran Berhasil 🎉', `Toko Anda telah terdaftar pada program "${program.title}".`);
+        Alert.alert('Perhatian', 'Hanya akun Toko (Dealer) yang dapat mendaftar program ini.');
         return;
       }
 
@@ -692,7 +685,7 @@ export default function DealerProgramsScreen() {
 
       if (error) throw error;
       if (data) {
-        setMyParticipants([...myParticipants, data[0] as any]);
+        setMyParticipants([]);//...myParticipants, data[0] as any]);
       }
       Alert.alert('Pendaftaran Berhasil 🎉', `Toko Anda telah terdaftar pada program "${program.title}". Kumpulkan omset belanja Anda!`);
     } catch (err: any) {
@@ -738,21 +731,8 @@ export default function DealerProgramsScreen() {
       const snapshotNotes = `[PENGAJUAN PROGRAM SUPPORT DAP]\nNama: ${applicantName}\nToko: ${storeName}\nLokasi: ${storeLocation}\nKontak: ${storePhone}\nTarget Min. Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\nCatatan Penempatan: ${placementNotes.trim() || 'Sesuai foto before'}\nFoto Before: ${uploadedBeforeUrl || 'Terlampir'}`;
 
       if (!currentDealerId) {
-        // Fallback demo mode
-        const newRecord: ParticipantRecord = {
-          id: 'part-' + Date.now(),
-          program_id: programToEnroll.id,
-          dealer_id: 'demo-dealer-id',
-          current_progress_amount: 0,
-          status: 'ENROLLED',
-          photo_before_url: uploadedBeforeUrl || beforePhotoUri,
-          claim_notes: snapshotNotes,
-        };
-        setMyParticipants([newRecord, ...myParticipants]);
+        Alert.alert('Perhatian', 'Hanya akun Toko (Dealer) yang dapat mendaftar program support ini.');
         setApplicationModalVisible(false);
-        const msg = `Pengajuan Program Support Berhasil! 🎉\n\nTarget Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\nFoto dokumentasi lokasi penempatan telah tersimpan.`;
-        if (Platform.OS === 'web') window.alert(msg);
-        else Alert.alert('Pengajuan Berhasil 🎉', msg);
         return;
       }
 
@@ -785,7 +765,7 @@ export default function DealerProgramsScreen() {
 
       insertResult = data && data[0] ? data[0] : null;
       if (insertResult) {
-        setMyParticipants([
+        setMyParticipants([]);//
           ...myParticipants,
           {
             ...insertResult,
