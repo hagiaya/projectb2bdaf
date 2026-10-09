@@ -2183,6 +2183,7 @@ export default function DealerProgramsScreen() {
             </ScrollView>
           )}
         </View>
+      </Modal>
     </View>
   );
 }
