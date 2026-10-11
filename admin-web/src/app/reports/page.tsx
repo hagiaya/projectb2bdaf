@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, Package, Users, DollarSign } from 'lucide-react';
+import Link from 'next/link';
+import { BarChart3, TrendingUp, Package, Users, DollarSign, FileText } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function ReportsPage() {
@@ -103,9 +104,28 @@ export default function ReportsPage() {
           </div>
         </div>
       )}
-      
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 text-center text-slate-500 font-medium">
-        Modul visualisasi grafik (Chart.js / Recharts) dapat ditambahkan di sini berdasarkan request.
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <Link 
+          href="/inventory?tab=report"
+          className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 hover:border-emerald-500 hover:shadow-md transition-all flex items-center justify-between"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <FileText size={24} />
+            </div>
+            <div>
+              <h4 className="text-base font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
+                Laporan Mutasi & Riwayat Stok
+              </h4>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Lihat rincian barang yang dilakukan pengurangan & penambahan stok bulan ini, filter periode, dan ekspor Excel.
+              </p>
+            </div>
+          </div>
+          <span className="p-2 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all">
+            ➔
+          </span>
+        </Link>
       </div>
     </div>
   );

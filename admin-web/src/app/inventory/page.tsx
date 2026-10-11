@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ProductImage from '@/components/ProductImage';
+import StockReportTab from '@/components/inventory/StockReportTab';
 
 interface Category {
   id: string;
@@ -65,13 +66,16 @@ interface StockLog {
 
 function InventoryContent() {
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get('tab') === 'restock' ? 'restock' : 'stock';
+  const tabParam = searchParams.get('tab');
+  const initialTab: 'stock' | 'restock' | 'report' = 
+    tabParam === 'restock' ? 'restock' : tabParam === 'report' ? 'report' : 'stock';
   
-  const [activeTab, setActiveTab] = useState<'stock' | 'restock'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'stock' | 'restock' | 'report'>(initialTab);
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [adminEmail, setAdminEmail] = useState('Admin');
+  const [refreshLogsCount, setRefreshLogsCount] = useState(0);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -107,10 +111,12 @@ function InventoryContent() {
   }, []);
 
   useEffect(() => {
-    const tabParam = searchParams.get('tab');
-    if (tabParam === 'restock') {
+    const tab = searchParams.get('tab');
+    if (tab === 'restock') {
       setActiveTab('restock');
-    } else if (tabParam === 'stock') {
+    } else if (tab === 'report') {
+      setActiveTab('report');
+    } else if (tab === 'stock') {
       setActiveTab('stock');
     }
   }, [searchParams]);
@@ -206,6 +212,7 @@ function InventoryContent() {
 
     // 3. Perbarui state lokal produk
     setProducts(prev => prev.map(p => p.id === selectedProduct.id ? { ...p, stock: newStock } : p));
+    setRefreshLogsCount(prev => prev + 1);
     setIsSubmitting(false);
     setIsModalOpen(false);
   };
@@ -287,6 +294,7 @@ function InventoryContent() {
 
     setHistoryRestockAmount('');
     setHistoryRestockNotes('');
+    setRefreshLogsCount(prev => prev + 1);
     setIsHistorySubmitting(false);
   };
 
@@ -387,7 +395,7 @@ function InventoryContent() {
             </div>
             <div>
               <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-                {activeTab === 'restock' ? 'Restok Produk' : 'Manajemen Stok'}
+                {activeTab === 'restock' ? 'Restok Produk' : activeTab === 'report' ? 'Laporan Riwayat Mutasi Stok' : 'Manajemen Stok'}
               </h1>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
@@ -400,12 +408,14 @@ function InventoryContent() {
           <p className="text-sm text-slate-500 font-medium">
             {activeTab === 'restock'
               ? 'Kelola pengisian restok produk dengan filter dan pengelompokan rapi per kategori.'
+              : activeTab === 'report'
+              ? 'Laporan historis barang yang dilakukan penambahan dan pengurangan stok per bulan / periode.'
               : 'Pantau stok live dari Master Produk, mutasi barang, dan riwayat penyesuaian per produk.'}
           </p>
         </div>
 
         {/* TOP ACTION BUTTONS */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button 
             onClick={fetchInitialData}
             disabled={isLoading}
@@ -414,6 +424,19 @@ function InventoryContent() {
           >
             <RefreshCw size={17} className={isLoading ? 'animate-spin text-emerald-600' : ''} />
           </button>
+
+          <button 
+            onClick={() => setActiveTab(activeTab === 'report' ? 'stock' : 'report')}
+            className={`px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm flex items-center gap-2 text-sm ${
+              activeTab === 'report'
+                ? 'bg-indigo-600 text-white shadow-indigo-600/20 ring-2 ring-indigo-400/40'
+                : 'bg-white border border-slate-200 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700'
+            }`}
+          >
+            <FileText size={16} strokeWidth={2.2} className={activeTab === 'report' ? 'text-white' : 'text-indigo-600'} />
+            {activeTab === 'report' ? 'Tutup Laporan' : 'Laporan Mutasi Stok'}
+          </button>
+
           <button 
             onClick={() => {
               if (products.length > 0) {
@@ -482,8 +505,8 @@ function InventoryContent() {
         </div>
       </div>
 
-      {/* TAB NAVIGATOR: RESTOK PRODUK vs MANAJEMEN STOK */}
-      <div className="flex items-center gap-2 mb-6 border-b border-slate-200/80 pb-3">
+      {/* TAB NAVIGATOR: RESTOK PRODUK vs MANAJEMEN STOK vs LAPORAN */}
+      <div className="flex flex-wrap items-center gap-2 mb-6 border-b border-slate-200/80 pb-3">
         <button
           onClick={() => setActiveTab('restock')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
@@ -514,9 +537,22 @@ function InventoryContent() {
           <Archive size={16} strokeWidth={2.5} />
           Manajemen Stok & Monitoring
         </button>
+
+        <button
+          onClick={() => setActiveTab('report')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
+            activeTab === 'report'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <FileText size={16} strokeWidth={2.5} />
+          Laporan Riwayat Mutasi Stok
+        </button>
       </div>
 
-      {/* FILTER CONTROL BAR */}
+      {/* FILTER CONTROL BAR UNTUK TAB STOK & RESTOK */}
+      {activeTab !== 'report' && (
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-6 space-y-3">
         <div className="flex flex-col md:flex-row gap-3">
           {/* SEARCH INPUT */}
@@ -625,11 +661,21 @@ function InventoryContent() {
           </div>
         )}
       </div>
+      )}
 
       {/* ======================================================== */}
-      {/* KONTEN TAB 1: RESTOK PRODUK (PENGELOMPOKAN PER KATEGORI) */}
+      {/* KONTEN TAB: REPORT vs RESTOK vs STOK                     */}
       {/* ======================================================== */}
-      {activeTab === 'restock' && isGroupedByCategory ? (
+      {activeTab === 'report' ? (
+        <StockReportTab
+          categories={categories}
+          onOpenProductHistory={(product) => {
+            const found = products.find(p => p.id === product.id) || product;
+            openHistoryModal(found);
+          }}
+          refreshTrigger={refreshLogsCount}
+        />
+      ) : activeTab === 'restock' && isGroupedByCategory ? (
         <div className="space-y-6">
           {isLoading ? (
             <div className="bg-white rounded-2xl p-12 text-center border border-slate-100">
