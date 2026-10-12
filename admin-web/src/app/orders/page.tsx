@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, ShoppingCart, Filter, Eye, Check, X, Clock, 
   Package, Truck, DollarSign, CreditCard, ChevronRight,
   AlertCircle, CheckCircle2, User, MapPin, Phone, RefreshCw, ZoomIn,
-  PackageCheck, FileText, UploadCloud, Calendar, CheckSquare, Download, FileSpreadsheet, MessageCircle
+  PackageCheck, FileText, UploadCloud, Calendar, CheckSquare, Download, FileSpreadsheet, MessageCircle,
+  ShieldCheck, Store, Layers
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
@@ -42,11 +43,55 @@ interface Order {
   receiving_proof_url?: string;
   receiving_status?: string;
   created_at: string;
+  sales_id?: string | null;
+  spv_id?: string | null;
+  region_id?: string | null;
   dealers?: {
+    id?: string;
     store_name: string;
     address: string;
-    profiles?: { full_name: string; phone_number: string; email: string };
+    sales_id?: string | null;
+    region_id?: string | null;
+    profiles?: { full_name: string; phone_number: string; email?: string };
   };
+  sales?: {
+    id: string;
+    is_spv?: boolean;
+    spv_id?: string | null;
+    region_id?: string | null;
+    profiles?: { full_name: string; phone_number: string };
+  };
+  spv?: {
+    id: string;
+    is_spv?: boolean;
+    region_id?: string | null;
+    profiles?: { full_name: string; phone_number: string };
+  };
+  regions?: {
+    id: string;
+    name: string;
+  };
+}
+
+interface SalesPerson {
+  id: string;
+  name: string;
+  is_spv: boolean;
+  spv_id?: string | null;
+  region_id?: string | null;
+}
+
+interface DealerOption {
+  id: string;
+  store_name: string;
+  pic_name?: string;
+  region_id?: string | null;
+  sales_id?: string | null;
+}
+
+interface RegionOption {
+  id: string;
+  name: string;
 }
 
 export default function OrdersPage() {
@@ -55,6 +100,18 @@ export default function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [stageFilter, setStageFilter] = useState<'ALL' | 'PENDING' | 'PACKING' | 'SHIPPED' | 'RECEIVED' | 'COMPLETED' | 'CANCELLED'>('ALL');
   
+  // Filter Dropdown States (Sales, SPV, Pelanggan, Wilayah)
+  const [selectedSales, setSelectedSales] = useState<string>('ALL');
+  const [selectedSpv, setSelectedSpv] = useState<string>('ALL');
+  const [selectedDealer, setSelectedDealer] = useState<string>('ALL');
+  const [selectedRegion, setSelectedRegion] = useState<string>('ALL');
+
+  // Metadata Lists for Dropdowns
+  const [salesList, setSalesList] = useState<SalesPerson[]>([]);
+  const [spvList, setSpvList] = useState<SalesPerson[]>([]);
+  const [dealersList, setDealersList] = useState<DealerOption[]>([]);
+  const [regionsList, setRegionsList] = useState<RegionOption[]>([]);
+
   // Detail Modal
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
@@ -117,18 +174,45 @@ export default function OrdersPage() {
     setFetchError(null);
 
     try {
-      // Tier 1: Query with joined dealers and profiles
+      // Tier 1: Query with joined dealers, sales, spv, and regions
       let { data, error } = await supabase
         .from('orders')
-        .select('*, dealers(store_name, address, profiles:profile_id(full_name, phone_number))')
+        .select(`
+          *,
+          dealers:dealer_id (
+            id,
+            store_name,
+            address,
+            region_id,
+            sales_id,
+            profiles:profile_id (full_name, phone_number)
+          ),
+          sales:sales_id (
+            id,
+            is_spv,
+            spv_id,
+            region_id,
+            profiles:profile_id (full_name, phone_number)
+          ),
+          spv:spv_id (
+            id,
+            is_spv,
+            region_id,
+            profiles:profile_id (full_name, phone_number)
+          ),
+          regions:region_id (
+            id,
+            name
+          )
+        `)
         .order('created_at', { ascending: false });
 
-      // Tier 2: Fallback if profiles relation causes schema mismatch
+      // Tier 2: Fallback if profiles/spv relation causes schema mismatch
       if (error) {
-        console.warn('Tier 1 query failed, trying Tier 2 (dealers without nested profiles):', error.message);
+        console.warn('Tier 1 query failed, trying Tier 2 (basic joined dealers):', error.message);
         const fb1 = await supabase
           .from('orders')
-          .select('*, dealers(store_name, address)')
+          .select('*, dealers:dealer_id(id, store_name, address, region_id, sales_id, profiles:profile_id(full_name, phone_number))')
           .order('created_at', { ascending: false });
         data = fb1.data;
         error = fb1.error;
@@ -152,6 +236,54 @@ export default function OrdersPage() {
       if (data) {
         setOrders(data as any);
         setLastSyncTime(new Date());
+      }
+
+      // Fetch metadata for filter dropdowns (Sales, SPV, Pelanggan, Wilayah)
+      try {
+        const [salesRes, dealersRes, regionsRes] = await Promise.all([
+          supabase.from('sales').select('id, is_spv, spv_id, region_id, profiles:profile_id(full_name)'),
+          supabase.from('dealers').select('id, store_name, region_id, sales_id, profiles:profile_id(full_name)').order('store_name', { ascending: true }),
+          supabase.from('regions').select('id, name').order('name', { ascending: true })
+        ]);
+
+        if (salesRes.data) {
+          const salesArr: SalesPerson[] = [];
+          const spvArr: SalesPerson[] = [];
+          salesRes.data.forEach((s: any) => {
+            const item: SalesPerson = {
+              id: s.id,
+              name: s.profiles?.full_name || (s.is_spv ? 'SPV' : 'Sales'),
+              is_spv: !!s.is_spv,
+              spv_id: s.spv_id,
+              region_id: s.region_id,
+            };
+            if (s.is_spv) {
+              spvArr.push(item);
+            } else {
+              salesArr.push(item);
+            }
+          });
+          salesArr.sort((a, b) => a.name.localeCompare(b.name));
+          spvArr.sort((a, b) => a.name.localeCompare(b.name));
+          setSalesList(salesArr);
+          setSpvList(spvArr);
+        }
+
+        if (dealersRes.data) {
+          setDealersList(dealersRes.data.map((d: any) => ({
+            id: d.id,
+            store_name: d.store_name || 'Toko',
+            pic_name: d.profiles?.full_name || '',
+            region_id: d.region_id,
+            sales_id: d.sales_id,
+          })));
+        }
+
+        if (regionsRes.data) {
+          setRegionsList(regionsRes.data);
+        }
+      } catch (metaErr) {
+        console.warn('Failed to fetch dropdown metadata:', metaErr);
       }
     } catch (err: any) {
       console.error('Fetch orders critical error:', err);
@@ -309,31 +441,126 @@ export default function OrdersPage() {
     }
   };
 
-  // Pipeline filter
-  const filteredOrders = orders.filter((order) => {
-    const query = searchQuery.toLowerCase();
-    const matchesSearch = 
-      order.order_number.toLowerCase().includes(query) || 
-      (order.dealers?.store_name || '').toLowerCase().includes(query) ||
-      (order.dealers?.profiles?.full_name || '').toLowerCase().includes(query);
+  // Memoized Lookup Maps for Ultra-Fast Resolution
+  const salesMap = useMemo(() => {
+    const map = new Map<string, SalesPerson>();
+    [...salesList, ...spvList].forEach(s => map.set(s.id, s));
+    return map;
+  }, [salesList, spvList]);
 
-    let matchesStage = true;
-    if (stageFilter === 'PENDING') {
-      matchesStage = order.status === 'PENDING';
-    } else if (stageFilter === 'PACKING') {
-      matchesStage = order.status === 'PACKING' || order.status === 'PROCESSING';
-    } else if (stageFilter === 'SHIPPED') {
-      matchesStage = order.status === 'SHIPPED';
-    } else if (stageFilter === 'RECEIVED') {
-      matchesStage = order.status === 'RECEIVED';
-    } else if (stageFilter === 'COMPLETED') {
-      matchesStage = order.status === 'COMPLETED';
-    } else if (stageFilter === 'CANCELLED') {
-      matchesStage = order.status === 'CANCELLED';
-    }
+  const spvMap = useMemo(() => {
+    const map = new Map<string, SalesPerson>();
+    spvList.forEach(s => map.set(s.id, s));
+    return map;
+  }, [spvList]);
 
-    return matchesSearch && matchesStage;
-  });
+  const regionsMap = useMemo(() => {
+    const map = new Map<string, string>();
+    regionsList.forEach(r => map.set(r.id, r.name));
+    return map;
+  }, [regionsList]);
+
+  const dealersMap = useMemo(() => {
+    const map = new Map<string, DealerOption>();
+    dealersList.forEach(d => map.set(d.id, d));
+    return map;
+  }, [dealersList]);
+
+  // Helper to extract effective metadata for any order
+  const getOrderMeta = (order: Order) => {
+    // 1. Dealer
+    const dealerId = order.dealer_id || order.dealers?.id || null;
+    const dealerObj = dealerId ? dealersMap.get(dealerId) : null;
+    const storeName = order.dealers?.store_name || dealerObj?.store_name || '-';
+    const picName = order.dealers?.profiles?.full_name || dealerObj?.pic_name || '-';
+
+    // 2. Sales
+    const effectiveSalesId = order.sales_id || order.dealers?.sales_id || dealerObj?.sales_id || null;
+    const salesObj = effectiveSalesId ? salesMap.get(effectiveSalesId) : null;
+    const salesName = order.sales?.profiles?.full_name || salesObj?.name || (effectiveSalesId ? 'Sales' : '-');
+
+    // 3. SPV
+    const effectiveSpvId = order.spv_id || order.sales?.spv_id || salesObj?.spv_id || (salesObj?.is_spv ? salesObj.id : null) || null;
+    const spvObj = effectiveSpvId ? spvMap.get(effectiveSpvId) : null;
+    const spvName = order.spv?.profiles?.full_name || spvObj?.name || (effectiveSpvId ? 'SPV' : '-');
+
+    // 4. Region
+    const effectiveRegionId = order.region_id || order.dealers?.region_id || dealerObj?.region_id || salesObj?.region_id || null;
+    const regionName = order.regions?.name || (effectiveRegionId ? regionsMap.get(effectiveRegionId) : null) || (effectiveRegionId ? 'Wilayah' : '-');
+
+    return {
+      salesId: effectiveSalesId,
+      salesName,
+      spvId: effectiveSpvId,
+      spvName,
+      regionId: effectiveRegionId,
+      regionName,
+      dealerId,
+      storeName,
+      picName,
+    };
+  };
+
+  const hasActiveFilters = 
+    selectedSales !== 'ALL' || 
+    selectedSpv !== 'ALL' || 
+    selectedDealer !== 'ALL' || 
+    selectedRegion !== 'ALL' || 
+    stageFilter !== 'ALL' || 
+    searchQuery.trim() !== '';
+
+  const resetAllFilters = () => {
+    setSelectedSales('ALL');
+    setSelectedSpv('ALL');
+    setSelectedDealer('ALL');
+    setSelectedRegion('ALL');
+    setStageFilter('ALL');
+    setSearchQuery('');
+  };
+
+  // Base filtered orders by Sales, SPV, Pelanggan, and Wilayah
+  const baseFilteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      const meta = getOrderMeta(order);
+      const matchesSales = selectedSales === 'ALL' || meta.salesId === selectedSales;
+      const matchesSpv = selectedSpv === 'ALL' || meta.spvId === selectedSpv;
+      const matchesDealer = selectedDealer === 'ALL' || meta.dealerId === selectedDealer;
+      const matchesRegion = selectedRegion === 'ALL' || meta.regionId === selectedRegion;
+      return matchesSales && matchesSpv && matchesDealer && matchesRegion;
+    });
+  }, [orders, selectedSales, selectedSpv, selectedDealer, selectedRegion, salesMap, spvMap, regionsMap, dealersMap]);
+
+  // Final filtered orders (including stage and search query)
+  const filteredOrders = useMemo(() => {
+    return baseFilteredOrders.filter((order) => {
+      const meta = getOrderMeta(order);
+      const query = searchQuery.toLowerCase();
+      const matchesSearch = 
+        order.order_number.toLowerCase().includes(query) || 
+        meta.storeName.toLowerCase().includes(query) ||
+        meta.picName.toLowerCase().includes(query) ||
+        meta.salesName.toLowerCase().includes(query) ||
+        meta.spvName.toLowerCase().includes(query) ||
+        meta.regionName.toLowerCase().includes(query);
+
+      let matchesStage = true;
+      if (stageFilter === 'PENDING') {
+        matchesStage = order.status === 'PENDING';
+      } else if (stageFilter === 'PACKING') {
+        matchesStage = order.status === 'PACKING' || order.status === 'PROCESSING';
+      } else if (stageFilter === 'SHIPPED') {
+        matchesStage = order.status === 'SHIPPED';
+      } else if (stageFilter === 'RECEIVED') {
+        matchesStage = order.status === 'RECEIVED';
+      } else if (stageFilter === 'COMPLETED') {
+        matchesStage = order.status === 'COMPLETED';
+      } else if (stageFilter === 'CANCELLED') {
+        matchesStage = order.status === 'CANCELLED';
+      }
+
+      return matchesSearch && matchesStage;
+    });
+  }, [baseFilteredOrders, searchQuery, stageFilter]);
 
   const getStageBadge = (status: string) => {
     switch (status) {
@@ -356,29 +583,35 @@ export default function OrdersPage() {
   };
 
   const countByStage = (stage: string) => {
-    if (stage === 'PENDING') return orders.filter(o => o.status === 'PENDING').length;
-    if (stage === 'PACKING') return orders.filter(o => o.status === 'PACKING' || o.status === 'PROCESSING').length;
-    if (stage === 'SHIPPED') return orders.filter(o => o.status === 'SHIPPED').length;
-    if (stage === 'RECEIVED') return orders.filter(o => o.status === 'RECEIVED').length;
-    if (stage === 'COMPLETED') return orders.filter(o => o.status === 'COMPLETED').length;
-    if (stage === 'CANCELLED') return orders.filter(o => o.status === 'CANCELLED').length;
-    return orders.length;
+    if (stage === 'PENDING') return baseFilteredOrders.filter(o => o.status === 'PENDING').length;
+    if (stage === 'PACKING') return baseFilteredOrders.filter(o => o.status === 'PACKING' || o.status === 'PROCESSING').length;
+    if (stage === 'SHIPPED') return baseFilteredOrders.filter(o => o.status === 'SHIPPED').length;
+    if (stage === 'RECEIVED') return baseFilteredOrders.filter(o => o.status === 'RECEIVED').length;
+    if (stage === 'COMPLETED') return baseFilteredOrders.filter(o => o.status === 'COMPLETED').length;
+    if (stage === 'CANCELLED') return baseFilteredOrders.filter(o => o.status === 'CANCELLED').length;
+    return baseFilteredOrders.length;
   };
 
   // ─── EXPORT EXCEL ──────────────────────────────────────────────
   const handleExportExcel = () => {
-    const rows = filteredOrders.map((o, idx) => ({
-      'No': idx + 1,
-      'Nomor Order': o.order_number,
-      'Tanggal': new Date(o.created_at).toLocaleString('id-ID'),
-      'Toko Dealer': o.dealers?.store_name || '-',
-      'Nama PIC': o.dealers?.profiles?.full_name || '-',
-      'Telepon': o.dealers?.profiles?.phone_number || '-',
-      'Metode Bayar': o.payment_method || '-',
-      'Total (Rp)': Number(o.total_amount || 0),
-      'Status': o.status,
-      'Status Pembayaran': o.payment_status || '-',
-    }));
+    const rows = filteredOrders.map((o, idx) => {
+      const meta = getOrderMeta(o);
+      return {
+        'No': idx + 1,
+        'Nomor Order': o.order_number,
+        'Tanggal': new Date(o.created_at).toLocaleString('id-ID'),
+        'Toko / Pelanggan': meta.storeName,
+        'PIC Pelanggan': meta.picName,
+        'Telepon': o.dealers?.profiles?.phone_number || '-',
+        'Wilayah': meta.regionName,
+        'Sales': meta.salesName,
+        'SPV': meta.spvName,
+        'Metode Bayar': o.payment_method || '-',
+        'Total (Rp)': Number(o.total_amount || 0),
+        'Status': getStageBadge(o.status).label,
+        'Status Pembayaran': o.payment_status || '-',
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(rows);
     // Auto-width columns
@@ -408,21 +641,25 @@ export default function OrdersPage() {
     doc.setFont('helvetica', 'normal');
     doc.text(`Dicetak: ${new Date().toLocaleString('id-ID')}  |  Total: ${filteredOrders.length} order`, 297 - 14, 14, { align: 'right' });
 
-    const tableData = filteredOrders.map((o, idx) => [
-      idx + 1,
-      o.order_number,
-      new Date(o.created_at).toLocaleDateString('id-ID'),
-      o.dealers?.store_name || '-',
-      o.dealers?.profiles?.full_name || '-',
-      o.payment_method || '-',
-      `Rp ${Number(o.total_amount || 0).toLocaleString('id-ID')}`,
-      o.status,
-      o.payment_status || '-',
-    ]);
+    const tableData = filteredOrders.map((o, idx) => {
+      const meta = getOrderMeta(o);
+      return [
+        idx + 1,
+        o.order_number,
+        new Date(o.created_at).toLocaleDateString('id-ID'),
+        meta.storeName,
+        meta.regionName,
+        meta.salesName,
+        meta.spvName,
+        o.payment_method || '-',
+        `Rp ${Number(o.total_amount || 0).toLocaleString('id-ID')}`,
+        getStageBadge(o.status).label,
+      ];
+    });
 
     autoTable(doc, {
       startY: 26,
-      head: [['No', 'Nomor Order', 'Tanggal', 'Toko Dealer', 'PIC', 'Metode Bayar', 'Total', 'Status', 'Status Bayar']],
+      head: [['No', 'Nomor Order', 'Tanggal', 'Toko Dealer', 'Wilayah', 'Sales', 'SPV', 'Metode Bayar', 'Total', 'Status']],
       body: tableData,
       theme: 'grid',
       headStyles: { fillColor: [142, 196, 74], textColor: 255, fontStyle: 'bold', fontSize: 8 },
@@ -430,9 +667,8 @@ export default function OrdersPage() {
       alternateRowStyles: { fillColor: [240, 247, 230] },
       columnStyles: {
         0: { cellWidth: 8, halign: 'center' },
-        6: { halign: 'right' },
-        7: { halign: 'center' },
-        8: { halign: 'center' },
+        8: { halign: 'right' },
+        9: { halign: 'center' },
       },
       margin: { left: 14, right: 14 },
     });
@@ -759,17 +995,140 @@ export default function OrdersPage() {
 
       {/* Main Table Card */}
       <div className="bg-white rounded-2xl shadow-[0_2px_12px_-3px_rgba(6,78,59,0.06)] border border-slate-200/80 overflow-hidden">
-        {/* Search Bar */}
-        <div className="p-4 md:p-5 border-b border-slate-100 flex flex-col md:flex-row gap-3 bg-slate-50/50">
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Cari Order ID, Nama Toko Dealer, Pelanggan..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm transition-all"
-            />
+        {/* Search & Filter Toolbar */}
+        <div className="p-4 md:p-5 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/50">
+          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
+            {/* Search Input */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input 
+                type="text" 
+                placeholder="Cari Order ID, Nama Toko Dealer, Pelanggan, Sales, SPV, Wilayah..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm transition-all shadow-xs"
+              />
+            </div>
+
+            {/* Reset Filter Button if active */}
+            {hasActiveFilters && (
+              <button
+                onClick={resetAllFilters}
+                className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-all shadow-xs shrink-0"
+                title="Reset Semua Filter"
+              >
+                <X size={14} /> Reset Filter
+              </button>
+            )}
+          </div>
+
+          {/* 5 Dropdown Filters: Sales, SPV, Pelanggan, Wilayah, Status */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 pt-1">
+            {/* 1. KATEGORI SALES */}
+            <div className="flex items-center gap-2">
+              <User size={16} className={`ml-1 hidden sm:block ${selectedSales !== 'ALL' ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <select
+                value={selectedSales}
+                onChange={(e) => setSelectedSales(e.target.value)}
+                className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all cursor-pointer ${
+                  selectedSales !== 'ALL' 
+                    ? 'border-emerald-500 text-emerald-800 bg-emerald-50/40 ring-1 ring-emerald-500/30' 
+                    : 'border-slate-200 text-slate-700'
+                }`}
+              >
+                <option value="ALL">Semua Sales ({salesList.length})</option>
+                {salesList.map((sales) => (
+                  <option key={sales.id} value={sales.id}>
+                    {sales.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 2. KATEGORI SPV */}
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={16} className={`ml-1 hidden sm:block ${selectedSpv !== 'ALL' ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <select
+                value={selectedSpv}
+                onChange={(e) => setSelectedSpv(e.target.value)}
+                className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all cursor-pointer ${
+                  selectedSpv !== 'ALL' 
+                    ? 'border-emerald-500 text-emerald-800 bg-emerald-50/40 ring-1 ring-emerald-500/30' 
+                    : 'border-slate-200 text-slate-700'
+                }`}
+              >
+                <option value="ALL">Semua SPV ({spvList.length})</option>
+                {spvList.map((spv) => (
+                  <option key={spv.id} value={spv.id}>
+                    {spv.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 3. KATEGORI PELANGGAN */}
+            <div className="flex items-center gap-2">
+              <Store size={16} className={`ml-1 hidden sm:block ${selectedDealer !== 'ALL' ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <select
+                value={selectedDealer}
+                onChange={(e) => setSelectedDealer(e.target.value)}
+                className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all cursor-pointer ${
+                  selectedDealer !== 'ALL' 
+                    ? 'border-emerald-500 text-emerald-800 bg-emerald-50/40 ring-1 ring-emerald-500/30' 
+                    : 'border-slate-200 text-slate-700'
+                }`}
+              >
+                <option value="ALL">Semua Pelanggan ({dealersList.length})</option>
+                {dealersList.map((dealer) => (
+                  <option key={dealer.id} value={dealer.id}>
+                    {dealer.store_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 4. KATEGORI WILAYAH */}
+            <div className="flex items-center gap-2">
+              <MapPin size={16} className={`ml-1 hidden sm:block ${selectedRegion !== 'ALL' ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <select
+                value={selectedRegion}
+                onChange={(e) => setSelectedRegion(e.target.value)}
+                className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all cursor-pointer ${
+                  selectedRegion !== 'ALL' 
+                    ? 'border-emerald-500 text-emerald-800 bg-emerald-50/40 ring-1 ring-emerald-500/30' 
+                    : 'border-slate-200 text-slate-700'
+                }`}
+              >
+                <option value="ALL">Semua Wilayah ({regionsList.length})</option>
+                {regionsList.map((reg) => (
+                  <option key={reg.id} value={reg.id}>
+                    {reg.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 5. STATUS PIPELINE */}
+            <div className="flex items-center gap-2">
+              <Filter size={16} className={`ml-1 hidden sm:block ${stageFilter !== 'ALL' ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value as any)}
+                className={`w-full px-3 py-2 border rounded-xl text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all cursor-pointer ${
+                  stageFilter !== 'ALL' 
+                    ? 'border-emerald-500 text-emerald-800 bg-emerald-50/40 ring-1 ring-emerald-500/30' 
+                    : 'border-slate-200 text-slate-700'
+                }`}
+              >
+                <option value="ALL">Semua Status</option>
+                <option value="PENDING">1. Pesan (Menunggu)</option>
+                <option value="PACKING">2. Pengemasan</option>
+                <option value="SHIPPED">3. Pengiriman</option>
+                <option value="RECEIVED">4. Penerimaan</option>
+                <option value="COMPLETED">5. COD Bayar (Completed)</option>
+                <option value="CANCELLED">Dibatalkan</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -797,11 +1156,12 @@ export default function OrdersPage() {
               ) : filteredOrders.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-12 text-center text-slate-400 font-medium">
-                    Tidak ada pesanan pada tahap ini.
+                    Tidak ada pesanan pada kriteria filter ini.
                   </td>
                 </tr>
               ) : (
                 filteredOrders.map((order) => {
+                  const meta = getOrderMeta(order);
                   const stage = getStageBadge(order.status);
                   const StageIcon = stage.icon;
                   const isCOD = (order.payment_method || '').toUpperCase() === 'COD';
@@ -818,12 +1178,29 @@ export default function OrdersPage() {
                         </div>
                       </td>
 
-                      {/* Store & Customer */}
+                      {/* Store & Customer with Sales, SPV, Region Meta */}
                       <td className="p-4">
-                        <p className="font-bold text-slate-800">{order.dealers?.store_name || '-'}</p>
-                        <p className="text-xs text-slate-400 truncate max-w-[200px]">
-                          {order.dealers?.profiles?.full_name || 'Dealer'} • {order.dealers?.profiles?.phone_number || ''}
+                        <p className="font-bold text-slate-800">{meta.storeName}</p>
+                        <p className="text-xs text-slate-400 truncate max-w-[220px]">
+                          {meta.picName} • {order.dealers?.profiles?.phone_number || ''}
                         </p>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          {meta.regionName !== '-' && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md">
+                              <MapPin size={9} /> {meta.regionName}
+                            </span>
+                          )}
+                          {meta.salesName !== '-' && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200/60 px-1.5 py-0.5 rounded-md">
+                              <User size={9} /> Sales: {meta.salesName}
+                            </span>
+                          )}
+                          {meta.spvName !== '-' && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200/60 px-1.5 py-0.5 rounded-md">
+                              <ShieldCheck size={9} /> SPV: {meta.spvName}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Payment Method & Proof */}
@@ -987,14 +1364,14 @@ export default function OrdersPage() {
 
             {/* Modal Content */}
             <div className="p-6 overflow-y-auto flex-1 space-y-6">
-              {/* Dealer & Shipping Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              {/* Dealer, Shipping & Assignment Info */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                     <User size={14} className="text-emerald-600" /> Informasi Toko & Kontak
                   </p>
-                  <p className="font-bold text-slate-800">{selectedOrder.dealers?.store_name || '-'}</p>
-                  <p className="text-sm text-slate-600">{selectedOrder.dealers?.profiles?.full_name || 'Pemilik Toko'}</p>
+                  <p className="font-bold text-slate-800">{getOrderMeta(selectedOrder).storeName}</p>
+                  <p className="text-sm text-slate-600">{getOrderMeta(selectedOrder).picName}</p>
                   <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
                     <Phone size={12} /> {selectedOrder.dealers?.profiles?.phone_number || '-'}
                   </p>
@@ -1005,6 +1382,20 @@ export default function OrdersPage() {
                   </p>
                   <p className="text-sm text-slate-700 leading-relaxed">
                     {selectedOrder.dealers?.address || 'Alamat tidak dicantumkan'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <ShieldCheck size={14} className="text-emerald-600" /> Wilayah & Penanggung Jawab
+                  </p>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Wilayah: <span className="font-bold text-slate-800">{getOrderMeta(selectedOrder).regionName}</span>
+                  </p>
+                  <p className="text-xs text-slate-500 font-medium mt-1">
+                    Sales: <span className="font-bold text-blue-700">{getOrderMeta(selectedOrder).salesName}</span>
+                  </p>
+                  <p className="text-xs text-slate-500 font-medium mt-1">
+                    SPV: <span className="font-bold text-purple-700">{getOrderMeta(selectedOrder).spvName}</span>
                   </p>
                 </div>
               </div>
