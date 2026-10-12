@@ -6,7 +6,7 @@ import {
   Package, Truck, DollarSign, CreditCard, ChevronRight,
   AlertCircle, CheckCircle2, User, MapPin, Phone, RefreshCw, ZoomIn,
   PackageCheck, FileText, UploadCloud, Calendar, CheckSquare, Download, FileSpreadsheet, MessageCircle,
-  ShieldCheck, Store, Layers
+  ShieldCheck, Store, Layers, Edit2, Trash2, Plus, Minus, ChevronLeft, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
@@ -112,6 +112,18 @@ export default function OrdersPage() {
   const [dealersList, setDealersList] = useState<DealerOption[]>([]);
   const [regionsList, setRegionsList] = useState<RegionOption[]>([]);
 
+  // User Role for Super Admin permissions
+  const [adminRole, setAdminRole] = useState<string>('SUPER_ADMIN');
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(15);
+
+  // Super Admin Item Editing State
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [tempQty, setTempQty] = useState<number>(1);
+  const [isProcessingItem, setIsProcessingItem] = useState<boolean>(false);
+
   // Detail Modal
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
@@ -132,6 +144,27 @@ export default function OrdersPage() {
   const [isSubmittingReceiving, setIsSubmittingReceiving] = useState(false);
 
   useEffect(() => {
+    // 0. Initialize Admin Role
+    const storedRole = localStorage.getItem('adminRole');
+    if (storedRole) {
+      setAdminRole(storedRole);
+    }
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user) {
+        supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single()
+          .then(({ data: prof }) => {
+            if (prof?.role) {
+              setAdminRole(prof.role);
+              localStorage.setItem('adminRole', prof.role);
+            }
+          });
+      }
+    });
+
     fetchData();
 
     // 1. Setup Supabase Realtime Channel
@@ -270,17 +303,21 @@ export default function OrdersPage() {
         }
 
         if (dealersRes.data) {
-          setDealersList(dealersRes.data.map((d: any) => ({
+          const dArr = dealersRes.data.map((d: any) => ({
             id: d.id,
             store_name: d.store_name || 'Toko',
             pic_name: d.profiles?.full_name || '',
             region_id: d.region_id,
             sales_id: d.sales_id,
-          })));
+          }));
+          dArr.sort((a: any, b: any) => a.store_name.localeCompare(b.store_name));
+          setDealersList(dArr);
         }
 
         if (regionsRes.data) {
-          setRegionsList(regionsRes.data);
+          const rArr = [...regionsRes.data];
+          rArr.sort((a: any, b: any) => a.name.localeCompare(b.name));
+          setRegionsList(rArr);
         }
       } catch (metaErr) {
         console.warn('Failed to fetch dropdown metadata:', metaErr);
@@ -295,6 +332,7 @@ export default function OrdersPage() {
 
   const handleOpenDetail = async (order: Order) => {
     setSelectedOrder(order);
+    setEditingItemId(null);
     setIsLoadingItems(true);
     const { data, error } = await supabase
       .from('order_items')
@@ -336,6 +374,101 @@ export default function OrdersPage() {
       }
     } else {
       alert("Gagal mengubah status: " + error.message);
+    }
+  };
+
+  // ─── SUPER ADMIN SKU & QUANTITY MANAGEMENT ─────────────────────
+  const handleSaveItemQty = async (item: OrderItem) => {
+    if (!selectedOrder || isProcessingItem) return;
+    const newQty = Math.max(1, Math.round(Number(tempQty) || 1));
+    const newUnitPrice = Number(item.unit_price) || 0;
+    const newTotalPrice = newQty * newUnitPrice;
+
+    setIsProcessingItem(true);
+    try {
+      // 1. Update item in database
+      const { error: itemError } = await supabase
+        .from('order_items')
+        .update({
+          quantity: newQty,
+          total_price: newTotalPrice
+        })
+        .eq('id', item.id);
+
+      if (itemError) throw itemError;
+
+      // 2. Recalculate order subtotal and total_amount
+      const updatedItems = orderItems.map((it) =>
+        it.id === item.id ? { ...it, quantity: newQty, total_price: newTotalPrice } : it
+      );
+      const newItemsSubtotal = updatedItems.reduce((acc, it) => acc + Number(it.total_price || 0), 0);
+      const newTotalAmount = newItemsSubtotal + Number(selectedOrder.unique_code || 0) + Number(selectedOrder.shipping_cost || 0) - Number(selectedOrder.discount_amount || 0);
+
+      // 3. Update orders table in database
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ total_amount: newTotalAmount })
+        .eq('id', selectedOrder.id);
+
+      if (orderError) throw orderError;
+
+      // 4. Update local states
+      setOrderItems(updatedItems);
+      setSelectedOrder(prev => prev ? { ...prev, total_amount: newTotalAmount } : null);
+      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, total_amount: newTotalAmount } : o));
+      setEditingItemId(null);
+    } catch (err: any) {
+      console.error('Failed to update item quantity:', err);
+      alert('Gagal mengubah quantity: ' + (err.message || 'Terjadi kesalahan'));
+    } finally {
+      setIsProcessingItem(false);
+    }
+  };
+
+  const handleDeleteOrderItem = async (item: OrderItem) => {
+    if (!selectedOrder || isProcessingItem) return;
+    if (orderItems.length <= 1) {
+      alert('Pesanan harus memiliki minimal 1 produk. Jika pesanan dibatalkan seluruhnya, silakan ubah tahap pesanan menjadi Dibatalkan.');
+      return;
+    }
+
+    const productName = item.products?.name || 'produk ini';
+    const confirmDelete = window.confirm(`Apakah Anda yakin ingin menghapus "${productName}" dari pesanan ini? Total tagihan pesanan akan otomatis dikalkulasi ulang.`);
+    if (!confirmDelete) return;
+
+    setIsProcessingItem(true);
+    try {
+      // 1. Delete item from database
+      const { error: delError } = await supabase
+        .from('order_items')
+        .delete()
+        .eq('id', item.id);
+
+      if (delError) throw delError;
+
+      // 2. Recalculate order subtotal and total_amount
+      const updatedItems = orderItems.filter((it) => it.id !== item.id);
+      const newItemsSubtotal = updatedItems.reduce((acc, it) => acc + Number(it.total_price || 0), 0);
+      const newTotalAmount = newItemsSubtotal + Number(selectedOrder.unique_code || 0) + Number(selectedOrder.shipping_cost || 0) - Number(selectedOrder.discount_amount || 0);
+
+      // 3. Update orders table in database
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ total_amount: newTotalAmount })
+        .eq('id', selectedOrder.id);
+
+      if (orderError) throw orderError;
+
+      // 4. Update local states
+      setOrderItems(updatedItems);
+      setSelectedOrder(prev => prev ? { ...prev, total_amount: newTotalAmount } : null);
+      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, total_amount: newTotalAmount } : o));
+      if (editingItemId === item.id) setEditingItemId(null);
+    } catch (err: any) {
+      console.error('Failed to delete order item:', err);
+      alert('Gagal menghapus SKU: ' + (err.message || 'Terjadi kesalahan'));
+    } finally {
+      setIsProcessingItem(false);
     }
   };
 
@@ -561,6 +694,20 @@ export default function OrdersPage() {
       return matchesSearch && matchesStage;
     });
   }, [baseFilteredOrders, searchQuery, stageFilter]);
+
+  // Reset pagination to page 1 whenever any filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedSales, selectedSpv, selectedDealer, selectedRegion, stageFilter, itemsPerPage]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / itemsPerPage));
+
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredOrders.slice(start, start + itemsPerPage);
+  }, [filteredOrders, currentPage, itemsPerPage]);
+
+  const isSuperAdmin = adminRole === 'SUPER_ADMIN';
 
   const getStageBadge = (status: string) => {
     switch (status) {
@@ -1160,7 +1307,7 @@ export default function OrdersPage() {
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map((order) => {
+                paginatedOrders.map((order) => {
                   const meta = getOrderMeta(order);
                   const stage = getStageBadge(order.status);
                   const StageIcon = stage.icon;
@@ -1316,6 +1463,96 @@ export default function OrdersPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Toolbar */}
+        <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white text-xs text-slate-600">
+          <div className="flex flex-wrap items-center gap-3">
+            <span>
+              Menampilkan <b>{filteredOrders.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(currentPage * itemsPerPage, filteredOrders.length)}</b> dari total <b>{filteredOrders.length}</b> pesanan
+            </span>
+            <div className="flex items-center gap-1.5 text-slate-500">
+              <span>Baris per halaman:</span>
+              <select 
+                value={itemsPerPage} 
+                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                className="border border-slate-200 rounded-lg px-2 py-1 bg-white font-semibold text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs shadow-2xs"
+              >
+                <option value={10}>10</option>
+                <option value={15}>15</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40 hover:bg-slate-50 font-medium transition-colors cursor-pointer disabled:cursor-not-allowed"
+                title="Halaman Pertama"
+              >
+                <ChevronsLeft size={15} />
+              </button>
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40 hover:bg-slate-50 font-medium flex items-center gap-1 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                title="Halaman Sebelumnya"
+              >
+                <ChevronLeft size={15} /> Prev
+              </button>
+
+              {/* Numbered Page Buttons */}
+              <div className="flex items-center gap-1 mx-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum = currentPage;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`w-7 h-7 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
+                        currentPage === pageNum 
+                          ? 'bg-emerald-600 text-white shadow-xs' 
+                          : 'text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40 hover:bg-slate-50 font-medium flex items-center gap-1 transition-colors cursor-pointer disabled:cursor-not-allowed"
+                title="Halaman Selanjutnya"
+              >
+                Next <ChevronRight size={15} />
+              </button>
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg border border-slate-200 text-slate-600 disabled:opacity-40 hover:bg-slate-50 font-medium transition-colors cursor-pointer disabled:cursor-not-allowed"
+                title="Halaman Terakhir"
+              >
+                <ChevronsRight size={15} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1536,15 +1773,25 @@ export default function OrdersPage() {
                 </div>
               </div>
 
-              {/* Items Table */}
+              {/* Items Table with Super Admin SKU & Quantity Editor */}
               <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Daftar Produk yang Dipesan</p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Package size={14} className="text-emerald-600" /> Daftar Produk yang Dipesan ({orderItems.length} SKU)
+                  </p>
+                  {isSuperAdmin && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 rounded-lg shadow-2xs self-start sm:self-auto">
+                      <ShieldCheck size={12} className="text-amber-600" /> Khusus Superadmin: Edit Qty & Hapus SKU
+                    </span>
+                  )}
+                </div>
+
                 {isLoadingItems ? (
                   <div className="p-8 text-center text-slate-400 text-sm">Memuat detail produk...</div>
                 ) : orderItems.length === 0 ? (
                   <div className="p-4 text-center text-slate-400 text-xs bg-slate-50 rounded-xl">Tidak ada rincian item produk.</div>
                 ) : (
-                  <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
                         <tr>
@@ -1552,43 +1799,157 @@ export default function OrdersPage() {
                           <th className="p-3 text-center">Jumlah</th>
                           <th className="p-3 text-right">Harga Satuan</th>
                           <th className="p-3 text-right">Subtotal</th>
+                          {isSuperAdmin && (
+                            <th className="p-3 text-center w-36">Aksi SKU</th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {orderItems.map((item) => (
-                          <tr key={item.id}>
-                            <td className="p-3 font-medium text-slate-800">
-                              <p className="font-bold">{item.products?.name || 'Produk'}</p>
-                              <p className="text-[10px] text-slate-400">{item.products?.sku || '-'}</p>
-                            </td>
-                            <td className="p-3 text-center font-bold text-slate-700">{item.quantity} unit</td>
-                            <td className="p-3 text-right text-slate-600">Rp {Number(item.unit_price).toLocaleString('id-ID')}</td>
-                            <td className="p-3 text-right font-bold text-slate-900">Rp {Number(item.total_price).toLocaleString('id-ID')}</td>
-                          </tr>
-                        ))}
+                        {orderItems.map((item) => {
+                          const isEditing = editingItemId === item.id;
+                          return (
+                            <tr key={item.id} className={isEditing ? 'bg-amber-50/50' : 'hover:bg-slate-50/60'}>
+                              <td className="p-3 font-medium text-slate-800">
+                                <p className="font-bold">{item.products?.name || 'Produk'}</p>
+                                <p className="text-[10px] text-slate-400 font-mono">{item.products?.sku || '-'}</p>
+                              </td>
+                              <td className="p-3 text-center">
+                                {isEditing ? (
+                                  <div className="inline-flex items-center gap-1 bg-white border border-emerald-300 rounded-lg p-0.5 shadow-xs">
+                                    <button 
+                                      type="button"
+                                      onClick={() => setTempQty(q => Math.max(1, q - 1))}
+                                      disabled={isProcessingItem}
+                                      className="p-1 hover:bg-slate-100 rounded text-slate-600 disabled:opacity-50 cursor-pointer"
+                                    >
+                                      <Minus size={12} />
+                                    </button>
+                                    <input 
+                                      type="number" 
+                                      min={1} 
+                                      value={tempQty} 
+                                      onChange={(e) => setTempQty(Math.max(1, parseInt(e.target.value) || 1))}
+                                      disabled={isProcessingItem}
+                                      className="w-12 text-center font-bold text-slate-900 border-0 focus:ring-0 p-0 text-xs"
+                                    />
+                                    <button 
+                                      type="button"
+                                      onClick={() => setTempQty(q => q + 1)}
+                                      disabled={isProcessingItem}
+                                      className="p-1 hover:bg-slate-100 rounded text-slate-600 disabled:opacity-50 cursor-pointer"
+                                    >
+                                      <Plus size={12} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="font-bold text-slate-700">{item.quantity} unit</span>
+                                )}
+                              </td>
+                              <td className="p-3 text-right text-slate-600">
+                                Rp {Number(item.unit_price).toLocaleString('id-ID')}
+                              </td>
+                              <td className="p-3 text-right font-bold text-slate-900">
+                                Rp {Number(isEditing ? tempQty * Number(item.unit_price) : item.total_price).toLocaleString('id-ID')}
+                              </td>
+                              {isSuperAdmin && (
+                                <td className="p-3 text-center">
+                                  {isEditing ? (
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveItemQty(item)}
+                                        disabled={isProcessingItem}
+                                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                                        title="Simpan Perubahan Qty"
+                                      >
+                                        <Check size={12} strokeWidth={3} /> Simpan
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingItemId(null)}
+                                        disabled={isProcessingItem}
+                                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold cursor-pointer"
+                                        title="Batal"
+                                      >
+                                        <X size={12} />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingItemId(item.id);
+                                          setTempQty(item.quantity);
+                                        }}
+                                        disabled={isProcessingItem}
+                                        className="px-2 py-1 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/70 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                        title="Ubah Quantity Pesanan"
+                                      >
+                                        <Edit2 size={12} />
+                                        <span>Edit Qty</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteOrderItem(item)}
+                                        disabled={isProcessingItem}
+                                        className="p-1 text-rose-600 hover:bg-rose-50 border border-rose-200/70 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                                        title="Hapus SKU ini dari Pesanan"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 )}
               </div>
 
-              {/* Summary Calculations */}
-              <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 flex flex-col gap-1.5 text-sm">
-                <div className="flex justify-between text-slate-600 text-xs">
-                  <span>Subtotal Produk:</span>
-                  <span>Rp {Number(selectedOrder.total_amount - (selectedOrder.unique_code || 0)).toLocaleString('id-ID')}</span>
-                </div>
-                {selectedOrder.unique_code ? (
-                  <div className="flex justify-between text-slate-600 text-xs">
-                    <span>Kode Unik Transaksi:</span>
-                    <span className="font-mono font-bold text-emerald-700">+ Rp {selectedOrder.unique_code}</span>
+              {/* Summary Calculations (Live Dynamic Calculation) */}
+              {(() => {
+                const currentSubtotal = orderItems.reduce((acc, it) => {
+                  const qty = editingItemId === it.id ? tempQty : it.quantity;
+                  return acc + (qty * Number(it.unit_price || 0));
+                }, 0);
+                const currentTotal = currentSubtotal + Number(selectedOrder.unique_code || 0) + Number(selectedOrder.shipping_cost || 0) - Number(selectedOrder.discount_amount || 0);
+
+                return (
+                  <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 flex flex-col gap-1.5 text-sm">
+                    <div className="flex justify-between text-slate-600 text-xs">
+                      <span>Subtotal Produk:</span>
+                      <span className="font-semibold">Rp {currentSubtotal.toLocaleString('id-ID')}</span>
+                    </div>
+                    {selectedOrder.unique_code ? (
+                      <div className="flex justify-between text-slate-600 text-xs">
+                        <span>Kode Unik Transaksi:</span>
+                        <span className="font-mono font-bold text-emerald-700">+ Rp {selectedOrder.unique_code}</span>
+                      </div>
+                    ) : null}
+                    {selectedOrder.shipping_cost ? (
+                      <div className="flex justify-between text-slate-600 text-xs">
+                        <span>Ongkos Kirim:</span>
+                        <span className="font-semibold">+ Rp {Number(selectedOrder.shipping_cost).toLocaleString('id-ID')}</span>
+                      </div>
+                    ) : null}
+                    {selectedOrder.discount_amount ? (
+                      <div className="flex justify-between text-slate-600 text-xs">
+                        <span>Diskon:</span>
+                        <span className="font-semibold text-rose-600">- Rp {Number(selectedOrder.discount_amount).toLocaleString('id-ID')}</span>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between text-base font-extrabold text-slate-900 pt-2 border-t border-emerald-100">
+                      <span>Total Tagihan:</span>
+                      <span className="text-emerald-700">Rp {currentTotal.toLocaleString('id-ID')}</span>
+                    </div>
                   </div>
-                ) : null}
-                <div className="flex justify-between text-base font-extrabold text-slate-900 pt-2 border-t border-emerald-100">
-                  <span>Total Tagihan:</span>
-                  <span className="text-emerald-700">Rp {Number(selectedOrder.total_amount).toLocaleString('id-ID')}</span>
-                </div>
-              </div>
+                );
+              })()}
             </div>
 
             {/* Modal Actions Footer */}
