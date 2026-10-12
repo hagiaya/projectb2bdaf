@@ -118,6 +118,7 @@ export default function LoginScreen() {
         // Password verification (Sales or Dealer)
         let loginEmail = raw;
         const normalizedPhone = !raw.includes('@') ? normalizePhone(raw) : '';
+        const cleanPassword = otpOrPassword.trim();
         
         if (!raw.includes('@')) {
           if (detectedRole === 'SALES' || detectedRole === 'SPV') {
@@ -129,7 +130,7 @@ export default function LoginScreen() {
 
         let loginResult = await supabase.auth.signInWithPassword({
           email: loginEmail,
-          password: otpOrPassword,
+          password: cleanPassword,
         });
 
         if (loginResult.error) {
@@ -144,7 +145,7 @@ export default function LoginScreen() {
             
             const fallbackResult = await supabase.auth.signInWithPassword({
               email: fallbackEmail,
-              password: otpOrPassword,
+              password: cleanPassword,
             });
             if (fallbackResult.error) {
               throw new Error('Kata sandi salah atau akun tidak ditemukan.');
