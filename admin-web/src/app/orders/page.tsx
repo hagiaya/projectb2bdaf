@@ -6,7 +6,8 @@ import {
   Package, Truck, DollarSign, CreditCard, ChevronRight,
   AlertCircle, CheckCircle2, User, MapPin, Phone, RefreshCw, ZoomIn,
   PackageCheck, FileText, UploadCloud, Calendar, CheckSquare, Download, FileSpreadsheet, MessageCircle,
-  ShieldCheck, Store, Layers, Edit2, Trash2, Plus, Minus, ChevronLeft, ChevronsLeft, ChevronsRight, Loader2
+  ShieldCheck, Store, Layers, Edit2, Trash2, Plus, Minus, ChevronLeft, ChevronsLeft, ChevronsRight, Loader2,
+  Lock, ShieldAlert
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
@@ -116,8 +117,8 @@ export default function OrdersPage() {
   const [dealersList, setDealersList] = useState<DealerOption[]>([]);
   const [regionsList, setRegionsList] = useState<RegionOption[]>([]);
 
-  // User Role for Super Admin permissions
-  const [adminRole, setAdminRole] = useState<string>('SUPER_ADMIN');
+  // User Role for Super Admin permissions (Default 'ADMIN' so permissions are safe until verified)
+  const [adminRole, setAdminRole] = useState<string>('ADMIN');
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -165,6 +166,16 @@ export default function OrdersPage() {
     }
     supabase.auth.getUser().then(({ data }) => {
       if (data?.user) {
+        const email = data.user.email?.toLowerCase();
+        if (email === 'ditoapp@atomicmail.io') {
+          setAdminRole('SUPER_ADMIN');
+          localStorage.setItem('adminRole', 'SUPER_ADMIN');
+          return;
+        } else if (email === 'admin@dap.com') {
+          setAdminRole('ADMIN');
+          localStorage.setItem('adminRole', 'ADMIN');
+          return;
+        }
         supabase
           .from('profiles')
           .select('role')
@@ -474,6 +485,10 @@ export default function OrdersPage() {
   };
 
   const handleSaveItemQty = async (item: OrderItem) => {
+    if (adminRole !== 'SUPER_ADMIN') {
+      alert('Akses Ditolak: Hanya Super Admin yang diizinkan untuk mengubah kuantitas atau harga produk pesanan.');
+      return;
+    }
     if (!selectedOrder || isProcessingItem) return;
     const newQty = Math.max(1, Math.round(Number(tempQty) || 1));
     const newUnitPrice = Math.max(0, Number(tempUnitPrice !== undefined && tempUnitPrice !== null ? tempUnitPrice : item.unit_price) || 0);
@@ -561,6 +576,10 @@ export default function OrdersPage() {
   };
 
   const handleDeleteOrderItem = async (item: OrderItem) => {
+    if (adminRole !== 'SUPER_ADMIN') {
+      alert('Akses Ditolak: Hanya Super Admin yang diizinkan untuk menghapus produk dari pesanan.');
+      return;
+    }
     if (!selectedOrder || isProcessingItem) return;
     if (orderItems.length <= 1) {
       alert('Pesanan harus memiliki minimal 1 produk. Jika pesanan dibatalkan seluruhnya, silakan ubah tahap pesanan menjadi Dibatalkan.');
@@ -644,6 +663,10 @@ export default function OrdersPage() {
   };
 
   const handleAddNewOrderItem = async () => {
+    if (adminRole !== 'SUPER_ADMIN') {
+      alert('Akses Ditolak: Hanya Super Admin yang diizinkan untuk menambahkan produk baru ke pesanan.');
+      return;
+    }
     if (!selectedOrder || !selectedProductToAdd || isProcessingItem) return;
     const prod = selectedProductToAdd;
     const qty = Math.max(1, Math.round(Number(addQty) || 1));
@@ -1888,11 +1911,20 @@ export default function OrdersPage() {
             {/* Modal Header */}
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div>
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <h3 className="text-xl font-bold text-slate-900">Detail Order {selectedOrder.order_number}</h3>
                   <span className={`px-2.5 py-0.5 rounded-lg text-xs font-bold border ${getStageBadge(selectedOrder.status).color}`}>
                     {getStageBadge(selectedOrder.status).label}
                   </span>
+                  {isSuperAdmin ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                      <ShieldAlert size={12} className="text-amber-600" /> Mode Super Admin
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                      <Lock size={11} className="text-slate-400" /> Mode Admin (Lihat Saja)
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-slate-400">
                   Dibuat pada: {new Date(selectedOrder.created_at).toLocaleString('id-ID')}
@@ -2106,39 +2138,47 @@ export default function OrdersPage() {
                       <Package size={14} className="text-emerald-600" /> Daftar Produk yang Dipesan ({orderItems.length} SKU)
                     </p>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      Kelola pesanan: ubah kuantitas, sesuaikan harga, hapus SKU, atau tambahkan produk baru.
+                      {isSuperAdmin 
+                        ? 'Kelola pesanan: ubah kuantitas, sesuaikan harga, hapus SKU, atau tambahkan produk baru.' 
+                        : 'Daftar rincian produk yang dipesan dalam pesanan ini.'}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextState = !isAddingItem;
-                      setIsAddingItem(nextState);
-                      if (nextState) {
-                        fetchCatalogProducts();
-                      }
-                    }}
-                    disabled={isProcessingItem}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
-                      isAddingItem 
-                        ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' 
-                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                    }`}
-                  >
-                    {isAddingItem ? (
-                      <>
-                        <X size={14} /> Tutup Form Tambah
-                      </>
-                    ) : (
-                      <>
-                        <Plus size={14} /> + Tambah Produk
-                      </>
-                    )}
-                  </button>
+                  {isSuperAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextState = !isAddingItem;
+                        setIsAddingItem(nextState);
+                        if (nextState) {
+                          fetchCatalogProducts();
+                        }
+                      }}
+                      disabled={isProcessingItem}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                        isAddingItem 
+                          ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' 
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      }`}
+                    >
+                      {isAddingItem ? (
+                        <>
+                          <X size={14} /> Tutup Form Tambah
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={14} /> + Tambah Produk
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                      <Lock size={12} className="text-slate-400" /> Mode Read-Only (Admin Biasa)
+                    </div>
+                  )}
                 </div>
 
-                {/* FORM TAMBAH PRODUK BARU KE PESANAN */}
-                {isAddingItem && (
+                {/* FORM TAMBAH PRODUK BARU KE PESANAN (HANYA SUPER ADMIN) */}
+                {isSuperAdmin && isAddingItem && (
                   <div className="mb-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl p-4 shadow-xs animate-in fade-in duration-200">
                     <div className="flex items-center justify-between mb-3 border-b border-emerald-100 pb-2">
                       <div className="flex items-center gap-2">
@@ -2362,12 +2402,12 @@ export default function OrdersPage() {
                           <th className="p-3 text-center">Jumlah</th>
                           <th className="p-3 text-right">Harga Satuan</th>
                           <th className="p-3 text-right">Subtotal</th>
-                          <th className="p-3 text-center w-36">Aksi</th>
+                          {isSuperAdmin && <th className="p-3 text-center w-36">Aksi</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {orderItems.map((item) => {
-                          const isEditing = editingItemId === item.id;
+                          const isEditing = isSuperAdmin && editingItemId === item.id;
                           return (
                             <tr key={item.id} className={isEditing ? 'bg-amber-50/60 border-l-4 border-l-amber-500' : 'hover:bg-slate-50/60'}>
                               <td className="p-3 font-medium text-slate-800">
@@ -2435,57 +2475,59 @@ export default function OrdersPage() {
                               <td className="p-3 text-right font-bold text-slate-900">
                                 Rp {Number(isEditing ? tempQty * (tempUnitPrice || 0) : item.total_price).toLocaleString('id-ID')}
                               </td>
-                              <td className="p-3 text-center">
-                                {isEditing ? (
-                                  <div className="flex items-center justify-center gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSaveItemQty(item)}
-                                      disabled={isProcessingItem}
-                                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                                      title="Simpan Perubahan"
-                                    >
-                                      {isProcessingItem ? <Loader2 size={11} className="animate-spin" /> : <Check size={12} strokeWidth={3} />}
-                                      <span>Simpan</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditingItemId(null)}
-                                      disabled={isProcessingItem}
-                                      className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold cursor-pointer"
-                                      title="Batal"
-                                    >
-                                      <X size={12} />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center justify-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingItemId(item.id);
-                                        setTempQty(item.quantity);
-                                        setTempUnitPrice(Number(item.unit_price) || 0);
-                                      }}
-                                      disabled={isProcessingItem}
-                                      className="px-2.5 py-1 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/70 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                                      title="Ubah Quantity / Harga"
-                                    >
-                                      <Edit2 size={12} />
-                                      <span>Edit</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteOrderItem(item)}
-                                      disabled={isProcessingItem}
-                                      className="p-1 text-rose-600 hover:bg-rose-50 border border-rose-200/70 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                                      title="Hapus SKU ini dari Pesanan"
-                                    >
-                                      <Trash2 size={13} />
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
+                              {isSuperAdmin && (
+                                <td className="p-3 text-center">
+                                  {isEditing ? (
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveItemQty(item)}
+                                        disabled={isProcessingItem}
+                                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                                        title="Simpan Perubahan"
+                                      >
+                                        {isProcessingItem ? <Loader2 size={11} className="animate-spin" /> : <Check size={12} strokeWidth={3} />}
+                                        <span>Simpan</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingItemId(null)}
+                                        disabled={isProcessingItem}
+                                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold cursor-pointer"
+                                        title="Batal"
+                                      >
+                                        <X size={12} />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingItemId(item.id);
+                                          setTempQty(item.quantity);
+                                          setTempUnitPrice(Number(item.unit_price) || 0);
+                                        }}
+                                        disabled={isProcessingItem}
+                                        className="px-2.5 py-1 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/70 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                        title="Ubah Quantity / Harga"
+                                      >
+                                        <Edit2 size={12} />
+                                        <span>Edit</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteOrderItem(item)}
+                                        disabled={isProcessingItem}
+                                        className="p-1 text-rose-600 hover:bg-rose-50 border border-rose-200/70 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                                        title="Hapus SKU ini dari Pesanan"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
