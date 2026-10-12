@@ -288,8 +288,8 @@ export default function OrdersPage() {
       // Fetch metadata for filter dropdowns (Sales, SPV, Pelanggan, Wilayah)
       try {
         const [salesRes, dealersRes, regionsRes] = await Promise.all([
-          supabase.from('sales').select('id, is_spv, spv_id, region_id, profiles:profile_id(full_name)'),
-          supabase.from('dealers').select('id, store_name, region_id, sales_id, profiles:profile_id(full_name)').order('store_name', { ascending: true }),
+          supabase.from('sales').select('id, is_spv, spv_id, region_id, status, profiles:profile_id(full_name)').eq('status', 'ACTIVE'),
+          supabase.from('dealers').select('id, store_name, region_id, sales_id, status, profiles:profile_id(full_name)').neq('status', 'DELETED').order('store_name', { ascending: true }),
           supabase.from('regions').select('id, name').order('name', { ascending: true })
         ]);
 
@@ -297,9 +297,13 @@ export default function OrdersPage() {
           const salesArr: SalesPerson[] = [];
           const spvArr: SalesPerson[] = [];
           salesRes.data.forEach((s: any) => {
+            const rawName = s.profiles?.full_name?.trim();
+            // Lewati akun yang tidak memiliki nama valid
+            if (!rawName) return;
+
             const item: SalesPerson = {
               id: s.id,
-              name: s.profiles?.full_name || (s.is_spv ? 'SPV' : 'Sales'),
+              name: rawName,
               is_spv: !!s.is_spv,
               spv_id: s.spv_id,
               region_id: s.region_id,
