@@ -6,7 +6,7 @@ import {
   Package, Truck, DollarSign, CreditCard, ChevronRight,
   AlertCircle, CheckCircle2, User, MapPin, Phone, RefreshCw, ZoomIn,
   PackageCheck, FileText, UploadCloud, Calendar, CheckSquare, Download, FileSpreadsheet, MessageCircle,
-  ShieldCheck, Store, Layers, Edit2, Trash2, Plus, Minus, ChevronLeft, ChevronsLeft, ChevronsRight
+  ShieldCheck, Store, Layers, Edit2, Trash2, Plus, Minus, ChevronLeft, ChevronsLeft, ChevronsRight, Loader2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
@@ -15,13 +15,17 @@ import autoTable from 'jspdf-autotable';
 
 interface OrderItem {
   id: string;
+  order_id?: string;
+  product_id?: string;
   quantity: number;
   unit_price: number;
   total_price: number;
   products?: {
+    id?: string;
     name: string;
     sku: string;
     image_url: string;
+    price?: number;
   };
 }
 
@@ -119,10 +123,20 @@ export default function OrdersPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage, setItemsPerPage] = useState<number>(15);
 
-  // Super Admin Item Editing State
+  // Order Item Editing & Management States
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [tempQty, setTempQty] = useState<number>(1);
+  const [tempUnitPrice, setTempUnitPrice] = useState<number>(0);
   const [isProcessingItem, setIsProcessingItem] = useState<boolean>(false);
+
+  // Add Product to Order States
+  const [isAddingItem, setIsAddingItem] = useState<boolean>(false);
+  const [catalogProducts, setCatalogProducts] = useState<any[]>([]);
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState<boolean>(false);
+  const [productSearchTerm, setProductSearchTerm] = useState<string>('');
+  const [selectedProductToAdd, setSelectedProductToAdd] = useState<any | null>(null);
+  const [addQty, setAddQty] = useState<number>(1);
+  const [addUnitPrice, setAddUnitPrice] = useState<number>(0);
 
   // Detail Modal
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -333,10 +347,13 @@ export default function OrdersPage() {
   const handleOpenDetail = async (order: Order) => {
     setSelectedOrder(order);
     setEditingItemId(null);
+    setIsAddingItem(false);
+    setSelectedProductToAdd(null);
+    setProductSearchTerm('');
     setIsLoadingItems(true);
     const { data, error } = await supabase
       .from('order_items')
-      .select('*, products(name, sku, image_url)')
+      .select('*, products(id, name, sku, image_url, price)')
       .eq('order_id', order.id);
 
     if (!error && data) {
@@ -368,6 +385,62 @@ export default function OrdersPage() {
     setIsUpdating(false);
 
     if (!error) {
+      // ─── SINKRONISASI STOK REALTIME SAAT PERUBAHAN STATUS ORDER ───
+      // Jika pesanan Dibatalkan (CANCELLED), kembalikan seluruh stok barang ke gudang
+      if (newStatus === 'CANCELLED' && orderToUpdate?.status !== 'CANCELLED') {
+        try {
+          const { data: cancelItems } = await supabase.from('order_items').select('product_id, quantity').eq('order_id', id);
+          if (cancelItems) {
+            for (const cit of cancelItems) {
+              const { data: pData } = await supabase.from('products').select('id, stock').eq('id', cit.product_id).single();
+              if (pData) {
+                const pPrev = Number(pData.stock) || 0;
+                const pNew = pPrev + cit.quantity;
+                await supabase.from('products').update({ stock: pNew }).eq('id', cit.product_id);
+                await supabase.from('stock_logs').insert([{
+                  product_id: cit.product_id,
+                  type: 'RETURN',
+                  quantity: cit.quantity,
+                  previous_stock: pPrev,
+                  current_stock: pNew,
+                  notes: `Pesanan Dibatalkan #${orderToUpdate?.order_number || id}`,
+                  created_by: 'Admin',
+                }]);
+              }
+            }
+          }
+        } catch (cancelErr) {
+          console.warn('Gagal mengembalikan stok saat pembatalan:', cancelErr);
+        }
+      }
+      // Jika pesanan yang tadinya CANCELLED diaktifkan kembali, kurangi lagi stoknya
+      else if (orderToUpdate?.status === 'CANCELLED' && newStatus !== 'CANCELLED') {
+        try {
+          const { data: reactivateItems } = await supabase.from('order_items').select('product_id, quantity').eq('order_id', id);
+          if (reactivateItems) {
+            for (const rit of reactivateItems) {
+              const { data: pData } = await supabase.from('products').select('id, stock').eq('id', rit.product_id).single();
+              if (pData) {
+                const pPrev = Number(pData.stock) || 0;
+                const pNew = Math.max(0, pPrev - rit.quantity);
+                await supabase.from('products').update({ stock: pNew }).eq('id', rit.product_id);
+                await supabase.from('stock_logs').insert([{
+                  product_id: rit.product_id,
+                  type: 'SALE',
+                  quantity: rit.quantity,
+                  previous_stock: pPrev,
+                  current_stock: pNew,
+                  notes: `Pesanan Diaktifkan Kembali #${orderToUpdate?.order_number || id}`,
+                  created_by: 'Admin',
+                }]);
+              }
+            }
+          }
+        } catch (reactivateErr) {
+          console.warn('Gagal memotong stok saat aktivasi kembali:', reactivateErr);
+        }
+      }
+
       setOrders(prev => prev.map(o => o.id === id ? { ...o, ...updatePayload } : o));
       if (selectedOrder && selectedOrder.id === id) {
         setSelectedOrder({ ...selectedOrder, ...updatePayload });
@@ -377,11 +450,29 @@ export default function OrdersPage() {
     }
   };
 
-  // ─── SUPER ADMIN SKU & QUANTITY MANAGEMENT ─────────────────────
+  // ─── ORDER ITEMS & SKU MANAGEMENT (EDIT QTY, TAMBAH, HAPUS) ───────
+  const fetchCatalogProducts = async () => {
+    if (catalogProducts.length > 0) return;
+    setIsLoadingCatalog(true);
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, name, sku, price, stock, image_url, unit_name, status')
+        .order('name');
+      if (!error && data) {
+        setCatalogProducts(data);
+      }
+    } catch (err) {
+      console.error('Error fetching catalog products:', err);
+    } finally {
+      setIsLoadingCatalog(false);
+    }
+  };
+
   const handleSaveItemQty = async (item: OrderItem) => {
     if (!selectedOrder || isProcessingItem) return;
     const newQty = Math.max(1, Math.round(Number(tempQty) || 1));
-    const newUnitPrice = Number(item.unit_price) || 0;
+    const newUnitPrice = Math.max(0, Number(tempUnitPrice !== undefined && tempUnitPrice !== null ? tempUnitPrice : item.unit_price) || 0);
     const newTotalPrice = newQty * newUnitPrice;
 
     setIsProcessingItem(true);
@@ -391,6 +482,7 @@ export default function OrdersPage() {
         .from('order_items')
         .update({
           quantity: newQty,
+          unit_price: newUnitPrice,
           total_price: newTotalPrice
         })
         .eq('id', item.id);
@@ -399,7 +491,7 @@ export default function OrdersPage() {
 
       // 2. Recalculate order subtotal and total_amount
       const updatedItems = orderItems.map((it) =>
-        it.id === item.id ? { ...it, quantity: newQty, total_price: newTotalPrice } : it
+        it.id === item.id ? { ...it, quantity: newQty, unit_price: newUnitPrice, total_price: newTotalPrice } : it
       );
       const newItemsSubtotal = updatedItems.reduce((acc, it) => acc + Number(it.total_price || 0), 0);
       const newTotalAmount = newItemsSubtotal + Number(selectedOrder.unique_code || 0) + Number(selectedOrder.shipping_cost || 0) - Number(selectedOrder.discount_amount || 0);
@@ -412,11 +504,50 @@ export default function OrdersPage() {
 
       if (orderError) throw orderError;
 
-      // 4. Update local states
+      // 4. Update dealer credit balance if payment method is KREDIT
+      if (selectedOrder.payment_method === 'KREDIT' && selectedOrder.dealer_id) {
+        const delta = newTotalAmount - Number(selectedOrder.total_amount || 0);
+        if (delta !== 0) {
+          const { data: dData } = await supabase.from('dealers').select('outstanding_balance').eq('id', selectedOrder.dealer_id).single();
+          if (dData) {
+            const newBalance = Math.max(0, Number(dData.outstanding_balance || 0) + delta);
+            await supabase.from('dealers').update({ outstanding_balance: newBalance }).eq('id', selectedOrder.dealer_id);
+          }
+        }
+      }
+
+      // 5. Update local states
       setOrderItems(updatedItems);
       setSelectedOrder(prev => prev ? { ...prev, total_amount: newTotalAmount } : null);
       setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, total_amount: newTotalAmount } : o));
       setEditingItemId(null);
+
+      // 6. Sinkronisasi perubahan stok produk ke tabel products & stock_logs
+      const qtyDiff = newQty - item.quantity;
+      const prodId = item.product_id || item.products?.id;
+      if (qtyDiff !== 0 && prodId) {
+        try {
+          const { data: pData } = await supabase.from('products').select('id, stock').eq('id', prodId).single();
+          if (pData) {
+            const pPrev = Number(pData.stock) || 0;
+            const pNew = qtyDiff > 0 ? Math.max(0, pPrev - qtyDiff) : pPrev + Math.abs(qtyDiff);
+            await supabase.from('products').update({ stock: pNew }).eq('id', prodId);
+            await supabase.from('stock_logs').insert([{
+              product_id: prodId,
+              type: qtyDiff > 0 ? 'SALE' : 'RESTOCK',
+              quantity: Math.abs(qtyDiff),
+              previous_stock: pPrev,
+              current_stock: pNew,
+              notes: qtyDiff > 0 
+                ? `Penambahan Qty Pesanan #${selectedOrder.order_number}` 
+                : `Pengurangan Qty Pesanan #${selectedOrder.order_number}`,
+              created_by: 'Admin',
+            }]);
+          }
+        } catch (stockSyncErr) {
+          console.warn('Gagal sinkronisasi stok:', stockSyncErr);
+        }
+      }
     } catch (err: any) {
       console.error('Failed to update item quantity:', err);
       alert('Gagal mengubah quantity: ' + (err.message || 'Terjadi kesalahan'));
@@ -459,14 +590,204 @@ export default function OrdersPage() {
 
       if (orderError) throw orderError;
 
-      // 4. Update local states
+      // 4. Update dealer credit balance if payment method is KREDIT
+      if (selectedOrder.payment_method === 'KREDIT' && selectedOrder.dealer_id) {
+        const delta = newTotalAmount - Number(selectedOrder.total_amount || 0);
+        if (delta !== 0) {
+          const { data: dData } = await supabase.from('dealers').select('outstanding_balance').eq('id', selectedOrder.dealer_id).single();
+          if (dData) {
+            const newBalance = Math.max(0, Number(dData.outstanding_balance || 0) + delta);
+            await supabase.from('dealers').update({ outstanding_balance: newBalance }).eq('id', selectedOrder.dealer_id);
+          }
+        }
+      }
+
+      // 5. Update local states
       setOrderItems(updatedItems);
       setSelectedOrder(prev => prev ? { ...prev, total_amount: newTotalAmount } : null);
       setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, total_amount: newTotalAmount } : o));
       if (editingItemId === item.id) setEditingItemId(null);
+
+      // 6. Kembalikan stok item yang dihapus ke gudang (products & stock_logs)
+      const prodId = item.product_id || item.products?.id;
+      if (prodId) {
+        try {
+          const { data: pData } = await supabase.from('products').select('id, stock').eq('id', prodId).single();
+          if (pData) {
+            const pPrev = Number(pData.stock) || 0;
+            const pNew = pPrev + item.quantity;
+            await supabase.from('products').update({ stock: pNew }).eq('id', prodId);
+            await supabase.from('stock_logs').insert([{
+              product_id: prodId,
+              type: 'RESTOCK',
+              quantity: item.quantity,
+              previous_stock: pPrev,
+              current_stock: pNew,
+              notes: `Hapus SKU dari Pesanan #${selectedOrder.order_number}`,
+              created_by: 'Admin',
+            }]);
+          }
+        } catch (delStockErr) {
+          console.warn('Gagal mengembalikan stok item dihapus:', delStockErr);
+        }
+      }
     } catch (err: any) {
       console.error('Failed to delete order item:', err);
       alert('Gagal menghapus SKU: ' + (err.message || 'Terjadi kesalahan'));
+    } finally {
+      setIsProcessingItem(false);
+    }
+  };
+
+  const handleAddNewOrderItem = async () => {
+    if (!selectedOrder || !selectedProductToAdd || isProcessingItem) return;
+    const prod = selectedProductToAdd;
+    const qty = Math.max(1, Math.round(Number(addQty) || 1));
+    const unitPrice = Math.max(0, Number(addUnitPrice) || 0);
+    const totalPrice = qty * unitPrice;
+
+    setIsProcessingItem(true);
+    try {
+      // Check if product already exists in current order items
+      const existingItem = orderItems.find(
+        (it) => it.product_id === prod.id || it.products?.sku === prod.sku
+      );
+
+      let updatedItems: OrderItem[] = [];
+
+      if (existingItem) {
+        // Product already exists in order -> accumulate quantity
+        const newQty = existingItem.quantity + qty;
+        const effectivePrice = unitPrice > 0 ? unitPrice : Number(existingItem.unit_price) || 0;
+        const newTotPrice = newQty * effectivePrice;
+
+        const { error: updErr } = await supabase
+          .from('order_items')
+          .update({
+            quantity: newQty,
+            unit_price: effectivePrice,
+            total_price: newTotPrice,
+          })
+          .eq('id', existingItem.id);
+
+        if (updErr) throw updErr;
+
+        updatedItems = orderItems.map((it) =>
+          it.id === existingItem.id
+            ? {
+                ...it,
+                quantity: newQty,
+                unit_price: effectivePrice,
+                total_price: newTotPrice,
+              }
+            : it
+        );
+      } else {
+        // Insert new order item
+        const { data: insertedData, error: insErr } = await supabase
+          .from('order_items')
+          .insert({
+            order_id: selectedOrder.id,
+            product_id: prod.id,
+            quantity: qty,
+            unit_price: unitPrice,
+            total_price: totalPrice,
+          })
+          .select('*, products(id, name, sku, image_url, price)')
+          .single();
+
+        if (insErr) throw insErr;
+
+        const newItem: OrderItem = {
+          ...(insertedData as any),
+          products: (insertedData as any)?.products || {
+            id: prod.id,
+            name: prod.name,
+            sku: prod.sku,
+            image_url: prod.image_url,
+            price: prod.price,
+          },
+        };
+
+        updatedItems = [...orderItems, newItem];
+      }
+
+      // Recalculate order subtotal and total_amount
+      const newItemsSubtotal = updatedItems.reduce(
+        (acc, it) => acc + Number(it.total_price || 0),
+        0
+      );
+      const newTotalAmount =
+        newItemsSubtotal +
+        Number(selectedOrder.unique_code || 0) +
+        Number(selectedOrder.shipping_cost || 0) -
+        Number(selectedOrder.discount_amount || 0);
+
+      // Update orders table
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ total_amount: newTotalAmount })
+        .eq('id', selectedOrder.id);
+
+      if (orderError) throw orderError;
+
+      // Update dealer credit if KREDIT
+      if (selectedOrder.payment_method === 'KREDIT' && selectedOrder.dealer_id) {
+        const delta = newTotalAmount - Number(selectedOrder.total_amount || 0);
+        if (delta !== 0) {
+          const { data: dData } = await supabase
+            .from('dealers')
+            .select('outstanding_balance')
+            .eq('id', selectedOrder.dealer_id)
+            .single();
+          if (dData) {
+            const newBalance = Math.max(0, Number(dData.outstanding_balance || 0) + delta);
+            await supabase
+              .from('dealers')
+              .update({ outstanding_balance: newBalance })
+              .eq('id', selectedOrder.dealer_id);
+          }
+        }
+      }
+
+      // Update local states
+      setOrderItems(updatedItems);
+      setSelectedOrder((prev) => (prev ? { ...prev, total_amount: newTotalAmount } : null));
+      setOrders((prev) =>
+        prev.map((o) => (o.id === selectedOrder.id ? { ...o, total_amount: newTotalAmount } : o))
+      );
+
+      // Potong stok produk yang baru ditambahkan ke pesanan
+      if (prod.id) {
+        try {
+          const { data: pData } = await supabase.from('products').select('id, stock').eq('id', prod.id).single();
+          if (pData) {
+            const pPrev = Number(pData.stock) || 0;
+            const pNew = Math.max(0, pPrev - qty);
+            await supabase.from('products').update({ stock: pNew }).eq('id', prod.id);
+            await supabase.from('stock_logs').insert([{
+              product_id: prod.id,
+              type: 'SALE',
+              quantity: qty,
+              previous_stock: pPrev,
+              current_stock: pNew,
+              notes: `Tambah SKU ke Pesanan #${selectedOrder.order_number}`,
+              created_by: 'Admin',
+            }]);
+          }
+        } catch (addStockErr) {
+          console.warn('Gagal memotong stok SKU baru:', addStockErr);
+        }
+      }
+
+      // Reset add-item form
+      setIsAddingItem(false);
+      setSelectedProductToAdd(null);
+      setAddQty(1);
+      setProductSearchTerm('');
+    } catch (err: any) {
+      console.error('Failed to add product to order:', err);
+      alert('Gagal menambahkan produk ke pesanan: ' + (err.message || 'Terjadi kesalahan'));
     } finally {
       setIsProcessingItem(false);
     }
@@ -1559,7 +1880,7 @@ export default function OrdersPage() {
       {/* Order Detail Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div>
@@ -1773,18 +2094,256 @@ export default function OrdersPage() {
                 </div>
               </div>
 
-              {/* Items Table with Super Admin SKU & Quantity Editor */}
+              {/* Items Table with SKU & Quantity Editor */}
               <div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Package size={14} className="text-emerald-600" /> Daftar Produk yang Dipesan ({orderItems.length} SKU)
-                  </p>
-                  {isSuperAdmin && (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 rounded-lg shadow-2xs self-start sm:self-auto">
-                      <ShieldCheck size={12} className="text-amber-600" /> Khusus Superadmin: Edit Qty & Hapus SKU
-                    </span>
-                  )}
+                  <div>
+                    <p className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Package size={14} className="text-emerald-600" /> Daftar Produk yang Dipesan ({orderItems.length} SKU)
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Kelola pesanan: ubah kuantitas, sesuaikan harga, hapus SKU, atau tambahkan produk baru.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextState = !isAddingItem;
+                      setIsAddingItem(nextState);
+                      if (nextState) {
+                        fetchCatalogProducts();
+                      }
+                    }}
+                    disabled={isProcessingItem}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                      isAddingItem 
+                        ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' 
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    }`}
+                  >
+                    {isAddingItem ? (
+                      <>
+                        <X size={14} /> Tutup Form Tambah
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={14} /> + Tambah Produk
+                      </>
+                    )}
+                  </button>
                 </div>
+
+                {/* FORM TAMBAH PRODUK BARU KE PESANAN */}
+                {isAddingItem && (
+                  <div className="mb-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl p-4 shadow-xs animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between mb-3 border-b border-emerald-100 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg">
+                          <Plus size={16} />
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          Tambah Produk Baru ke Pesanan
+                        </h4>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingItem(false);
+                          setSelectedProductToAdd(null);
+                        }}
+                        className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+
+                    {isLoadingCatalog ? (
+                      <div className="p-6 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                        <Loader2 size={16} className="animate-spin text-emerald-600" />
+                        Memuat katalog produk...
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {/* Search & Selector */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                            Pilih Produk dari Katalog
+                          </label>
+                          <div className="relative mb-2">
+                            <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Cari nama produk atau SKU..."
+                              value={productSearchTerm}
+                              onChange={(e) => setProductSearchTerm(e.target.value)}
+                              className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                            />
+                          </div>
+
+                          <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-xl bg-white divide-y divide-slate-100">
+                            {catalogProducts
+                              .filter((p) => {
+                                if (!productSearchTerm) return true;
+                                const term = productSearchTerm.toLowerCase();
+                                return (p.name || '').toLowerCase().includes(term) || (p.sku || '').toLowerCase().includes(term);
+                              })
+                              .slice(0, 30)
+                              .map((p) => {
+                                const isSelected = selectedProductToAdd?.id === p.id;
+                                const alreadyInOrder = orderItems.some(
+                                  (it) => it.product_id === p.id || it.products?.sku === p.sku
+                                );
+
+                                return (
+                                  <div
+                                    key={p.id}
+                                    onClick={() => {
+                                      setSelectedProductToAdd(p);
+                                      setAddUnitPrice(Number(p.price) || 0);
+                                      setAddQty(1);
+                                    }}
+                                    className={`p-2.5 flex items-center justify-between text-xs cursor-pointer transition-colors ${
+                                      isSelected ? 'bg-emerald-100/70 font-semibold' : 'hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      {p.image_url ? (
+                                        <img src={p.image_url} alt={p.name} className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0" />
+                                      ) : (
+                                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
+                                          <Package size={14} />
+                                        </div>
+                                      )}
+                                      <div className="truncate">
+                                        <div className="flex items-center gap-1.5">
+                                          <p className="font-bold text-slate-800 truncate">{p.name}</p>
+                                          {alreadyInOrder && (
+                                            <span className="text-[9px] px-1.5 py-0.2 bg-amber-100 text-amber-700 rounded font-semibold shrink-0">
+                                              Sudah di Order
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 font-mono">SKU: {p.sku || '-'}</p>
+                                      </div>
+                                    </div>
+                                    <div className="text-right shrink-0 pl-2">
+                                      <p className="font-bold text-emerald-700">Rp {Number(p.price || 0).toLocaleString('id-ID')}</p>
+                                      <p className="text-[10px] text-slate-400">Stok: {p.stock ?? '-'}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            {catalogProducts.filter((p) => {
+                              if (!productSearchTerm) return true;
+                              const term = productSearchTerm.toLowerCase();
+                              return (p.name || '').toLowerCase().includes(term) || (p.sku || '').toLowerCase().includes(term);
+                            }).length === 0 && (
+                              <div className="p-4 text-center text-xs text-slate-400">
+                                Tidak ada produk yang cocok dengan &quot;{productSearchTerm}&quot;
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Detail Pilihan Produk */}
+                        {selectedProductToAdd && (
+                          <div className="bg-white p-3 rounded-xl border border-emerald-200 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-bold text-slate-900">{selectedProductToAdd.name}</p>
+                                <p className="text-[10px] text-slate-500 font-mono">SKU: {selectedProductToAdd.sku}</p>
+                              </div>
+                              {orderItems.some(
+                                (it) => it.product_id === selectedProductToAdd.id || it.products?.sku === selectedProductToAdd.sku
+                              ) && (
+                                <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-lg font-medium">
+                                  Kuantitas akan diakumulasikan
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-100">
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-600 mb-1">Jumlah (Qty)</label>
+                                <div className="flex items-center border border-slate-200 rounded-lg p-0.5 bg-slate-50">
+                                  <button
+                                    type="button"
+                                    onClick={() => setAddQty((q) => Math.max(1, q - 1))}
+                                    className="p-1.5 hover:bg-white rounded text-slate-600 cursor-pointer"
+                                  >
+                                    <Minus size={12} />
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={addQty}
+                                    onChange={(e) => setAddQty(Math.max(1, parseInt(e.target.value) || 1))}
+                                    className="w-full text-center font-bold text-xs bg-transparent border-0 focus:ring-0 p-0 text-slate-800"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setAddQty((q) => q + 1)}
+                                    className="p-1.5 hover:bg-white rounded text-slate-600 cursor-pointer"
+                                  >
+                                    <Plus size={12} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-600 mb-1">Harga Satuan (Rp)</label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={addUnitPrice}
+                                  onChange={(e) => setAddUnitPrice(Math.max(0, parseInt(e.target.value) || 0))}
+                                  className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-600 mb-1">Subtotal Item</label>
+                                <div className="px-2.5 py-1.5 bg-emerald-50 text-emerald-800 font-extrabold text-xs rounded-lg border border-emerald-200 flex items-center h-[34px]">
+                                  Rp {((addQty || 1) * (addUnitPrice || 0)).toLocaleString('id-ID')}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedProductToAdd(null);
+                                  setIsAddingItem(false);
+                                }}
+                                disabled={isProcessingItem}
+                                className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-xl font-semibold cursor-pointer"
+                              >
+                                Batal
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleAddNewOrderItem}
+                                disabled={isProcessingItem}
+                                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              >
+                                {isProcessingItem ? (
+                                  <>
+                                    <Loader2 size={13} className="animate-spin" /> Menyimpan...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check size={13} strokeWidth={2.5} /> Tambahkan ke Pesanan
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {isLoadingItems ? (
                   <div className="p-8 text-center text-slate-400 text-sm">Memuat detail produk...</div>
@@ -1793,34 +2352,40 @@ export default function OrdersPage() {
                 ) : (
                   <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
                     <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                      <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                         <tr>
                           <th className="p-3">Produk</th>
                           <th className="p-3 text-center">Jumlah</th>
                           <th className="p-3 text-right">Harga Satuan</th>
                           <th className="p-3 text-right">Subtotal</th>
-                          {isSuperAdmin && (
-                            <th className="p-3 text-center w-36">Aksi SKU</th>
-                          )}
+                          <th className="p-3 text-center w-36">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {orderItems.map((item) => {
                           const isEditing = editingItemId === item.id;
                           return (
-                            <tr key={item.id} className={isEditing ? 'bg-amber-50/50' : 'hover:bg-slate-50/60'}>
+                            <tr key={item.id} className={isEditing ? 'bg-amber-50/60 border-l-4 border-l-amber-500' : 'hover:bg-slate-50/60'}>
                               <td className="p-3 font-medium text-slate-800">
-                                <p className="font-bold">{item.products?.name || 'Produk'}</p>
-                                <p className="text-[10px] text-slate-400 font-mono">{item.products?.sku || '-'}</p>
+                                <div className="flex items-center gap-2">
+                                  {item.products?.image_url && (
+                                    <img src={item.products.image_url} alt="" className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0" />
+                                  )}
+                                  <div>
+                                    <p className="font-bold text-slate-900">{item.products?.name || 'Produk'}</p>
+                                    <p className="text-[10px] text-slate-400 font-mono">{item.products?.sku || '-'}</p>
+                                  </div>
+                                </div>
                               </td>
                               <td className="p-3 text-center">
                                 {isEditing ? (
                                   <div className="inline-flex items-center gap-1 bg-white border border-emerald-300 rounded-lg p-0.5 shadow-xs">
                                     <button 
                                       type="button"
-                                      onClick={() => setTempQty(q => Math.max(1, q - 1))}
+                                      onClick={() => setTempQty((q) => Math.max(1, q - 1))}
                                       disabled={isProcessingItem}
                                       className="p-1 hover:bg-slate-100 rounded text-slate-600 disabled:opacity-50 cursor-pointer"
+                                      title="Kurangi Kuantitas"
                                     >
                                       <Minus size={12} />
                                     </button>
@@ -1834,9 +2399,10 @@ export default function OrdersPage() {
                                     />
                                     <button 
                                       type="button"
-                                      onClick={() => setTempQty(q => q + 1)}
+                                      onClick={() => setTempQty((q) => q + 1)}
                                       disabled={isProcessingItem}
                                       className="p-1 hover:bg-slate-100 rounded text-slate-600 disabled:opacity-50 cursor-pointer"
+                                      title="Tambahkan Kuantitas"
                                     >
                                       <Plus size={12} />
                                     </button>
@@ -1846,62 +2412,76 @@ export default function OrdersPage() {
                                 )}
                               </td>
                               <td className="p-3 text-right text-slate-600">
-                                Rp {Number(item.unit_price).toLocaleString('id-ID')}
+                                {isEditing ? (
+                                  <div className="inline-flex items-center justify-end gap-1">
+                                    <span className="text-[10px] text-slate-400">Rp</span>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      value={tempUnitPrice}
+                                      onChange={(e) => setTempUnitPrice(Math.max(0, parseInt(e.target.value) || 0))}
+                                      disabled={isProcessingItem}
+                                      className="w-24 text-right font-bold text-xs bg-white border border-emerald-300 rounded-lg px-2 py-1 focus:ring-1 focus:ring-emerald-500"
+                                    />
+                                  </div>
+                                ) : (
+                                  <span>Rp {Number(item.unit_price).toLocaleString('id-ID')}</span>
+                                )}
                               </td>
                               <td className="p-3 text-right font-bold text-slate-900">
-                                Rp {Number(isEditing ? tempQty * Number(item.unit_price) : item.total_price).toLocaleString('id-ID')}
+                                Rp {Number(isEditing ? tempQty * (tempUnitPrice || 0) : item.total_price).toLocaleString('id-ID')}
                               </td>
-                              {isSuperAdmin && (
-                                <td className="p-3 text-center">
-                                  {isEditing ? (
-                                    <div className="flex items-center justify-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSaveItemQty(item)}
-                                        disabled={isProcessingItem}
-                                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                                        title="Simpan Perubahan Qty"
-                                      >
-                                        <Check size={12} strokeWidth={3} /> Simpan
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditingItemId(null)}
-                                        disabled={isProcessingItem}
-                                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold cursor-pointer"
-                                        title="Batal"
-                                      >
-                                        <X size={12} />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center justify-center gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingItemId(item.id);
-                                          setTempQty(item.quantity);
-                                        }}
-                                        disabled={isProcessingItem}
-                                        className="px-2 py-1 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/70 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                                        title="Ubah Quantity Pesanan"
-                                      >
-                                        <Edit2 size={12} />
-                                        <span>Edit Qty</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteOrderItem(item)}
-                                        disabled={isProcessingItem}
-                                        className="p-1 text-rose-600 hover:bg-rose-50 border border-rose-200/70 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                                        title="Hapus SKU ini dari Pesanan"
-                                      >
-                                        <Trash2 size={13} />
-                                      </button>
-                                    </div>
-                                  )}
-                                </td>
-                              )}
+                              <td className="p-3 text-center">
+                                {isEditing ? (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveItemQty(item)}
+                                      disabled={isProcessingItem}
+                                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                                      title="Simpan Perubahan"
+                                    >
+                                      {isProcessingItem ? <Loader2 size={11} className="animate-spin" /> : <Check size={12} strokeWidth={3} />}
+                                      <span>Simpan</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingItemId(null)}
+                                      disabled={isProcessingItem}
+                                      className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-[11px] font-semibold cursor-pointer"
+                                      title="Batal"
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingItemId(item.id);
+                                        setTempQty(item.quantity);
+                                        setTempUnitPrice(Number(item.unit_price) || 0);
+                                      }}
+                                      disabled={isProcessingItem}
+                                      className="px-2.5 py-1 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/70 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                      title="Ubah Quantity / Harga"
+                                    >
+                                      <Edit2 size={12} />
+                                      <span>Edit</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteOrderItem(item)}
+                                      disabled={isProcessingItem}
+                                      className="p-1 text-rose-600 hover:bg-rose-50 border border-rose-200/70 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                                      title="Hapus SKU ini dari Pesanan"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
                             </tr>
                           );
                         })}
@@ -1915,7 +2495,8 @@ export default function OrdersPage() {
               {(() => {
                 const currentSubtotal = orderItems.reduce((acc, it) => {
                   const qty = editingItemId === it.id ? tempQty : it.quantity;
-                  return acc + (qty * Number(it.unit_price || 0));
+                  const price = editingItemId === it.id ? (tempUnitPrice || 0) : Number(it.unit_price || 0);
+                  return acc + (qty * price);
                 }, 0);
                 const currentTotal = currentSubtotal + Number(selectedOrder.unique_code || 0) + Number(selectedOrder.shipping_cost || 0) - Number(selectedOrder.discount_amount || 0);
 

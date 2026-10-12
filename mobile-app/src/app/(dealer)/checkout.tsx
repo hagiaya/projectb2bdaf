@@ -273,7 +273,63 @@ export default function CheckoutScreen() {
 
       if (itemsError) throw itemsError;
 
-      // 4. Update outstanding_balance if payment method is KREDIT
+      // 4. Pengurangan Stok Produk Otomatis & Pencatatan Log Mutasi
+      let directUpdateSucceeded = false;
+      try {
+        for (const it of orderItems) {
+          const { data: pData } = await supabase
+            .from('products')
+            .select('id, stock')
+            .eq('id', it.product_id)
+            .single();
+
+          if (pData) {
+            const pPrev = Number(pData.stock) || 0;
+            const pNew = Math.max(0, pPrev - it.quantity);
+            const { data: updData, error: updErr } = await supabase
+              .from('products')
+              .update({ stock: pNew })
+              .eq('id', it.product_id)
+              .select('id');
+
+            if (!updErr && updData && updData.length > 0) {
+              directUpdateSucceeded = true;
+              await supabase.from('stock_logs').insert([{
+                product_id: it.product_id,
+                type: 'SALE',
+                quantity: it.quantity,
+                previous_stock: pPrev,
+                current_stock: pNew,
+                notes: `Order #${orderNumber}`,
+                created_by: dealerData?.store_name || 'Dealer',
+              }]);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Direct client stock deduction attempt:', e);
+      }
+
+      // Jika direct update tidak berhasil (karena RLS/hak akses), potong via server endpoint DAP Admin
+      if (!directUpdateSucceeded) {
+        try {
+          fetch('https://adminpaneldap.vercel.app/api/inventory/deduct-stock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              order_id: orderId,
+              order_number: orderNumber,
+              items: orderItems.map(it => ({ product_id: it.product_id, quantity: it.quantity })),
+              action: 'DEDUCT',
+              created_by: dealerData?.store_name || 'Dealer',
+            }),
+          }).catch(() => {});
+        } catch (apiErr) {
+          console.warn('Server stock deduction trigger:', apiErr);
+        }
+      }
+
+      // 5. Update outstanding_balance if payment method is KREDIT
       if (paymentMethod === 'KREDIT') {
         const newOutstanding = creditUsed + totalAfterDiscount;
         await supabase

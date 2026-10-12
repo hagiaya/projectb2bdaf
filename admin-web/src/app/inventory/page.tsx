@@ -106,8 +106,60 @@ function InventoryContent() {
   const [historyRestockNotes, setHistoryRestockNotes] = useState('');
   const [isHistorySubmitting, setIsHistorySubmitting] = useState(false);
 
+  // Realtime States
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
+
   useEffect(() => {
     fetchInitialData();
+
+    // ─── SETUP SUPABASE REALTIME CHANNEL FOR LIVE STOCK SYNC ───────
+    const channel = supabase
+      .channel('inventory-realtime-stock-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        (payload) => {
+          setLastSyncTime(new Date());
+          if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as any;
+            setProducts((prev) =>
+              prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+            );
+          } else if (payload.eventType === 'INSERT') {
+            const inserted = payload.new as any;
+            setProducts((prev) => {
+              if (prev.some((p) => p.id === inserted.id)) return prev;
+              return [inserted, ...prev];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            const deletedId = (payload.old as any).id;
+            setProducts((prev) => prev.filter((p) => p.id !== deletedId));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'stock_logs' },
+        () => {
+          setRefreshLogsCount((prev) => prev + 1);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'order_items' },
+        () => {
+          // Sinkronisasi ulang otomatis saat ada item pesanan baru/revisi
+          fetchInitialData(true);
+        }
+      )
+      .subscribe((status) => {
+        setIsRealtimeConnected(status === 'SUBSCRIBED');
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -121,8 +173,8 @@ function InventoryContent() {
     }
   }, [searchParams]);
 
-  const fetchInitialData = async () => {
-    setIsLoading(true);
+  const fetchInitialData = async (isBackground = false) => {
+    if (!isBackground) setIsLoading(true);
     
     // Get Admin Email
     const { data: { user } } = await supabase.auth.getUser();
@@ -147,8 +199,9 @@ function InventoryContent() {
 
     if (!prodError && prodData) {
       setProducts(prodData as any);
+      setLastSyncTime(new Date());
     }
-    setIsLoading(false);
+    if (!isBackground) setIsLoading(false);
   };
 
   // Open adjustment modal for a specific product
@@ -397,11 +450,21 @@ function InventoryContent() {
               <h1 className="text-3xl font-black text-slate-900 tracking-tight">
                 {activeTab === 'restock' ? 'Restok Produk' : activeTab === 'report' ? 'Laporan Riwayat Mutasi Stok' : 'Manajemen Stok'}
               </h1>
-              <div className="flex items-center gap-2 mt-0.5">
+              <div className="flex flex-wrap items-center gap-2 mt-0.5">
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
                   <CheckCircle2 size={12} /> Live Sync Master Produk
                 </span>
-                <span className="text-xs text-slate-400">• Supabase Realtime</span>
+                <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-md border transition-all ${
+                  isRealtimeConnected
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs'
+                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${isRealtimeConnected ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}`} />
+                  {isRealtimeConnected ? 'Supabase Realtime Aktif' : 'Menghubungkan Realtime...'}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Sinkron: {lastSyncTime.toLocaleTimeString('id-ID')}
+                </span>
               </div>
             </div>
           </div>
@@ -417,7 +480,7 @@ function InventoryContent() {
         {/* TOP ACTION BUTTONS */}
         <div className="flex flex-wrap items-center gap-2.5">
           <button 
-            onClick={fetchInitialData}
+            onClick={() => fetchInitialData()}
             disabled={isLoading}
             className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 p-2.5 rounded-xl font-semibold transition-all shadow-sm flex items-center gap-2 text-sm"
             title="Muat Ulang Data"
