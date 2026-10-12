@@ -1567,43 +1567,18 @@ export default function DealerProgramsScreen() {
                   </View>
                 ) : (
                   <View style={styles.photoEmptyUploadBox}>
-                    <Feather name="image" size={36} color="#94a3b8" />
-                    <Text style={styles.photoEmptyUploadTitle}>Belum Ada Foto Dokumentasi Lokasi</Text>
+                    <Feather name="camera" size={36} color="#16a34a" />
+                    <Text style={styles.photoEmptyUploadTitle}>Ambil Foto Dokumentasi Lokasi</Text>
                     <Text style={styles.photoEmptyUploadSub}>
-                      Pilih salah satu tombol di bawah untuk mengambil foto langsung di toko:
+                      Gunakan kamera untuk mengambil foto sudut/ruangan toko secara langsung:
                     </Text>
 
-                    <View style={styles.photoButtonsGrid}>
-                      <TouchableOpacity
-                        style={styles.cameraBtn}
-                        onPress={() => handleCapturePhoto('before', 'camera')}
-                      >
-                        <Feather name="camera" size={18} color="white" />
-                        <Text style={styles.cameraBtnText}>Buka Kamera</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.galleryBtn}
-                        onPress={() => handleCapturePhoto('before', 'gallery')}
-                      >
-                        <Feather name="image" size={18} color="#1e293b" />
-                        <Text style={styles.galleryBtnText}>Pilih Galeri</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Tombol Foto Sampel Demo */}
                     <TouchableOpacity
-                      style={styles.demoSamplePhotoBtn}
-                      onPress={() => {
-                        setBeforePhotoUri('https://images.unsplash.com/photo-1581783342308-f792dbdd27c5?w=600');
-                        setBeforePhotoBase64(null);
-                        setPlacementNotes('Area depan kasir toko (Foto Sampel Uji Coba Demo)');
-                        if (Platform.OS === 'web') window.alert('Foto sampel toko berhasil dimuat untuk pengujian!');
-                        else Alert.alert('Foto Sampel Toko 📸', 'Foto contoh sudut toko berhasil dimuat untuk pengujian.');
-                      }}
+                      style={styles.cameraBtnFull}
+                      onPress={() => handleCapturePhoto('before', 'camera')}
                     >
-                      <Feather name="zap" size={14} color="#b45309" />
-                      <Text style={styles.demoSamplePhotoBtnText}>⚡ Gunakan Foto Contoh Toko (Uji Coba Demo)</Text>
+                      <Feather name="camera" size={20} color="white" />
+                      <Text style={styles.cameraBtnText}>Buka Kamera</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -1927,43 +1902,18 @@ export default function DealerProgramsScreen() {
                   </View>
                 ) : (
                   <View style={styles.photoEmptyUploadBox}>
-                    <Feather name="camera" size={36} color="#94a3b8" />
+                    <Feather name="camera" size={36} color="#16a34a" />
                     <Text style={styles.photoEmptyUploadTitle}>Ambil Foto Barang Support yang Sudah Dipasang</Text>
                     <Text style={styles.photoEmptyUploadSub}>
-                      Pastikan barang rak/etalase tampak jelas terpasang di dalam toko Anda:
+                      Gunakan kamera untuk memotret rak/etalase yang sudah terpasang di toko:
                     </Text>
 
-                    <View style={styles.photoButtonsGrid}>
-                      <TouchableOpacity
-                        style={styles.cameraBtn}
-                        onPress={() => handleCapturePhoto('after', 'camera')}
-                      >
-                        <Feather name="camera" size={18} color="white" />
-                        <Text style={styles.cameraBtnText}>Buka Kamera</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.galleryBtn}
-                        onPress={() => handleCapturePhoto('after', 'gallery')}
-                      >
-                        <Feather name="image" size={18} color="#1e293b" />
-                        <Text style={styles.galleryBtnText}>Pilih Galeri</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Tombol Foto Sampel Demo After */}
                     <TouchableOpacity
-                      style={styles.demoSamplePhotoBtn}
-                      onPress={() => {
-                        setAfterPhotoUri('https://images.unsplash.com/photo-1555421689-491a97ff2040?w=600');
-                        setAfterPhotoBase64(null);
-                        setAfterNotes('Barang display DAP telah tiba dan selesai dirakit rapi di toko (Foto Sampel Uji Coba Demo)');
-                        if (Platform.OS === 'web') window.alert('Foto sampel rak terpasang berhasil dimuat untuk pengujian!');
-                        else Alert.alert('Foto Sampel Terpasang ✨', 'Foto contoh rak selesai dirakit berhasil dimuat untuk pengujian.');
-                      }}
+                      style={styles.cameraBtnFull}
+                      onPress={() => handleCapturePhoto('after', 'camera')}
                     >
-                      <Feather name="zap" size={14} color="#b45309" />
-                      <Text style={styles.demoSamplePhotoBtnText}>⚡ Gunakan Foto Contoh Rak Terpasang (Uji Coba Demo)</Text>
+                      <Feather name="camera" size={20} color="white" />
+                      <Text style={styles.cameraBtnText}>Buka Kamera Toko</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -3462,9 +3412,19 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
   },
+  cameraBtnFull: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#15803d',
+    paddingVertical: 13,
+    borderRadius: 12,
+  },
   cameraBtnText: {
     color: 'white',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: 'bold',
   },
   galleryBtn: {

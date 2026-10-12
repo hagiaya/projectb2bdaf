@@ -848,7 +848,7 @@ export default function DealerHome() {
                 style={[styles.logoutBtn, { backgroundColor: '#e2e8f0', marginBottom: 12 }]} 
                 onPress={() => {
                   setIsProfileVisible(false);
-                  router.push('/(dealer)/profile-edit');
+                  router.push('/(dealer)/profile-edit' as any);
                 }}
               >
                 <Feather name="edit-3" size={18} color="#475569" />
