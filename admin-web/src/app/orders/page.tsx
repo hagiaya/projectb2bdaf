@@ -159,6 +159,15 @@ export default function OrdersPage() {
   const [isSubmittingReceiving, setIsSubmittingReceiving] = useState(false);
 
   useEffect(() => {
+    // Check URL search parameters for initial stage filter
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const stageParam = (searchParams.get('stage') || searchParams.get('status') || '').toUpperCase();
+      if (['ALL', 'PENDING', 'PACKING', 'SHIPPED', 'RECEIVED', 'COMPLETED', 'CANCELLED'].includes(stageParam)) {
+        setStageFilter(stageParam as any);
+      }
+    }
+
     // 0. Initialize Admin Role
     const storedRole = localStorage.getItem('adminRole');
     if (storedRole) {
@@ -386,6 +395,37 @@ export default function OrdersPage() {
       updatePayload.payment_status = newPaymentStatus;
     }
 
+    try {
+      // 1. Coba update via API Route Server (bypasses RLS restrictions completely)
+      const res = await fetch('/api/orders/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: id,
+          new_status: newStatus,
+          new_payment_status: newPaymentStatus,
+          updated_by: isSuperAdmin ? 'Super Admin' : 'Admin Operasional',
+        }),
+      });
+
+      const resData = await res.json();
+
+      if (res.ok && resData.success) {
+        // Berhasil update via API server
+        setOrders(prev => prev.map(o => o.id === id ? { ...o, ...updatePayload } : o));
+        if (selectedOrder && selectedOrder.id === id) {
+          setSelectedOrder({ ...selectedOrder, ...updatePayload });
+        }
+        setIsUpdating(false);
+        return;
+      }
+      
+      console.warn("API update-status gagal, mencoba direct supabase client:", resData.error);
+    } catch (apiErr) {
+      console.warn("Koneksi API update-status error, mencoba direct client fallback:", apiErr);
+    }
+
+    // 2. Fallback via direct Supabase Client
     const orderToUpdate = orders.find(o => o.id === id);
     if (newStatus === 'RECEIVED' && orderToUpdate?.payment_method === 'KREDIT') {
       const { data: dData } = await supabase.from('dealers').select('credit_term_days').eq('id', orderToUpdate.dealer_id).single();
@@ -1921,8 +1961,8 @@ export default function OrdersPage() {
                       <ShieldAlert size={12} className="text-amber-600" /> Mode Super Admin
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                      <Lock size={11} className="text-slate-400" /> Mode Admin (Lihat Saja)
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      <ShieldCheck size={12} className="text-emerald-600" /> Mode Admin Operasional
                     </span>
                   )}
                 </div>
@@ -2581,7 +2621,7 @@ export default function OrdersPage() {
 
             {/* Modal Actions Footer */}
             <div className="p-5 border-t border-slate-100 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-slate-500 font-semibold">Ubah Tahap Pipeline:</span>
                 <select 
                   value={selectedOrder.status}
@@ -2596,21 +2636,77 @@ export default function OrdersPage() {
                   <option value="COMPLETED">5. Selesai / COD Bayar (Completed)</option>
                   <option value="CANCELLED">Dibatalkan (Cancelled)</option>
                 </select>
+
+                {/* FAST ONE-CLICK PROCESS BUTTONS */}
+                {selectedOrder.status === 'PENDING' && (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateStatus(selectedOrder.id, 'PACKING')}
+                    disabled={isUpdating}
+                    className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="Proses pesanan ke tahap Pengemasan"
+                  >
+                    {isUpdating ? <Loader2 size={13} className="animate-spin" /> : <Package size={14} />}
+                    <span>Proses & Masuk Pengemasan</span>
+                  </button>
+                )}
+
+                {(selectedOrder.status === 'PACKING' || selectedOrder.status === 'PROCESSING') && (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateStatus(selectedOrder.id, 'SHIPPED')}
+                    disabled={isUpdating}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="Proses pesanan ke tahap Pengiriman"
+                  >
+                    {isUpdating ? <Loader2 size={13} className="animate-spin" /> : <Truck size={14} />}
+                    <span>Proses Pengiriman</span>
+                  </button>
+                )}
+
+                {selectedOrder.status === 'SHIPPED' && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenReceivingModal(selectedOrder)}
+                    disabled={isUpdating}
+                    className="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                    title="Catat dan konfirmasi penerimaan barang"
+                  >
+                    <PackageCheck size={14} />
+                    <span>Catat Penerimaan Barang</span>
+                  </button>
+                )}
+
+                {selectedOrder.status === 'RECEIVED' && (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateStatus(selectedOrder.id, 'COMPLETED', 'paid')}
+                    disabled={isUpdating}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="Selesaikan pesanan dan konfirmasi lunas"
+                  >
+                    {isUpdating ? <Loader2 size={13} className="animate-spin" /> : <Check size={14} strokeWidth={2.5} />}
+                    <span>Selesaikan Pesanan & Konfirmasi Lunas</span>
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
-                {selectedOrder.payment_status !== 'paid' && (
+                {selectedOrder.payment_status !== 'paid' && selectedOrder.status !== 'RECEIVED' && (
                   <button
+                    type="button"
                     onClick={() => handleUpdateStatus(selectedOrder.id, selectedOrder.status, 'paid')}
                     disabled={isUpdating}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                   >
-                    <Check size={14} /> Konfirmasi Lunas
+                    {isUpdating ? <Loader2 size={13} className="animate-spin" /> : <Check size={14} />}
+                    <span>Konfirmasi Lunas</span>
                   </button>
                 )}
                 <button
+                  type="button"
                   onClick={() => setSelectedOrder(null)}
-                  className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
+                  className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all cursor-pointer"
                 >
                   Tutup
                 </button>

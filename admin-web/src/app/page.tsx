@@ -32,7 +32,9 @@ export default function Dashboard() {
     activeSales: 0,
     ordersToday: 0,
     totalProducts: 0,
-    syncedProducts: 0
+    syncedProducts: 0,
+    completedOrdersCount: 0,
+    pipelineSales: 0,
   });
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
@@ -50,16 +52,27 @@ export default function Dashboard() {
 
   const fetchStats = async () => {
     try {
-      const { data: orders } = await supabase.from('orders').select('final_amount, total_amount, created_at');
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('final_amount, total_amount, created_at, status');
       
       let totalSales = 0;
+      let completedOrdersCount = 0;
+      let pipelineSales = 0;
       let ordersToday = 0;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
       if (orders) {
         orders.forEach(order => {
-          totalSales += Number(order.final_amount || order.total_amount) || 0;
+          const amt = Number(order.total_amount) || 0;
+          if (order.status === 'COMPLETED') {
+            totalSales += amt;
+            completedOrdersCount++;
+          } else if (order.status !== 'CANCELLED') {
+            pipelineSales += amt;
+          }
+
           const orderDate = new Date(order.created_at);
           if (orderDate >= today) {
             ordersToday++;
@@ -78,7 +91,9 @@ export default function Dashboard() {
         activeSales: activeSales || 0,
         ordersToday,
         totalProducts: totalProducts || 0,
-        syncedProducts: syncedProducts || 0
+        syncedProducts: syncedProducts || 0,
+        completedOrdersCount,
+        pipelineSales,
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -116,9 +131,7 @@ export default function Dashboard() {
   };
 
   const formatCurrency = (val: number) => {
-    if (val >= 1000000000) return `Rp ${(val / 1000000000).toFixed(1)}B`;
-    if (val >= 1000000) return `Rp ${(val / 1000000).toFixed(1)}M`;
-    return `Rp ${val.toLocaleString('id-ID')}`;
+    return `Rp ${Number(val || 0).toLocaleString('id-ID')}`;
   };
 
   const getStatusColor = (status: string) => {
@@ -157,10 +170,35 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* KPI Cards */}
           {[
-            { title: 'Total Penjualan', value: loading ? '...' : formatCurrency(stats.totalSales), icon: TrendingUp, href: '/reports' },
-            { title: 'Total Dealer', value: loading ? '...' : stats.totalDealers.toString(), icon: Users, href: '/dealers' },
-            { title: 'Sales Aktif', value: loading ? '...' : stats.activeSales.toString(), icon: ShoppingBag, href: '/sales' },
-            { title: 'Order Hari Ini', value: loading ? '...' : stats.ordersToday.toString(), icon: Package, href: '/orders' }
+            { 
+              title: 'Total Penjualan', 
+              value: loading ? '...' : formatCurrency(stats.totalSales), 
+              subtext: loading ? '' : `${stats.completedOrdersCount} Pesanan Selesai`,
+              badge: !loading && stats.pipelineSales > 0 ? `Pipeline: ${formatCurrency(stats.pipelineSales)}` : undefined,
+              icon: TrendingUp, 
+              href: '/reports' 
+            },
+            { 
+              title: 'Total Dealer', 
+              value: loading ? '...' : stats.totalDealers.toString(), 
+              subtext: 'Toko Terdaftar',
+              icon: Users, 
+              href: '/dealers' 
+            },
+            { 
+              title: 'Sales Aktif', 
+              value: loading ? '...' : stats.activeSales.toString(), 
+              subtext: 'Tenaga Penjual',
+              icon: ShoppingBag, 
+              href: '/sales' 
+            },
+            { 
+              title: 'Order Hari Ini', 
+              value: loading ? '...' : stats.ordersToday.toString(), 
+              subtext: 'Transaksi Baru',
+              icon: Package, 
+              href: '/orders' 
+            }
           ].map((item, i) => (
             <div 
               key={item.title} 
@@ -174,9 +212,21 @@ export default function Dashboard() {
                 <ChevronRight size={18} className="text-slate-300 group-hover:text-emerald-600 transition-colors" />
               </div>
               <h3 className="text-sm font-semibold text-slate-500 mb-1">{item.title}</h3>
-              <p className="text-3xl font-black text-slate-800 tracking-tight">
+              <p className="text-2xl xl:text-3xl font-black text-slate-800 tracking-tight">
                 {item.value}
               </p>
+              {item.subtext && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-medium text-slate-400">
+                    {item.subtext}
+                  </span>
+                  {item.badge && (
+                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100/80">
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

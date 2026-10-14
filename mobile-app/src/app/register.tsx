@@ -9,6 +9,7 @@ import React, { useState, useEffect } from 'react';
 import * as Location from 'expo-location';
 import MapPicker from '../components/MapPicker';
 import { supabase } from '../lib/supabase';
+import { detectTerritoryFromAddress } from '../lib/territoryDetector';
 
 export default function RegisterScreen() {
   const [roleType, setRoleType] = useState<'dealer' | 'sales'>('dealer');
@@ -172,8 +173,22 @@ export default function RegisterScreen() {
       });
       
       if (addressDetails) {
-        const fullAddress = [addressDetails.street, addressDetails.city, addressDetails.subregion, addressDetails.region].filter(Boolean).join(', ');
-        if (fullAddress) setAddress(fullAddress);
+        const fullAddress = [
+          addressDetails.name,
+          addressDetails.street,
+          addressDetails.district,
+          addressDetails.city,
+          addressDetails.subregion,
+          addressDetails.region
+        ].filter(Boolean).join(', ');
+        
+        if (fullAddress) {
+          setAddress(fullAddress);
+          const detected = detectTerritoryFromAddress(fullAddress);
+          if (detected && !selectedSalesId) {
+            setSelectedSalesId(detected.salesId);
+          }
+        }
       }
       
       if (Platform.OS !== 'web') Alert.alert('Berhasil', 'Lokasi berhasil dideteksi.');
@@ -311,8 +326,17 @@ export default function RegisterScreen() {
       let finalSalesId = selectedSalesId || null;
       let detectedRegionId = null;
 
-      // Auto detect region
-      if (address) {
+      // 1. Auto detect wilayah dan Sales PIC berdasarkan alamat cerdas
+      const detected = detectTerritoryFromAddress(address || '');
+      if (detected) {
+        detectedRegionId = detected.regionId;
+        if (!finalSalesId) {
+          finalSalesId = detected.salesId;
+        }
+      }
+
+      // 2. Fallback deteksi region dari daftar tabel regions jika belum terdeteksi
+      if (!detectedRegionId && address) {
         const addressUpper = address.toUpperCase();
         for (const reg of regions) {
           if (addressUpper.includes(reg.name.toUpperCase())) {
@@ -322,7 +346,7 @@ export default function RegisterScreen() {
         }
       }
 
-      // If no sales selected, try to auto-assign based on region
+      // 3. Fallback sales jika sales masih kosong dan region sudah ada
       if (!finalSalesId && detectedRegionId) {
         const regionalSales = salesList.filter(s => s.region_id === detectedRegionId);
         if (regionalSales.length > 0) {
@@ -645,7 +669,23 @@ export default function RegisterScreen() {
 
       </View>
 
-      <MapPicker visible={isMapVisible} onClose={() => setIsMapVisible(false)} onSelectLocation={(lat, lng) => { setLocation({lat, lng}); setIsMapVisible(false); }} />
+      <MapPicker 
+        visible={isMapVisible} 
+        onClose={() => setIsMapVisible(false)} 
+        initialLocation={location}
+        initialAddress={address}
+        onSelectLocation={(lat, lng, addr) => { 
+          setLocation({ lat, lng }); 
+          if (addr && (!address || address.trim() === '')) {
+            setAddress(addr);
+          }
+          const detected = detectTerritoryFromAddress(addr || address);
+          if (detected && !selectedSalesId) {
+            setSelectedSalesId(detected.salesId);
+          }
+          setIsMapVisible(false); 
+        }} 
+      />
 
       {/* Native Sales Picker Modal */}
       <Modal visible={salesModalVisible} transparent animationType="slide">

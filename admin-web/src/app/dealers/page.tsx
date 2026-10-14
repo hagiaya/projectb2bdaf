@@ -33,9 +33,21 @@ import {
   Percent,
   Tag,
   Calendar,
-  Crown
+  Crown,
+  UserCheck,
+  Upload,
+  Eye,
+  EyeOff,
+  Lock,
+  Phone,
+  Mail,
+  User,
+  FileUp,
+  ExternalLink,
+  Camera
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { detectTerritoryFromAddress } from '@/lib/territoryDetector';
 
 interface Dealer {
   id: string;
@@ -88,6 +100,7 @@ interface Region {
   name: string;
   city_name?: string;
   district_name?: string;
+  manager_name?: string;
 }
 
 interface Profile {
@@ -129,7 +142,7 @@ export default function DealersPage() {
   const [pendingProfiles, setPendingProfiles] = useState<PendingProfile[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [salesList, setSalesList] = useState<{ id: string; name: string }[]>([]);
+  const [salesList, setSalesList] = useState<{ id: string; name: string; region_id?: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [adminEmail, setAdminEmail] = useState('Admin');
 
@@ -141,6 +154,7 @@ export default function DealersPage() {
   const [selectedRegionFilter, setSelectedRegionFilter] = useState('Semua Wilayah');
   const [selectedCreditFilter, setSelectedCreditFilter] = useState('ALL'); // 'ALL' | 'CREDIT_ONLY' | 'REGULAR_ONLY'
   const [selectedTypeFilter, setSelectedTypeFilter] = useState('ALL'); // 'ALL' | 'SPECIAL_ONLY' | 'REGULAR_ONLY'
+  const [selectedSalesFilter, setSelectedSalesFilter] = useState('ALL'); // 'ALL' | 'NO_SALES' | string (sales_id)
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -148,22 +162,86 @@ export default function DealersPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedRegionFilter, selectedCreditFilter, selectedTypeFilter]);
+  }, [searchQuery, selectedRegionFilter, selectedCreditFilter, selectedTypeFilter, selectedSalesFilter]);
 
-  // Add Dealer Modal State
+  // Add Dealer Modal State (Manual Registration)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newStoreName, setNewStoreName] = useState('');
-  const [newOwnerId, setNewOwnerId] = useState('');
-  const [selectedProvince, setSelectedProvince] = useState('');
+  const [newOwnerName, setNewOwnerName] = useState('');
+  const [newOwnerPhone, setNewOwnerPhone] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
   const [newRegionId, setNewRegionId] = useState('');
   const [newSalesId, setNewSalesId] = useState('');
   const [newAddress, setNewAddress] = useState('');
+  const [newKtpFile, setNewKtpFile] = useState<File | null>(null);
+  const [newKtpPreview, setNewKtpPreview] = useState<string | null>(null);
+  const [newNpwpFile, setNewNpwpFile] = useState<File | null>(null);
+  const [newNpwpPreview, setNewNpwpPreview] = useState<string | null>(null);
   const [newCreditLimit, setNewCreditLimit] = useState('0');
   const [newIsCreditEligible, setNewIsCreditEligible] = useState(false);
   const [newCreditTermDays, setNewCreditTermDays] = useState('15');
   const [newIsSpecialDealer, setNewIsSpecialDealer] = useState(false);
   const [newSpecialTier, setNewSpecialTier] = useState('VIP');
   const [newSpecialDiscount, setNewSpecialDiscount] = useState('0');
+  const [isSubmittingDealer, setIsSubmittingDealer] = useState(false);
+  const [newDealerDetectedInfo, setNewDealerDetectedInfo] = useState<string | null>(null);
+
+  const handleAutoDetectTerritoryForNewDealer = (addrText?: string, storeText?: string) => {
+    const combined = `${addrText !== undefined ? addrText : newAddress} ${storeText !== undefined ? storeText : newStoreName}`;
+    const detected = detectTerritoryFromAddress(combined);
+    if (detected) {
+      setNewRegionId(detected.regionId);
+      setNewSalesId(detected.salesId);
+      setNewDealerDetectedInfo(`🎯 Terdeteksi: ${detected.regionName} • ${detected.salesName} (${detected.cityArea})`);
+    } else {
+      setNewDealerDetectedInfo(null);
+    }
+  };
+
+  const handleKtpFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setNewKtpFile(file);
+      const reader = new FileReader();
+      reader.onload = () => setNewKtpPreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleNpwpFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setNewNpwpFile(file);
+      const reader = new FileReader();
+      reader.onload = () => setNewNpwpPreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const resetNewDealerForm = () => {
+    setNewStoreName('');
+    setNewOwnerName('');
+    setNewOwnerPhone('');
+    setNewPassword('');
+    setShowNewPassword(false);
+    setNewEmail('');
+    setNewRegionId('');
+    setNewSalesId('');
+    setNewAddress('');
+    setNewKtpFile(null);
+    setNewKtpPreview(null);
+    setNewNpwpFile(null);
+    setNewNpwpPreview(null);
+    setNewCreditLimit('0');
+    setNewIsCreditEligible(false);
+    setNewCreditTermDays('15');
+    setNewIsSpecialDealer(false);
+    setNewSpecialTier('VIP');
+    setNewSpecialDiscount('0');
+    setNewDealerDetectedInfo(null);
+  };
 
   // Dealer Khusus & Credit Limit Management Modal State
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
@@ -197,6 +275,98 @@ export default function DealersPage() {
   const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editSalesId, setEditSalesId] = useState('');
+  const [isUploadingDoc, setIsUploadingDoc] = useState<'ktp' | 'npwp' | 'store' | null>(null);
+
+  const handleUploadDealerDoc = async (file: File, docType: 'ktp' | 'npwp' | 'store') => {
+    if (!selectedDealerCredit || !selectedDealerCredit.profile_id) return;
+    setIsUploadingDoc(docType);
+
+    try {
+      const cleanPhone = selectedDealerCredit.profiles?.phone_number || selectedDealerCredit.id;
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const filePath = `${cleanPhone}/${docType}_${Date.now()}.${fileExt}`;
+
+      let publicUrl = '';
+      const { error: uploadErr } = await supabase.storage
+        .from('dealer_documents')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadErr) {
+        console.warn("Upload ke dealer_documents gagal, mencoba promo-banners:", uploadErr);
+        const { error: fbErr } = await supabase.storage
+          .from('promo-banners')
+          .upload(`docs/${filePath}`, file, { upsert: true });
+        if (fbErr) throw fbErr;
+        publicUrl = supabase.storage.from('promo-banners').getPublicUrl(`docs/${filePath}`).data.publicUrl;
+      } else {
+        publicUrl = supabase.storage.from('dealer_documents').getPublicUrl(filePath).data.publicUrl;
+      }
+
+      const colName = docType === 'ktp' ? 'ktp_url' : docType === 'npwp' ? 'npwp_url' : 'store_photo_url';
+      const { error: profErr } = await supabase
+        .from('profiles')
+        .update({ [colName]: publicUrl })
+        .eq('id', selectedDealerCredit.profile_id);
+
+      if (profErr) throw profErr;
+
+      // Update local state
+      const updatedProfiles = {
+        ...(selectedDealerCredit.profiles || { full_name: '' }),
+        [colName]: publicUrl,
+      };
+      const updatedDealer: Dealer = {
+        ...selectedDealerCredit,
+        profiles: updatedProfiles as any,
+      };
+
+      setSelectedDealerCredit(updatedDealer);
+      setDealers(prev => prev.map(d => d.id === selectedDealerCredit.id ? updatedDealer : d));
+
+      alert(`Foto ${docType === 'ktp' ? 'KTP' : docType === 'npwp' ? 'NPWP' : 'Toko'} berhasil diperbarui! 🎉`);
+    } catch (err: any) {
+      console.error("Gagal upload dokumen:", err);
+      alert(`Gagal memperbarui foto: ${err.message || 'Terjadi kesalahan'}`);
+    } finally {
+      setIsUploadingDoc(null);
+    }
+  };
+
+  const handleRemoveDealerDoc = async (docType: 'ktp' | 'npwp' | 'store') => {
+    if (!selectedDealerCredit || !selectedDealerCredit.profile_id) return;
+    const label = docType === 'ktp' ? 'KTP' : docType === 'npwp' ? 'NPWP' : 'Foto Toko';
+    if (!confirm(`Apakah Anda yakin ingin menghapus dokumen ${label} ini?`)) return;
+
+    setIsUploadingDoc(docType);
+    try {
+      const colName = docType === 'ktp' ? 'ktp_url' : docType === 'npwp' ? 'npwp_url' : 'store_photo_url';
+      const { error: profErr } = await supabase
+        .from('profiles')
+        .update({ [colName]: null })
+        .eq('id', selectedDealerCredit.profile_id);
+
+      if (profErr) throw profErr;
+
+      const updatedProfiles = {
+        ...(selectedDealerCredit.profiles || { full_name: '' }),
+        [colName]: null,
+      };
+      const updatedDealer: Dealer = {
+        ...selectedDealerCredit,
+        profiles: updatedProfiles as any,
+      };
+
+      setSelectedDealerCredit(updatedDealer);
+      setDealers(prev => prev.map(d => d.id === selectedDealerCredit.id ? updatedDealer : d));
+
+      alert(`Foto ${label} berhasil dihapus.`);
+    } catch (err: any) {
+      console.error("Gagal menghapus dokumen:", err);
+      alert(`Gagal menghapus foto: ${err.message || 'Terjadi kesalahan'}`);
+    } finally {
+      setIsUploadingDoc(null);
+    }
+  };
 
   // Payment & Bank CBD / COD Settings State
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>({
@@ -236,16 +406,19 @@ export default function DealersPage() {
     const { data: profData } = await supabase.from('profiles').select('id, full_name');
     if (profData) {
       setProfiles(profData);
-      if (profData.length > 0) setNewOwnerId(profData[0].id);
     }
 
     // Fetch active sales for dropdown
     const { data: sData } = await supabase
       .from('sales')
-      .select('id, profiles(full_name)')
-      .eq('status', 'ACTIVE');
+      .select('id, region_id, profiles(full_name)')
+      .order('created_at', { ascending: false });
     if (sData) {
-      setSalesList(sData.map((s: any) => ({ id: s.id, name: s.profiles?.full_name || 'Sales' })));
+      const list = sData
+        .filter((s: any) => s.profiles?.full_name)
+        .map((s: any) => ({ id: s.id, name: s.profiles?.full_name || 'Sales', region_id: s.region_id }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setSalesList(list);
     }
 
     // Fetch dealers (APPROVED) with sales relation
@@ -318,14 +491,18 @@ export default function DealersPage() {
       vip_support: dealer.special_access_permissions?.vip_support ?? true,
     });
     setSpecialDealerNotesInput(dealer.special_dealer_notes || '');
-    setEditRegionId(dealer.region_id || '');
+    
+    // Auto-detect Wilayah & Sales PIC jika masih kosong
+    const autoDetected = (!dealer.region_id || !dealer.sales_id) ? detectTerritoryFromAddress(dealer.address) : null;
+    setEditRegionId(dealer.region_id || autoDetected?.regionId || '');
+    setEditSalesId(dealer.sales_id || autoDetected?.salesId || '');
+
     setEditStoreName(dealer.store_name || '');
     setEditAddress(dealer.address || '');
     setEditFullName(dealer.profiles?.full_name || '');
     setEditPhoneNumber(dealer.profiles?.phone_number || '');
     setEditEmail(dealer.email || '');
     setEditPassword('');
-    setEditSalesId(dealer.sales_id || '');
 
     setIsLoadingLogs(true);
     try {
@@ -400,8 +577,22 @@ export default function DealersPage() {
       special_pricing_notes: isSpecialDealerInput ? specialPricingNotesInput.trim() : null,
       special_access_permissions: isSpecialDealerInput ? specialPermissions : null,
       special_dealer_notes: isSpecialDealerInput ? specialDealerNotesInput.trim() : null,
-      region_id: editRegionId || null,
-      sales_id: editSalesId || null,
+      region_id: (() => {
+        let rId = editRegionId || null;
+        if (!rId) {
+          const d = detectTerritoryFromAddress(editAddress);
+          if (d) rId = d.regionId;
+        }
+        return rId;
+      })(),
+      sales_id: (() => {
+        let sId = editSalesId || null;
+        if (!sId) {
+          const d = detectTerritoryFromAddress(editAddress);
+          if (d) sId = d.salesId;
+        }
+        return sId;
+      })(),
       store_name: editStoreName,
       address: editAddress,
     };
@@ -566,54 +757,118 @@ export default function DealersPage() {
 
   const handleAddDealer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newStoreName || !newOwnerId || !newRegionId) return;
-
-    const parsedLimit = parseFloat(newCreditLimit) || 0;
-    const newDlr: any = {
-      store_name: newStoreName,
-      profile_id: newOwnerId,
-      region_id: newRegionId,
-      address: newAddress,
-      credit_limit: parsedLimit,
-      is_credit_eligible: newIsCreditEligible,
-      credit_status: newIsCreditEligible ? 'ACTIVE' : 'DISABLED',
-      credit_term_days: parseInt(newCreditTermDays, 10) || 15,
-      is_special_dealer: newIsSpecialDealer,
-      special_dealer_tier: newIsSpecialDealer ? newSpecialTier : 'REGULAR',
-      special_discount_percentage: newIsSpecialDealer ? parseFloat(newSpecialDiscount) || 0 : 0,
-      status: 'ACTIVE',
-    };
-    if (newSalesId) newDlr.sales_id = newSalesId;
-
-    let { data, error } = await supabase.from('dealers').insert([newDlr]).select('*, profiles(full_name), regions(name), sales(id, profiles(full_name))');
-
-    if (error && (error.message?.includes('is_credit_eligible') || error.message?.includes('is_special_dealer') || error.code === '42703')) {
-      delete newDlr.is_credit_eligible;
-      delete newDlr.credit_status;
-      delete newDlr.credit_term_days;
-      delete newDlr.is_special_dealer;
-      delete newDlr.special_dealer_tier;
-      delete newDlr.special_discount_percentage;
-      const fb = await supabase.from('dealers').insert([newDlr]).select('*, profiles(full_name), regions(name), sales(id, profiles(full_name))');
-      data = fb.data;
-      error = fb.error;
+    if (!newStoreName.trim()) {
+      alert("Nama toko wajib diisi.");
+      return;
+    }
+    if (!newOwnerName.trim()) {
+      alert("Nama pemilik / owner wajib diisi.");
+      return;
+    }
+    if (!newOwnerPhone.trim()) {
+      alert("Nomor HP / WhatsApp pemilik wajib diisi.");
+      return;
+    }
+    if (!newPassword.trim() || newPassword.trim().length < 6) {
+      alert("Kata sandi akun dealer minimal 6 karakter.");
+      return;
+    }
+    if (!newRegionId) {
+      alert("Silakan pilih Wilayah / Provinsi toko.");
+      return;
     }
 
-    if (!error && data) {
-      setDealers([data[0] as any, ...dealers]);
+    setIsSubmittingDealer(true);
+
+    try {
+      const cleanPhone = newOwnerPhone.replace(/\D/g, '');
+      let ktpUrl: string | undefined = undefined;
+      let npwpUrl: string | undefined = undefined;
+
+      // 1. Upload KTP jika ada
+      if (newKtpFile) {
+        const fileExt = newKtpFile.name.split('.').pop() || 'jpg';
+        const ktpPath = `${cleanPhone}/ktp_${Date.now()}.${fileExt}`;
+        const { error: ktpUploadErr } = await supabase.storage
+          .from('dealer_documents')
+          .upload(ktpPath, newKtpFile, { upsert: true });
+
+        if (ktpUploadErr) {
+          console.warn("Gagal upload KTP ke dealer_documents, mencoba fallback promo-banners:", ktpUploadErr);
+          const { error: fbErr } = await supabase.storage
+            .from('promo-banners')
+            .upload(`docs/${ktpPath}`, newKtpFile, { upsert: true });
+          if (!fbErr) {
+            ktpUrl = supabase.storage.from('promo-banners').getPublicUrl(`docs/${ktpPath}`).data.publicUrl;
+          }
+        } else {
+          ktpUrl = supabase.storage.from('dealer_documents').getPublicUrl(ktpPath).data.publicUrl;
+        }
+      }
+
+      // 2. Upload NPWP jika ada
+      if (newNpwpFile) {
+        const fileExt = newNpwpFile.name.split('.').pop() || 'jpg';
+        const npwpPath = `${cleanPhone}/npwp_${Date.now()}.${fileExt}`;
+        const { error: npwpUploadErr } = await supabase.storage
+          .from('dealer_documents')
+          .upload(npwpPath, newNpwpFile, { upsert: true });
+
+        if (npwpUploadErr) {
+          console.warn("Gagal upload NPWP ke dealer_documents, mencoba fallback promo-banners:", npwpUploadErr);
+          const { error: fbErr } = await supabase.storage
+            .from('promo-banners')
+            .upload(`docs/${npwpPath}`, newNpwpFile, { upsert: true });
+          if (!fbErr) {
+            npwpUrl = supabase.storage.from('promo-banners').getPublicUrl(`docs/${npwpPath}`).data.publicUrl;
+          }
+        } else {
+          npwpUrl = supabase.storage.from('dealer_documents').getPublicUrl(npwpPath).data.publicUrl;
+        }
+      }
+
+      // 3. Kirim ke API pendaftaran akun dealer
+      const response = await fetch('/api/dealers/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          store_name: newStoreName.trim(),
+          full_name: newOwnerName.trim(),
+          phone_number: cleanPhone,
+          password: newPassword.trim(),
+          email: newEmail.trim() || undefined,
+          region_id: newRegionId,
+          sales_id: newSalesId || undefined,
+          address: newAddress.trim(),
+          ktp_url: ktpUrl,
+          npwp_url: npwpUrl,
+          credit_limit: newIsCreditEligible ? (parseFloat(newCreditLimit) || 0) : 0,
+          is_credit_eligible: newIsCreditEligible,
+          credit_term_days: parseInt(newCreditTermDays, 10) || 15,
+          is_special_dealer: newIsSpecialDealer,
+          special_dealer_tier: newIsSpecialDealer ? newSpecialTier : 'REGULAR',
+          special_discount_percentage: newIsSpecialDealer ? (parseFloat(newSpecialDiscount) || 0) : 0,
+        }),
+      });
+
+      const resData = await response.json();
+
+      if (!response.ok || !resData.success) {
+        throw new Error(resData.error || 'Gagal mendaftarkan dealer.');
+      }
+
+      // 4. Update state list dealer secara langsung
+      if (resData.dealer) {
+        setDealers((prev) => [resData.dealer, ...prev]);
+      }
+
       setIsModalOpen(false);
-      setNewStoreName('');
-      setSelectedProvince('');
-      setNewRegionId('');
-      setNewOwnerId('');
-      setNewAddress('');
-      setNewCreditLimit('0');
-      setNewIsCreditEligible(false);
-      setNewIsSpecialDealer(false);
-      setNewSalesId('');
-      alert("Dealer baru berhasil ditambahkan.");
-    } else {
-      alert("Gagal menambahkan dealer: " + (error?.message || 'Error'));
+      resetNewDealerForm();
+      alert(`🎉 Berhasil! Akun dealer "${newStoreName}" berhasil didaftarkan.\n\nDealer dapat langsung login di aplikasi mobile menggunakan:\nNomor HP: ${cleanPhone} (atau Email: ${resData.email})\nPassword: ${newPassword.trim()}`);
+    } catch (err: any) {
+      alert("Gagal menambahkan dealer: " + (err.message || 'Error'));
+    } finally {
+      setIsSubmittingDealer(false);
     }
   };
 
@@ -646,12 +901,19 @@ export default function DealersPage() {
     
     await supabase.from('profiles').update({ approval_status: 'APPROVED', role: 'DEALER' }).eq('id', profileId);
     
-    const { data: existingDealer } = await supabase.from('dealers').select('id').eq('profile_id', profileId).maybeSingle();
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', profileId).single();
+    const detected = detectTerritoryFromAddress(profile?.address || '');
+    const regId = detected?.regionId || null;
+    const sId = detected?.salesId || null;
+
+    const { data: existingDealer } = await supabase.from('dealers').select('id, region_id, sales_id').eq('profile_id', profileId).maybeSingle();
     
     if (existingDealer) {
-      await supabase.from('dealers').update({ status: 'ACTIVE' }).eq('profile_id', profileId);
+      const updatePayload: any = { status: 'ACTIVE' };
+      if (!existingDealer.region_id && regId) updatePayload.region_id = regId;
+      if (!existingDealer.sales_id && sId) updatePayload.sales_id = sId;
+      await supabase.from('dealers').update(updatePayload).eq('profile_id', profileId);
     } else {
-      const { data: profile } = await supabase.from('profiles').select('*').eq('id', profileId).single();
       await supabase.from('dealers').insert({
         profile_id: profileId,
         store_name: profile?.company_name || storeName || 'Toko Baru',
@@ -659,13 +921,30 @@ export default function DealersPage() {
         credit_limit: 0,
         is_credit_eligible: false,
         status: 'ACTIVE',
+        region_id: regId,
+        sales_id: sId,
       });
     }
     
     fetchData();
   };
 
-  // Filtered dealers calculation
+  // Map count dealer per sales / PIC
+  const salesDealerCountMap = React.useMemo(() => {
+    const map: Record<string, number> = {};
+    let noSalesCount = 0;
+    dealers.forEach((d) => {
+      if (d.status === 'INACTIVE') return;
+      const sId = d.sales_id || d.sales?.id;
+      if (sId) {
+        map[sId] = (map[sId] || 0) + 1;
+      } else {
+        noSalesCount++;
+      }
+    });
+    return { map, noSalesCount };
+  }, [dealers]);
+
   // Filtered dealers calculation
   const filteredDealers = dealers.filter((d) => {
     if (d.status === 'INACTIVE') return false; // Sembunyikan dealer yang dinonaktifkan (soft delete)
@@ -673,7 +952,8 @@ export default function DealersPage() {
     const regName = d.regions?.name || '';
     const matchesRegion = selectedRegionFilter === 'Semua Wilayah' || regName === selectedRegionFilter;
     const matchesSearch = d.store_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (d.profiles?.full_name || '').toLowerCase().includes(searchQuery.toLowerCase());
+                          (d.profiles?.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (d.sales?.profiles?.full_name || '').toLowerCase().includes(searchQuery.toLowerCase());
     
     let matchesCredit = true;
     const hasCredit = Boolean(d.is_credit_eligible || d.credit_status === 'ACTIVE' || (d.credit_limit && d.credit_limit > 0));
@@ -690,7 +970,14 @@ export default function DealersPage() {
       matchesType = !d.is_special_dealer;
     }
 
-    return matchesRegion && matchesSearch && matchesCredit && matchesType;
+    let matchesSales = true;
+    if (selectedSalesFilter === 'NO_SALES') {
+      matchesSales = !d.sales_id && !d.sales?.id;
+    } else if (selectedSalesFilter !== 'ALL') {
+      matchesSales = d.sales_id === selectedSalesFilter || d.sales?.id === selectedSalesFilter;
+    }
+
+    return matchesRegion && matchesSearch && matchesCredit && matchesType && matchesSales;
   });
 
   const totalPages = Math.ceil(filteredDealers.length / itemsPerPage) || 1;
@@ -766,7 +1053,7 @@ export default function DealersPage() {
           </div>
           <div>
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Plafon</p>
-            <p className="text-lg font-black text-slate-900">Rp {(totalPlafonKredit / 1000000).toFixed(1)}M</p>
+            <p className="text-lg font-black text-slate-900">Rp {Number(totalPlafonKredit || 0).toLocaleString('id-ID')}</p>
           </div>
         </div>
 
@@ -838,12 +1125,12 @@ export default function DealersPage() {
       {activeTab === 'active' && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
           {/* Filter Bar */}
-          <div className="p-4 md:p-5 border-b border-slate-100 flex flex-col md:flex-row gap-3 bg-slate-50/50">
-            <div className="relative flex-1">
+          <div className="p-4 md:p-5 border-b border-slate-100 flex flex-col xl:flex-row flex-wrap gap-3 bg-slate-50/50">
+            <div className="relative flex-1 min-w-[220px]">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
               <input 
                 type="text" 
-                placeholder="Cari dealer (Nama Toko, Pemilik)..." 
+                placeholder="Cari dealer (Nama Toko, Pemilik, PIC)..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-sm transition-all"
@@ -851,7 +1138,7 @@ export default function DealersPage() {
             </div>
 
             {/* Filter Wilayah */}
-            <div className="relative min-w-[200px]">
+            <div className="relative min-w-[180px]">
               <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
               <select 
                 value={selectedRegionFilter}
@@ -865,8 +1152,31 @@ export default function DealersPage() {
               </select>
             </div>
 
+            {/* Filter Sales / PIC */}
+            <div className="relative min-w-[200px]">
+              <UserCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 text-blue-500 pointer-events-none" size={16} />
+              <select 
+                value={selectedSalesFilter}
+                onChange={(e) => setSelectedSalesFilter(e.target.value)}
+                className="w-full pl-10 pr-8 py-2.5 border border-slate-200 rounded-xl text-sm bg-white font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
+              >
+                <option value="ALL">Semua PIC / Sales</option>
+                {salesDealerCountMap.noSalesCount > 0 && (
+                  <option value="NO_SALES">⚠️ Belum Ada PIC ({salesDealerCountMap.noSalesCount} Toko)</option>
+                )}
+                {salesList.map(s => {
+                  const count = salesDealerCountMap.map[s.id] || 0;
+                  return (
+                    <option key={s.id} value={s.id}>
+                      PIC: {s.name} {count > 0 ? `(${count} Toko)` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
             {/* Filter Status Dealer Khusus */}
-            <div className="relative min-w-[210px]">
+            <div className="relative min-w-[190px]">
               <Star className="absolute left-3.5 top-1/2 -translate-y-1/2 text-amber-500 pointer-events-none" size={16} />
               <select 
                 value={selectedTypeFilter}
@@ -880,7 +1190,7 @@ export default function DealersPage() {
             </div>
 
             {/* Filter Hak Akses Kredit */}
-            <div className="relative min-w-[210px]">
+            <div className="relative min-w-[190px]">
               <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
               <select 
                 value={selectedCreditFilter}
@@ -892,6 +1202,23 @@ export default function DealersPage() {
                 <option value="REGULAR_ONLY">⚪ Dealer Reguler (Biasa)</option>
               </select>
             </div>
+
+            {/* Tombol Reset Filter */}
+            {(selectedRegionFilter !== 'Semua Wilayah' || selectedSalesFilter !== 'ALL' || selectedTypeFilter !== 'ALL' || selectedCreditFilter !== 'ALL' || searchQuery.trim() !== '') && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedRegionFilter('Semua Wilayah');
+                  setSelectedSalesFilter('ALL');
+                  setSelectedTypeFilter('ALL');
+                  setSelectedCreditFilter('ALL');
+                }}
+                className="px-3.5 py-2.5 rounded-xl border border-red-200 bg-red-50/50 text-red-600 hover:bg-red-100 text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer active:scale-95"
+                title="Reset semua filter ke default"
+              >
+                <X size={15} /> Reset Filter
+              </button>
+            )}
           </div>
           
           {/* Table */}
@@ -1490,59 +1817,229 @@ export default function DealersPage() {
             </div>
 
             <form onSubmit={handleSaveCreditLimit} className="flex-1 overflow-y-auto flex flex-col">
-              {modalSubTab === 'docs' && (
+              {modalSubTab === 'docs' && selectedDealerCredit && (
                 <div className="p-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">FOTO KTP</label>
-                      {selectedDealerCredit.profiles?.ktp_url ? (
-                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white p-2">
-                          <img src={selectedDealerCredit.profiles.ktp_url} alt="KTP" className="w-full h-auto object-contain max-h-64 rounded-lg" />
-                          <a href={selectedDealerCredit.profiles.ktp_url} target="_blank" rel="noreferrer" className="mt-3 block text-center text-xs font-bold text-blue-600 hover:text-blue-800">
-                            Lihat Gambar Penuh
-                          </a>
-                        </div>
-                      ) : (
-                        <div className="border border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-white">
-                          <FileText size={24} className="text-slate-300 mb-2" />
-                          <p className="text-sm text-slate-500 font-medium">KTP tidak tersedia</p>
-                        </div>
-                      )}
+                      <h3 className="text-sm font-bold text-slate-800">Dokumen Toko & Legalitas</h3>
+                      <p className="text-xs text-slate-500">Lihat, unggah ulang, atau ganti foto KTP, NPWP, dan fisik toko jika foto sebelumnya keliru.</p>
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">FOTO NPWP</label>
-                      {selectedDealerCredit.profiles?.npwp_url ? (
-                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white p-2">
-                          <img src={selectedDealerCredit.profiles.npwp_url} alt="NPWP" className="w-full h-auto object-contain max-h-64 rounded-lg" />
-                          <a href={selectedDealerCredit.profiles.npwp_url} target="_blank" rel="noreferrer" className="mt-3 block text-center text-xs font-bold text-blue-600 hover:text-blue-800">
-                            Lihat Gambar Penuh
-                          </a>
+                    {isUploadingDoc && (
+                      <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-emerald-200">
+                        <div className="w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                        <span>Mengunggah dokumen {isUploadingDoc.toUpperCase()}...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* 1. KTP */}
+                    <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-2.5">
+                          <label className="text-xs font-bold text-gray-800 tracking-wide flex items-center gap-1.5">
+                            <FileText size={14} className="text-blue-600" /> FOTO KTP PEMILIK
+                          </label>
+                          {selectedDealerCredit.profiles?.ktp_url ? (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">✓ Terunggah</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-100/70 px-2 py-0.5 rounded-full">Belum Tersedia</span>
+                          )}
                         </div>
-                      ) : (
-                        <div className="border border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-white">
-                          <FileText size={24} className="text-slate-300 mb-2" />
-                          <p className="text-sm text-slate-500 font-medium">NPWP tidak tersedia</p>
+
+                        {selectedDealerCredit.profiles?.ktp_url ? (
+                          <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white p-2 relative group">
+                            <img 
+                              src={selectedDealerCredit.profiles.ktp_url} 
+                              alt="KTP" 
+                              className="w-full h-44 object-contain rounded-lg bg-slate-900/5" 
+                            />
+                            <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
+                              <a 
+                                href={selectedDealerCredit.profiles.ktp_url} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                              >
+                                <ExternalLink size={12} /> Buka Gambar Penuh
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDealerDoc('ktp')}
+                                disabled={isUploadingDoc !== null}
+                                className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 cursor-pointer"
+                              >
+                                <Trash2 size={12} /> Hapus
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="border border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-white text-center">
+                            <FileText size={28} className="text-slate-300 mb-2" />
+                            <p className="text-xs text-slate-500 font-medium">KTP belum diunggah</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Upload / Reupload Button */}
+                      <div className="mt-3.5 pt-3 border-t border-slate-200/80">
+                        <label className="w-full py-2 px-3 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm">
+                          <Upload size={14} className="text-slate-500" />
+                          <span>{selectedDealerCredit.profiles?.ktp_url ? 'Ganti / Upload Ulang KTP' : '+ Upload Foto KTP Baru'}</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            disabled={isUploadingDoc !== null}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleUploadDealerDoc(e.target.files[0], 'ktp');
+                                e.target.value = '';
+                              }
+                            }} 
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* 2. NPWP */}
+                    <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-2.5">
+                          <label className="text-xs font-bold text-gray-800 tracking-wide flex items-center gap-1.5">
+                            <FileText size={14} className="text-amber-600" /> FOTO NPWP (OPSIONAL)
+                          </label>
+                          {selectedDealerCredit.profiles?.npwp_url ? (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">✓ Terunggah</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-full">Tidak Tersedia</span>
+                          )}
                         </div>
-                      )}
+
+                        {selectedDealerCredit.profiles?.npwp_url ? (
+                          <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white p-2 relative group">
+                            <img 
+                              src={selectedDealerCredit.profiles.npwp_url} 
+                              alt="NPWP" 
+                              className="w-full h-44 object-contain rounded-lg bg-slate-900/5" 
+                            />
+                            <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
+                              <a 
+                                href={selectedDealerCredit.profiles.npwp_url} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                              >
+                                <ExternalLink size={12} /> Buka Gambar Penuh
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDealerDoc('npwp')}
+                                disabled={isUploadingDoc !== null}
+                                className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 cursor-pointer"
+                              >
+                                <Trash2 size={12} /> Hapus
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="border border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-white text-center">
+                            <FileText size={28} className="text-slate-300 mb-2" />
+                            <p className="text-xs text-slate-500 font-medium">NPWP tidak tersedia</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Upload / Reupload Button */}
+                      <div className="mt-3.5 pt-3 border-t border-slate-200/80">
+                        <label className="w-full py-2 px-3 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm">
+                          <Upload size={14} className="text-slate-500" />
+                          <span>{selectedDealerCredit.profiles?.npwp_url ? 'Ganti / Upload Ulang NPWP' : '+ Upload Foto NPWP Baru'}</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            disabled={isUploadingDoc !== null}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleUploadDealerDoc(e.target.files[0], 'npwp');
+                                e.target.value = '';
+                              }
+                            }} 
+                          />
+                        </label>
+                      </div>
                     </div>
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-2 tracking-wide">FOTO TOKO</label>
-                      {selectedDealerCredit.profiles?.store_photo_url ? (
-                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white p-2">
-                          <img src={selectedDealerCredit.profiles.store_photo_url} alt="Foto Toko" className="w-full h-auto object-contain max-h-64 rounded-lg" />
-                          <a href={selectedDealerCredit.profiles.store_photo_url} target="_blank" rel="noreferrer" className="mt-3 block text-center text-xs font-bold text-blue-600 hover:text-blue-800">
-                            Lihat Gambar Penuh
-                          </a>
+
+                  {/* 3. FOTO TOKO */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                    <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-2.5">
+                          <label className="text-xs font-bold text-gray-800 tracking-wide flex items-center gap-1.5">
+                            <Store size={14} className="text-emerald-600" /> FOTO FISIK TOKO
+                          </label>
+                          {selectedDealerCredit.profiles?.store_photo_url ? (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">✓ Terunggah</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-full">Tidak Tersedia</span>
+                          )}
                         </div>
-                      ) : (
-                        <div className="border border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-white">
-                          <FileText size={24} className="text-slate-300 mb-2" />
-                          <p className="text-sm text-slate-500 font-medium">Foto Toko tidak tersedia</p>
-                        </div>
-                      )}
+
+                        {selectedDealerCredit.profiles?.store_photo_url ? (
+                          <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white p-2 relative group">
+                            <img 
+                              src={selectedDealerCredit.profiles.store_photo_url} 
+                              alt="Foto Toko" 
+                              className="w-full h-44 object-contain rounded-lg bg-slate-900/5" 
+                            />
+                            <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
+                              <a 
+                                href={selectedDealerCredit.profiles.store_photo_url} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                              >
+                                <ExternalLink size={12} /> Buka Gambar Penuh
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDealerDoc('store')}
+                                disabled={isUploadingDoc !== null}
+                                className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 cursor-pointer"
+                              >
+                                <Trash2 size={12} /> Hapus
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="border border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center bg-white text-center">
+                            <Store size={28} className="text-slate-300 mb-2" />
+                            <p className="text-xs text-slate-500 font-medium">Foto Toko tidak tersedia</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Upload / Reupload Button */}
+                      <div className="mt-3.5 pt-3 border-t border-slate-200/80">
+                        <label className="w-full py-2 px-3 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm">
+                          <Upload size={14} className="text-slate-500" />
+                          <span>{selectedDealerCredit.profiles?.store_photo_url ? 'Ganti / Upload Ulang Foto Toko' : '+ Upload Foto Toko Baru'}</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            disabled={isUploadingDoc !== null}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                handleUploadDealerDoc(e.target.files[0], 'store');
+                                e.target.value = '';
+                              }
+                            }} 
+                          />
+                        </label>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1601,10 +2098,38 @@ export default function DealersPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">ALAMAT LENGKAP</label>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="block text-xs font-bold text-gray-700 tracking-wide">ALAMAT LENGKAP</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const detected = detectTerritoryFromAddress(editAddress);
+                          if (detected) {
+                            setEditRegionId(detected.regionId);
+                            setEditSalesId(detected.salesId);
+                            alert(`Otomatis Terdeteksi:\n• Wilayah: ${detected.regionName}\n• Sales PIC: ${detected.salesName}`);
+                          } else {
+                            alert("Tidak dapat mendeteksi wilayah dari alamat ini. Pastikan nama kota/kabupaten tercantum.");
+                          }
+                        }}
+                        className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 active:scale-95"
+                      >
+                        <Sparkles size={12} /> Deteksi Otomatis Wilayah & PIC
+                      </button>
+                    </div>
                     <textarea
                       value={editAddress}
-                      onChange={(e) => setEditAddress(e.target.value)}
+                      onChange={(e) => {
+                        const newAddr = e.target.value;
+                        setEditAddress(newAddr);
+                        if (!editRegionId || !editSalesId) {
+                          const detected = detectTerritoryFromAddress(newAddr);
+                          if (detected) {
+                            if (!editRegionId) setEditRegionId(detected.regionId);
+                            if (!editSalesId) setEditSalesId(detected.salesId);
+                          }
+                        }
+                      }}
                       rows={3}
                       className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                       required
@@ -2108,201 +2633,425 @@ export default function DealersPage() {
       )}
 
       {/* ======================================================== */}
-      {/* MODAL TAMBAH DEALER                                      */}
+      {/* MODAL TAMBAH DEALER (PENDAFTARAN MANUAL UNTUK GAPTEK)     */}
       {/* ======================================================== */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-gray-100 overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h2 className="text-xl font-bold text-gray-900">Tambah Dealer Baru</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-200/50 rounded-xl transition-colors cursor-pointer">
+        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-gray-100 overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="px-6 py-4.5 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-emerald-50/60 via-slate-50 to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+                  <Store size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-gray-900 leading-tight">Daftar Akun Dealer Baru</h2>
+                  <p className="text-xs text-gray-500 font-medium">Buat akun, data toko, login, & dokumen legalitas secara manual.</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setIsModalOpen(false);
+                  resetNewDealerForm();
+                }} 
+                className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-200/50 rounded-xl transition-colors cursor-pointer"
+              >
                 <X size={20} strokeWidth={2.5} />
               </button>
             </div>
 
-            <form onSubmit={handleAddDealer} className="p-6 space-y-4 overflow-y-auto">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">NAMA TOKO <span className="text-red-500">*</span></label>
-                <input 
-                  type="text" required value={newStoreName}
-                  onChange={(e) => setNewStoreName(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">PEMILIK (PROFILE) <span className="text-red-500">*</span></label>
-                  <select 
-                    value={newOwnerId} onChange={(e) => setNewOwnerId(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-semibold text-gray-800"
-                  >
-                    {profiles.map((prof) => (
-                      <option key={prof.id} value={prof.id}>{prof.full_name}</option>
-                    ))}
-                  </select>
+            {/* Modal Body Form */}
+            <form onSubmit={handleAddDealer} className="p-6 space-y-5 overflow-y-auto">
+              
+              {/* SECTION 1: DATA TOKO & WILAYAH */}
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Store size={14} className="text-emerald-600" /> Informasi Toko & Wilayah
+                  </h3>
+                  {newDealerDetectedInfo && (
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                      {newDealerDetectedInfo}
+                    </span>
+                  )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">PROVINSI WILAYAH <span className="text-red-500">*</span></label>
-                  <select 
-                    value={selectedProvince} 
+                  <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide">
+                    NAMA TOKO <span className="text-red-500">*</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="Contoh: INCELL CELL TERNATE / Toko Berkah Abadi"
+                    value={newStoreName}
                     onChange={(e) => {
-                      setSelectedProvince(e.target.value);
-                      setNewRegionId('');
+                      setNewStoreName(e.target.value);
+                      handleAutoDetectTerritoryForNewDealer(newAddress, e.target.value);
                     }}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-semibold text-gray-800"
-                  >
-                    <option value="">-- Pilih Provinsi --</option>
-                    {Array.from(new Set(regions.map(r => r.name))).sort().map(prov => (
-                      <option key={prov} value={prov}>{prov}</option>
-                    ))}
-                  </select>
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-semibold text-gray-900"
+                  />
                 </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">KOTA / KABUPATEN <span className="text-red-500">*</span></label>
-                  <select 
-                    value={newRegionId} 
-                    onChange={(e) => setNewRegionId(e.target.value)}
-                    disabled={!selectedProvince}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-semibold text-gray-800 disabled:bg-gray-100"
-                  >
-                    <option value="">-- Pilih Kota/Kabupaten --</option>
-                    {regions.filter(r => r.name === selectedProvince).sort((a,b) => (a.city_name || '').localeCompare(b.city_name || '')).map((reg) => (
-                      <option key={reg.id} value={reg.id}>
-                        {reg.city_name || reg.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Status Dealer Khusus Checkbox */}
-              <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <p className="text-xs font-bold text-amber-900 flex items-center gap-1">
-                      <Star size={13} className="fill-amber-600 text-amber-600" /> Tetapkan Sebagai Dealer Khusus?
-                    </p>
-                    <p className="text-[11px] text-amber-700/80">Diberikan ketentuan harga, diskon, & hak akses istimewa.</p>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-bold text-gray-700 tracking-wide">
+                      ALAMAT LENGKAP TOKO
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleAutoDetectTerritoryForNewDealer()}
+                      className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles size={11} className="text-emerald-600" /> Deteksi Otomatis Wilayah & PIC
+                    </button>
                   </div>
-                  <input 
-                    type="checkbox"
-                    checked={newIsSpecialDealer}
-                    onChange={(e) => setNewIsSpecialDealer(e.target.checked)}
-                    className="w-4 h-4 text-amber-600 rounded cursor-pointer"
+                  <textarea 
+                    value={newAddress} 
+                    onChange={(e) => {
+                      setNewAddress(e.target.value);
+                      handleAutoDetectTerritoryForNewDealer(e.target.value, newStoreName);
+                    }}
+                    placeholder="Masukkan jalan, kelurahan, kecamatan, kabupaten/kota..."
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl text-xs focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium resize-none"
+                    rows={2}
                   />
                 </div>
 
-                {newIsSpecialDealer && (
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-amber-200/60 mt-2">
-                    <div>
-                      <label className="block text-[11px] font-bold text-amber-900 mb-1">TIER KEMITRAAN</label>
-                      <select
-                        value={newSpecialTier}
-                        onChange={(e) => setNewSpecialTier(e.target.value)}
-                        className="w-full px-3 py-1.5 border border-amber-200 rounded-lg text-xs font-bold bg-white"
-                      >
-                        <option value="VIP">⭐ VIP Partner</option>
-                        <option value="PRIORITY">💎 Mitra Prioritas</option>
-                        <option value="DISTRIBUTOR">👑 Distributor</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-amber-900 mb-1">DISKON KHUSUS (%)</label>
-                      <input 
-                        type="number"
-                        min="0"
-                        max="100"
-                        placeholder="Contoh: 5"
-                        value={newSpecialDiscount}
-                        onChange={(e) => setNewSpecialDiscount(e.target.value)}
-                        className="w-full px-3 py-1.5 border border-amber-200 rounded-lg text-xs font-bold bg-white"
-                      />
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide">
+                      PROVINSI / WILAYAH <span className="text-red-500">*</span>
+                    </label>
+                    <select 
+                      value={newRegionId} 
+                      onChange={(e) => setNewRegionId(e.target.value)}
+                      required
+                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all bg-white cursor-pointer"
+                    >
+                      <option value="">-- Pilih Wilayah Operasional --</option>
+                      {regions.map((reg) => (
+                        <option key={reg.id} value={reg.id}>
+                          {reg.name} {reg.manager_name ? `(SPV: ${reg.manager_name})` : ''}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide">
+                      SALES PIC (OPSIONAL)
+                    </label>
+                    <select 
+                      value={newSalesId} 
+                      onChange={(e) => setNewSalesId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all bg-white cursor-pointer"
+                    >
+                      <option value="">-- Tanpa Sales PIC --</option>
+                      {salesList.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              {/* Hak Akses Kredit Switch & Pilihan Termin (15 Hari / 30 Hari) */}
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between mb-2">
+              {/* SECTION 2: DATA PEMILIK & KREDENSIAL LOGIN */}
+              <div className="pt-3 border-t border-gray-100 space-y-3.5">
+                <h3 className="text-xs font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <User size={14} className="text-blue-600" /> Data Pemilik & Akses Login Aplikasi
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   <div>
-                    <p className="text-xs font-bold text-slate-800">Berikan Hak Akses Kredit?</p>
-                    <p className="text-[11px] text-slate-400">Pilih jika dealer diperbolehkan memesan dengan Tempo/Kredit.</p>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide">
+                      NAMA PEMILIK / PIC <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      required 
+                      placeholder="Contoh: Siti Nahari / Jony Ray"
+                      value={newOwnerName}
+                      onChange={(e) => setNewOwnerName(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-medium text-gray-900"
+                    />
                   </div>
-                  <input 
-                    type="checkbox"
-                    checked={newIsCreditEligible}
-                    onChange={(e) => setNewIsCreditEligible(e.target.checked)}
-                    className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
-                  />
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide">
+                      NOMOR HP / WA PEMILIK <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="tel" 
+                      required 
+                      placeholder="Contoh: 082199180846"
+                      value={newOwnerPhone}
+                      onChange={(e) => setNewOwnerPhone(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-medium text-gray-900"
+                    />
+                  </div>
                 </div>
 
-                {newIsCreditEligible && (
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 mt-2">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">PLAFON KREDIT AWAL</label>
-                      <input 
-                        type="number"
-                        min="0"
-                        value={newCreditLimit}
-                        onChange={(e) => setNewCreditLimit(e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">PILIHAN TERMIN (TOP)</label>
-                      <select
-                        value={newCreditTermDays}
-                        onChange={(e) => setNewCreditTermDays(e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-white cursor-pointer"
-                      >
-                        <option value="15">⏱️ 15 Hari (Termin 15 Hari)</option>
-                        <option value="30">📅 30 Hari (Termin 30 Hari / 1 Bulan)</option>
-                        <option value="7">7 Hari (1 Minggu)</option>
-                        <option value="45">45 Hari (1.5 Bulan)</option>
-                        <option value="60">60 Hari (2 Bulan)</option>
-                      </select>
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide">
+                      EMAIL LOGIN (OPSIONAL)
+                    </label>
+                    <input 
+                      type="email" 
+                      placeholder="Contoh: incell@gmail.com (opsional)"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-medium text-gray-900"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Jika dikosongkan, otomatis menggunakan format HP lokal.</p>
                   </div>
-                )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 tracking-wide">
+                      KATA SANDI / PASSWORD <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type={showNewPassword ? "text" : "password"} 
+                        required 
+                        minLength={6}
+                        placeholder="Minimal 6 karakter (cth: dealer123)"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full px-4 py-2.5 pr-10 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-medium text-gray-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 cursor-pointer"
+                      >
+                        {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1">Password ini akan digunakan dealer untuk login di aplikasi HP.</p>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">SALES PIC (OPSIONAL)</label>
-                <select 
-                  value={newSalesId} onChange={(e) => setNewSalesId(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-semibold text-gray-800"
-                >
-                  <option value="">-- Tanpa Sales PIC --</option>
-                  {salesList.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+              {/* SECTION 3: UPLOAD DOKUMEN (KTP & NPWP) */}
+              <div className="pt-3 border-t border-gray-100 space-y-3.5">
+                <h3 className="text-xs font-black text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText size={14} className="text-amber-600" /> Upload Dokumen Toko (KTP & NPWP)
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {/* Foto KTP */}
+                  <div className="p-3.5 rounded-2xl border border-gray-200 bg-gray-50/50">
+                    <label className="block text-xs font-bold text-gray-700 mb-2">
+                      FOTO KTP PEMILIK
+                    </label>
+                    {newKtpPreview ? (
+                      <div className="relative group">
+                        <img 
+                          src={newKtpPreview} 
+                          alt="Preview KTP" 
+                          className="w-full h-28 object-contain bg-slate-900/5 rounded-xl border border-gray-200" 
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewKtpFile(null);
+                            setNewKtpPreview(null);
+                          }}
+                          className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white p-1 rounded-lg text-xs font-bold shadow-md transition-colors cursor-pointer"
+                        >
+                          <X size={14} />
+                        </button>
+                        <p className="text-[11px] text-gray-500 font-medium truncate mt-1">
+                          {newKtpFile?.name}
+                        </p>
+                      </div>
+                    ) : (
+                      <label className="border-2 border-dashed border-gray-300 hover:border-emerald-500 hover:bg-emerald-50/20 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors text-center group">
+                        <Upload size={22} className="text-gray-400 group-hover:text-emerald-600 mb-1 transition-colors" />
+                        <span className="text-xs font-bold text-gray-700 group-hover:text-emerald-700">Pilih Foto KTP</span>
+                        <span className="text-[10px] text-gray-400 mt-0.5">JPG, PNG, atau WebP</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={handleKtpFileChange} 
+                          className="hidden" 
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Foto NPWP */}
+                  <div className="p-3.5 rounded-2xl border border-gray-200 bg-gray-50/50">
+                    <label className="block text-xs font-bold text-gray-700 mb-2">
+                      FOTO NPWP (OPSIONAL)
+                    </label>
+                    {newNpwpPreview ? (
+                      <div className="relative group">
+                        <img 
+                          src={newNpwpPreview} 
+                          alt="Preview NPWP" 
+                          className="w-full h-28 object-contain bg-slate-900/5 rounded-xl border border-gray-200" 
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewNpwpFile(null);
+                            setNewNpwpPreview(null);
+                          }}
+                          className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white p-1 rounded-lg text-xs font-bold shadow-md transition-colors cursor-pointer"
+                        >
+                          <X size={14} />
+                        </button>
+                        <p className="text-[11px] text-gray-500 font-medium truncate mt-1">
+                          {newNpwpFile?.name}
+                        </p>
+                      </div>
+                    ) : (
+                      <label className="border-2 border-dashed border-gray-300 hover:border-emerald-500 hover:bg-emerald-50/20 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-colors text-center group">
+                        <Upload size={22} className="text-gray-400 group-hover:text-emerald-600 mb-1 transition-colors" />
+                        <span className="text-xs font-bold text-gray-700 group-hover:text-emerald-700">Pilih Foto NPWP</span>
+                        <span className="text-[10px] text-gray-400 mt-0.5">Opsional (JPG, PNG)</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={handleNpwpFileChange} 
+                          className="hidden" 
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5 tracking-wide">ALAMAT TOKO</label>
-                <textarea 
-                  value={newAddress} onChange={(e) => setNewAddress(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl text-xs focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
-                  rows={2}
-                />
+              {/* SECTION 4: DEALER KHUSUS & AKSES KREDIT */}
+              <div className="space-y-3 pt-3 border-t border-gray-100">
+                {/* Status Dealer Khusus Checkbox */}
+                <div className="p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                        <Star size={14} className="fill-amber-600 text-amber-600" /> Tetapkan Sebagai Dealer Khusus?
+                      </p>
+                      <p className="text-[11px] text-amber-700/80">Diberikan ketentuan harga, diskon, & hak akses istimewa.</p>
+                    </div>
+                    <input 
+                      type="checkbox"
+                      checked={newIsSpecialDealer}
+                      onChange={(e) => setNewIsSpecialDealer(e.target.checked)}
+                      className="w-4 h-4 text-amber-600 rounded cursor-pointer accent-amber-600"
+                    />
+                  </div>
+
+                  {newIsSpecialDealer && (
+                    <div className="grid grid-cols-2 gap-3 pt-3 border-t border-amber-200/60 mt-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-amber-900 mb-1">TIER KEMITRAAN</label>
+                        <select
+                          value={newSpecialTier}
+                          onChange={(e) => setNewSpecialTier(e.target.value as any)}
+                          className="w-full px-3 py-1.5 border border-amber-200 rounded-lg text-xs font-bold bg-white"
+                        >
+                          <option value="VIP">⭐ VIP Partner</option>
+                          <option value="PRIORITY">💎 Mitra Prioritas</option>
+                          <option value="DISTRIBUTOR">👑 Distributor</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-amber-900 mb-1">DISKON KHUSUS (%)</label>
+                        <input 
+                          type="number"
+                          min="0"
+                          max="100"
+                          placeholder="Contoh: 5"
+                          value={newSpecialDiscount}
+                          onChange={(e) => setNewSpecialDiscount(e.target.value)}
+                          className="w-full px-3 py-1.5 border border-amber-200 rounded-lg text-xs font-bold bg-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Hak Akses Kredit Switch & Pilihan Termin (15 Hari / 30 Hari) */}
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <CreditCard size={14} className="text-emerald-600" /> Berikan Hak Akses Kredit (Tempo)?
+                      </p>
+                      <p className="text-[11px] text-slate-400">Pilih jika dealer diperbolehkan memesan dengan sistem TOP/Tempo.</p>
+                    </div>
+                    <input 
+                      type="checkbox"
+                      checked={newIsCreditEligible}
+                      onChange={(e) => setNewIsCreditEligible(e.target.checked)}
+                      className="w-4 h-4 text-emerald-600 rounded cursor-pointer accent-emerald-600"
+                    />
+                  </div>
+
+                  {newIsCreditEligible && (
+                    <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-200 mt-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">PLAFON KREDIT AWAL (RP)</label>
+                        <input 
+                          type="number"
+                          min="0"
+                          step="100000"
+                          value={newCreditLimit}
+                          onChange={(e) => setNewCreditLimit(e.target.value)}
+                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">PILIHAN TERMIN (TOP)</label>
+                        <select
+                          value={newCreditTermDays}
+                          onChange={(e) => setNewCreditTermDays(e.target.value)}
+                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-white cursor-pointer"
+                        >
+                          <option value="15">⏱️ 15 Hari (Termin 15 Hari)</option>
+                          <option value="30">📅 30 Hari (Termin 30 Hari / 1 Bulan)</option>
+                          <option value="7">7 Hari (1 Minggu)</option>
+                          <option value="45">45 Hari (1.5 Bulan)</option>
+                          <option value="60">60 Hari (2 Bulan)</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
+              {/* Modal Footer Buttons */}
               <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
                 <button 
-                  type="button" onClick={() => setIsModalOpen(false)}
-                  className="px-5 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
+                  type="button" 
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    resetNewDealerForm();
+                  }}
+                  disabled={isSubmittingDealer}
+                  className="px-5 py-2.5 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button 
                   type="submit"
-                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+                  disabled={isSubmittingDealer}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2 cursor-pointer active:scale-95"
                 >
-                  <Plus size={16} strokeWidth={2.5} /> Simpan Dealer
+                  {isSubmittingDealer ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Mendaftarkan Dealer...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={16} strokeWidth={2.5} />
+                      <span>Simpan & Daftarkan Dealer</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
