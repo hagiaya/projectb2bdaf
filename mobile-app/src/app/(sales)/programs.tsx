@@ -18,6 +18,7 @@ import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../lib/supabase';
+import { useSafeBottom } from '../../hooks/useSafeBottom';
 
 const catalogPoster = require('../../../assets/katalog-program-support.png');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -203,6 +204,13 @@ export default function DealerProgramsScreen() {
 
   // Image Zoom Lightbox
   const [lightboxImageUri, setLightboxImageUri] = useState<string | null>(null);
+
+  // In-Modal Photo Inspection & Zoom
+  const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
+  const [previewModalTitle, setPreviewModalTitle] = useState<string>('Foto Dokumentasi');
+
+  // Safe Bottom for Android gesture & navigation bar
+  const safeBottom = useSafeBottom(12);
 
   // Claim Modal State
   const [claimModalVisible, setClaimModalVisible] = useState(false);
@@ -1461,7 +1469,7 @@ export default function DealerProgramsScreen() {
       {/* ========================================================================= */}
       <Modal visible={applicationModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { maxHeight: '92%' }]}>
+          <View style={[styles.modalSheet, { height: '92%', maxHeight: '94%' }]}>
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <View style={{ flex: 1, paddingRight: 10 }}>
@@ -1478,7 +1486,12 @@ export default function DealerProgramsScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 24 }}>
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={{ paddingBottom: 36 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+            >
               {/* 1. DATA AKUN DEALER (OTOMATIS SESUAI AKUN) */}
               <View style={styles.formSectionBox}>
                 <View style={styles.formSectionHeader}>
@@ -1516,7 +1529,6 @@ export default function DealerProgramsScreen() {
                 </View>
               </View>
 
-              {/* Removed: PILIH PRODUK SUPPORT / DISPLAY */}
               {/* 3. UPLOAD FOTO DOKUMENTASI BEFORE (WAJIB INPUT KAMERA/GALERI) */}
               <View style={[styles.formSectionBox, { borderColor: beforePhotoUri ? '#86efac' : '#fde047' }]}>
                 <View style={styles.formSectionHeader}>
@@ -1534,52 +1546,99 @@ export default function DealerProgramsScreen() {
 
                 {/* Photo Preview or Capture Buttons */}
                 {beforePhotoUri ? (
-                  <View style={styles.photoPreviewWrapper}>
-                    <Image
-                      source={{ uri: beforePhotoUri }}
-                      style={styles.photoPreviewImage}
-                      contentFit="cover"
-                    />
-                    <View style={styles.photoPreviewOverlay}>
-                      <View style={styles.photoSuccessTag}>
-                        <Feather name="check" size={13} color="white" />
-                        <Text style={styles.photoSuccessTagText}>Foto Before Siap Diunggah</Text>
+                  <View style={styles.photoPreviewCard}>
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      onPress={() => {
+                        setPreviewModalImage(beforePhotoUri);
+                        setPreviewModalTitle('Dokumentasi BEFORE (Lokasi Penempatan Toko)');
+                      }}
+                      style={styles.photoPreviewTouchArea}
+                    >
+                      <Image
+                        source={{ uri: beforePhotoUri }}
+                        style={styles.photoPreviewImageLarge}
+                        contentFit="contain"
+                      />
+                      <View style={styles.photoZoomBadge}>
+                        <Feather name="maximize-2" size={13} color="white" />
+                        <Text style={styles.photoZoomBadgeText}>Ketuk untuk Perbesar / Cek Detail</Text>
                       </View>
-                      <View style={styles.photoActionButtonsRow}>
+                    </TouchableOpacity>
+
+                    <View style={styles.photoPreviewBottomBar}>
+                      <View style={styles.photoSuccessTagLight}>
+                        <Feather name="check-circle" size={14} color="#15803d" />
+                        <Text style={styles.photoSuccessTagLightText}>Foto Siap Dikirim</Text>
+                      </View>
+
+                      <View style={styles.photoPreviewButtonsRow}>
                         <TouchableOpacity
-                          style={styles.retakePhotoBtn}
+                          style={styles.photoBtnSmallOutline}
+                          onPress={() => {
+                            setPreviewModalImage(beforePhotoUri);
+                            setPreviewModalTitle('Dokumentasi BEFORE (Lokasi Penempatan Toko)');
+                          }}
+                        >
+                          <Feather name="eye" size={13} color="#0f172a" />
+                          <Text style={styles.photoBtnSmallOutlineText}>Lihat</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.photoBtnSmallOutline}
                           onPress={() => handleCapturePhoto('before', 'camera')}
                         >
-                          <Feather name="camera" size={13} color="white" />
-                          <Text style={styles.retakePhotoBtnText}>Foto Ulang</Text>
+                          <Feather name="camera" size={13} color="#0f172a" />
+                          <Text style={styles.photoBtnSmallOutlineText}>Kamera</Text>
                         </TouchableOpacity>
+
                         <TouchableOpacity
-                          style={styles.deletePhotoBtn}
+                          style={styles.photoBtnSmallOutline}
+                          onPress={() => handleCapturePhoto('before', 'gallery')}
+                        >
+                          <Feather name="image" size={13} color="#0f172a" />
+                          <Text style={styles.photoBtnSmallOutlineText}>Galeri</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.photoBtnSmallDanger}
                           onPress={() => {
                             setBeforePhotoUri(null);
                             setBeforePhotoBase64(null);
                           }}
                         >
-                          <Feather name="trash-2" size={13} color="white" />
+                          <Feather name="trash-2" size={13} color="#ef4444" />
                         </TouchableOpacity>
                       </View>
                     </View>
                   </View>
                 ) : (
                   <View style={styles.photoEmptyUploadBox}>
-                    <Feather name="camera" size={36} color="#16a34a" />
+                    <View style={styles.photoEmptyIconCircle}>
+                      <Feather name="camera" size={28} color="#15803d" />
+                    </View>
                     <Text style={styles.photoEmptyUploadTitle}>Ambil Foto Dokumentasi Lokasi</Text>
                     <Text style={styles.photoEmptyUploadSub}>
-                      Gunakan kamera untuk mengambil foto sudut/ruangan toko secara langsung:
+                      Ambil foto sudut / lokasi ruangan toko langsung dengan kamera atau pilih dari galeri:
                     </Text>
 
-                    <TouchableOpacity
-                      style={styles.cameraBtnFull}
-                      onPress={() => handleCapturePhoto('before', 'camera')}
-                    >
-                      <Feather name="camera" size={20} color="white" />
-                      <Text style={styles.cameraBtnText}>Buka Kamera</Text>
-                    </TouchableOpacity>
+                    <View style={styles.photoChoiceButtonsRow}>
+                      <TouchableOpacity
+                        style={styles.cameraBtnHalf}
+                        onPress={() => handleCapturePhoto('before', 'camera')}
+                      >
+                        <Feather name="camera" size={18} color="white" />
+                        <Text style={styles.cameraBtnText}>Buka Kamera</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.galleryBtnHalf}
+                        onPress={() => handleCapturePhoto('before', 'gallery')}
+                      >
+                        <Feather name="image" size={18} color="#0f172a" />
+                        <Text style={styles.galleryBtnHalfText}>Pilih Galeri</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 )}
 
@@ -1596,9 +1655,8 @@ export default function DealerProgramsScreen() {
               </View>
             </ScrollView>
 
-            {/* Selection Confirmation Footer */}
-            <View style={styles.selectionFooter}>
-
+            {/* Selection Confirmation Footer (Pinned with Safe Bottom) */}
+            <View style={[styles.selectionFooter, { paddingBottom: Math.max(safeBottom, 16) }]}>
               <TouchableOpacity
                 style={[
                   styles.confirmSelectionBtn,
@@ -1619,6 +1677,39 @@ export default function DealerProgramsScreen() {
                 )}
               </TouchableOpacity>
             </View>
+
+            {/* In-Modal Fullscreen Lightbox Overlay */}
+            {previewModalImage && (
+              <View style={styles.inModalLightbox}>
+                <View style={styles.inModalLightboxHeader}>
+                  <Text style={styles.inModalLightboxTitle} numberOfLines={1}>
+                    {previewModalTitle}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.inModalLightboxCloseBtn}
+                    onPress={() => setPreviewModalImage(null)}
+                  >
+                    <Feather name="x" size={22} color="white" />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.inModalLightboxImageContainer}>
+                  <Image
+                    source={{ uri: previewModalImage }}
+                    style={styles.inModalLightboxImage}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.inModalLightboxFooter}>
+                  <TouchableOpacity
+                    style={styles.inModalLightboxDismissBtn}
+                    onPress={() => setPreviewModalImage(null)}
+                  >
+                    <Feather name="check" size={16} color="white" />
+                    <Text style={styles.inModalLightboxDismissBtnText}>Kembali ke Form</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -1829,7 +1920,7 @@ export default function DealerProgramsScreen() {
       {/* ========================================================================= */}
       <Modal visible={afterModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { maxHeight: '88%' }]}>
+          <View style={[styles.modalSheet, { height: '92%', maxHeight: '94%' }]}>
             <View style={styles.modalHeader}>
               <View style={{ flex: 1, paddingRight: 10 }}>
                 <Text style={styles.modalTitle}>Upload Foto Dokumentasi AFTER</Text>
@@ -1845,16 +1936,34 @@ export default function DealerProgramsScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 20 }}>
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={{ paddingBottom: 36 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+            >
               {/* Review Foto Before */}
               {activeAfterParticipant?.photo_before_url && (
                 <View style={styles.beforeReviewCard}>
                   <Text style={styles.beforeReviewLabel}>Foto BEFORE Lokasi Awal Saat Mendaftar:</Text>
-                  <Image
-                    source={{ uri: activeAfterParticipant.photo_before_url }}
-                    style={styles.beforeReviewImage}
-                    contentFit="cover"
-                  />
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => {
+                      setPreviewModalImage(activeAfterParticipant.photo_before_url!);
+                      setPreviewModalTitle('Foto BEFORE Saat Mendaftar');
+                    }}
+                    style={{ position: 'relative' }}
+                  >
+                    <Image
+                      source={{ uri: activeAfterParticipant.photo_before_url }}
+                      style={styles.beforeReviewImage}
+                      contentFit="cover"
+                    />
+                    <View style={styles.photoZoomBadgeSmall}>
+                      <Feather name="maximize-2" size={11} color="white" />
+                      <Text style={styles.photoZoomBadgeSmallText}>Ketuk untuk Perbesar</Text>
+                    </View>
+                  </TouchableOpacity>
                 </View>
               )}
 
@@ -1869,52 +1978,99 @@ export default function DealerProgramsScreen() {
                 </View>
 
                 {afterPhotoUri ? (
-                  <View style={styles.photoPreviewWrapper}>
-                    <Image
-                      source={{ uri: afterPhotoUri }}
-                      style={styles.photoPreviewImage}
-                      contentFit="cover"
-                    />
-                    <View style={styles.photoPreviewOverlay}>
-                      <View style={styles.photoSuccessTag}>
-                        <Feather name="check" size={13} color="white" />
-                        <Text style={styles.photoSuccessTagText}>Foto After Siap Diunggah</Text>
+                  <View style={styles.photoPreviewCard}>
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      onPress={() => {
+                        setPreviewModalImage(afterPhotoUri);
+                        setPreviewModalTitle('Foto AFTER Pemasangan Toko');
+                      }}
+                      style={styles.photoPreviewTouchArea}
+                    >
+                      <Image
+                        source={{ uri: afterPhotoUri }}
+                        style={styles.photoPreviewImageLarge}
+                        contentFit="contain"
+                      />
+                      <View style={styles.photoZoomBadge}>
+                        <Feather name="maximize-2" size={13} color="white" />
+                        <Text style={styles.photoZoomBadgeText}>Ketuk untuk Perbesar / Cek Detail</Text>
                       </View>
-                      <View style={styles.photoActionButtonsRow}>
+                    </TouchableOpacity>
+
+                    <View style={styles.photoPreviewBottomBar}>
+                      <View style={styles.photoSuccessTagLight}>
+                        <Feather name="check-circle" size={14} color="#15803d" />
+                        <Text style={styles.photoSuccessTagLightText}>Foto After Siap Diunggah</Text>
+                      </View>
+
+                      <View style={styles.photoPreviewButtonsRow}>
                         <TouchableOpacity
-                          style={styles.retakePhotoBtn}
+                          style={styles.photoBtnSmallOutline}
+                          onPress={() => {
+                            setPreviewModalImage(afterPhotoUri);
+                            setPreviewModalTitle('Foto AFTER Pemasangan Toko');
+                          }}
+                        >
+                          <Feather name="eye" size={13} color="#0f172a" />
+                          <Text style={styles.photoBtnSmallOutlineText}>Lihat</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.photoBtnSmallOutline}
                           onPress={() => handleCapturePhoto('after', 'camera')}
                         >
-                          <Feather name="camera" size={13} color="white" />
-                          <Text style={styles.retakePhotoBtnText}>Foto Ulang</Text>
+                          <Feather name="camera" size={13} color="#0f172a" />
+                          <Text style={styles.photoBtnSmallOutlineText}>Kamera</Text>
                         </TouchableOpacity>
+
                         <TouchableOpacity
-                          style={styles.deletePhotoBtn}
+                          style={styles.photoBtnSmallOutline}
+                          onPress={() => handleCapturePhoto('after', 'gallery')}
+                        >
+                          <Feather name="image" size={13} color="#0f172a" />
+                          <Text style={styles.photoBtnSmallOutlineText}>Galeri</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.photoBtnSmallDanger}
                           onPress={() => {
                             setAfterPhotoUri(null);
                             setAfterPhotoBase64(null);
                           }}
                         >
-                          <Feather name="trash-2" size={13} color="white" />
+                          <Feather name="trash-2" size={13} color="#ef4444" />
                         </TouchableOpacity>
                       </View>
                     </View>
                   </View>
                 ) : (
                   <View style={styles.photoEmptyUploadBox}>
-                    <Feather name="camera" size={36} color="#16a34a" />
+                    <View style={styles.photoEmptyIconCircle}>
+                      <Feather name="camera" size={28} color="#15803d" />
+                    </View>
                     <Text style={styles.photoEmptyUploadTitle}>Ambil Foto Barang Support yang Sudah Dipasang</Text>
                     <Text style={styles.photoEmptyUploadSub}>
-                      Gunakan kamera untuk memotret rak/etalase yang sudah terpasang di toko:
+                      Gunakan kamera atau pilih dari galeri untuk memotret rak/etalase yang sudah terpasang di toko:
                     </Text>
 
-                    <TouchableOpacity
-                      style={styles.cameraBtnFull}
-                      onPress={() => handleCapturePhoto('after', 'camera')}
-                    >
-                      <Feather name="camera" size={20} color="white" />
-                      <Text style={styles.cameraBtnText}>Buka Kamera Toko</Text>
-                    </TouchableOpacity>
+                    <View style={styles.photoChoiceButtonsRow}>
+                      <TouchableOpacity
+                        style={styles.cameraBtnHalf}
+                        onPress={() => handleCapturePhoto('after', 'camera')}
+                      >
+                        <Feather name="camera" size={18} color="white" />
+                        <Text style={styles.cameraBtnText}>Buka Kamera Toko</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.galleryBtnHalf}
+                        onPress={() => handleCapturePhoto('after', 'gallery')}
+                      >
+                        <Feather name="image" size={18} color="#0f172a" />
+                        <Text style={styles.galleryBtnHalfText}>Pilih Galeri</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 )}
 
@@ -1928,10 +2084,13 @@ export default function DealerProgramsScreen() {
                   onChangeText={setAfterNotes}
                 />
               </View>
+            </ScrollView>
 
+            {/* Pinned Selection Footer for Modal 2 */}
+            <View style={[styles.selectionFooter, { paddingBottom: Math.max(safeBottom, 16) }]}>
               <TouchableOpacity
                 style={[
-                  styles.submitAfterBtn,
+                  styles.confirmSelectionBtn,
                   !afterPhotoUri && { backgroundColor: '#94a3b8' },
                 ]}
                 onPress={submitAfterDocumentation}
@@ -1942,13 +2101,46 @@ export default function DealerProgramsScreen() {
                 ) : (
                   <>
                     <Feather name="send" size={16} color="white" />
-                    <Text style={styles.submitAfterBtnText}>
-                      Kirim Dokumentasi AFTER & Selesaikan Program
+                    <Text style={styles.confirmSelectionBtnText}>
+                      {afterPhotoUri ? 'Kirim Dokumentasi AFTER & Selesaikan' : 'Wajib Ambil Foto After'}
                     </Text>
                   </>
                 )}
               </TouchableOpacity>
-            </ScrollView>
+            </View>
+
+            {/* In-Modal Fullscreen Lightbox Overlay */}
+            {previewModalImage && (
+              <View style={styles.inModalLightbox}>
+                <View style={styles.inModalLightboxHeader}>
+                  <Text style={styles.inModalLightboxTitle} numberOfLines={1}>
+                    {previewModalTitle}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.inModalLightboxCloseBtn}
+                    onPress={() => setPreviewModalImage(null)}
+                  >
+                    <Feather name="x" size={22} color="white" />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.inModalLightboxImageContainer}>
+                  <Image
+                    source={{ uri: previewModalImage }}
+                    style={styles.inModalLightboxImage}
+                    contentFit="contain"
+                  />
+                </View>
+                <View style={styles.inModalLightboxFooter}>
+                  <TouchableOpacity
+                    style={styles.inModalLightboxDismissBtn}
+                    onPress={() => setPreviewModalImage(null)}
+                  >
+                    <Feather name="check" size={16} color="white" />
+                    <Text style={styles.inModalLightboxDismissBtnText}>Kembali ke Form</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -3042,8 +3234,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingBottom: 20,
-    maxHeight: '88%',
+    height: '92%',
+    maxHeight: '94%',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -3072,6 +3267,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   modalScroll: {
+    flex: 1,
     paddingHorizontal: 16,
     paddingTop: 12,
   },
@@ -3373,29 +3569,72 @@ const styles = StyleSheet.create({
     color: '#854d0e',
   },
 
-  // Photo Input Styles
+  // Photo Input & Preview Styles
   photoEmptyUploadBox: {
     backgroundColor: 'white',
     borderWidth: 1.5,
     borderColor: '#cbd5e1',
     borderStyle: 'dashed',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 14,
+    padding: 20,
     alignItems: 'center',
     marginTop: 10,
   },
+  photoEmptyIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#dcfce7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
   photoEmptyUploadTitle: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: 'bold',
     color: '#1e293b',
-    marginTop: 8,
+    marginTop: 4,
   },
   photoEmptyUploadSub: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#64748b',
     textAlign: 'center',
     marginTop: 2,
     marginBottom: 12,
+    lineHeight: 16,
+  },
+  photoChoiceButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+    marginTop: 6,
+  },
+  cameraBtnHalf: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: '#15803d',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  galleryBtnHalf: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  galleryBtnHalfText: {
+    color: '#0f172a',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   photoButtonsGrid: {
     flexDirection: 'row',
@@ -3424,7 +3663,7 @@ const styles = StyleSheet.create({
   },
   cameraBtnText: {
     color: 'white',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 'bold',
   },
   galleryBtn: {
@@ -3441,6 +3680,118 @@ const styles = StyleSheet.create({
     color: '#1e293b',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+
+  // Photo Preview Card & Actions
+  photoPreviewCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#86efac',
+    overflow: 'hidden',
+    marginTop: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  photoPreviewTouchArea: {
+    width: '100%',
+    height: 220,
+    backgroundColor: '#0f172a',
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoPreviewImageLarge: {
+    width: '100%',
+    height: '100%',
+  },
+  photoZoomBadge: {
+    position: 'absolute',
+    bottom: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.82)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  photoZoomBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  photoZoomBadgeSmall: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  photoZoomBadgeSmallText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  photoPreviewBottomBar: {
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  photoSuccessTagLight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flex: 1,
+  },
+  photoSuccessTagLightText: {
+    color: '#15803d',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  photoPreviewButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  photoBtnSmallOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  photoBtnSmallOutlineText: {
+    color: '#0f172a',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  photoBtnSmallDanger: {
+    backgroundColor: '#fee2e2',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   photoPreviewWrapper: {
     height: 180,
@@ -3512,6 +3863,73 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 12,
     color: '#0f172a',
+  },
+
+  // In-Modal Fullscreen Lightbox Overlay
+  inModalLightbox: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    zIndex: 99999,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'android' ? 36 : 50,
+    paddingBottom: 24,
+    paddingHorizontal: 16,
+  },
+  inModalLightboxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  inModalLightboxTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    flex: 1,
+    marginRight: 12,
+  },
+  inModalLightboxCloseBtn: {
+    padding: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 20,
+  },
+  inModalLightboxImageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  inModalLightboxImage: {
+    width: '100%',
+    height: '100%',
+  },
+  inModalLightboxFooter: {
+    paddingTop: 12,
+    alignItems: 'center',
+  },
+  inModalLightboxDismissBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#15803d',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    width: '100%',
+  },
+  inModalLightboxDismissBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 
   // Selection Footer
