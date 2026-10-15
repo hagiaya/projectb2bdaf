@@ -17,6 +17,7 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
 import { useSafeBottom } from '../../hooks/useSafeBottom';
 
@@ -147,6 +148,7 @@ interface ParticipantRecord {
   dealer_id: string;
   current_progress_amount: number;
   status: 'ENROLLED' | 'ACHIEVED' | 'CLAIMED' | 'REJECTED' | 'SHIPPED' | 'INSTALLED' | 'COMPLETED';
+  enrolled_at?: string;
   claim_notes?: string;
   admin_notes?: string;
   claimed_at?: string;
@@ -289,7 +291,17 @@ export default function DealerProgramsScreen() {
 
       setPrograms(loadedPrograms);
 
-      // 3. Fetch Participants for current dealer
+      // 3. Fetch Participants from Supabase & Merge with local AsyncStorage
+      const storageKey = `@dap_enrolled_participants_${dId || 'demo'}`;
+      let localEnrolled: ParticipantRecord[] = [];
+      try {
+        const localStr = await AsyncStorage.getItem(storageKey);
+        if (localStr) localEnrolled = JSON.parse(localStr);
+      } catch (e) {
+        console.warn('Error reading local participants:', e);
+      }
+
+      let loadedParts: any[] = [];
       if (dId) {
         const { data: partData } = await supabase
           .from('dealer_program_participants')
@@ -297,28 +309,73 @@ export default function DealerProgramsScreen() {
           .eq('dealer_id', dId);
 
         if (partData && partData.length > 0) {
-          const enrichedParts = partData.map((p: any) => {
-            const calculatedProgress = Math.max(
-              Number(p.current_progress_amount) || 0,
-              totalCompletedOrders
-            );
-            const matchedProg = loadedPrograms.find((pr) => pr.id === p.program_id);
-            const target =
-              p.custom_target_amount || (matchedProg ? matchedProg.target_amount : 999999999);
-            const isAchieved = calculatedProgress >= target;
-            return {
-              ...p,
-              current_progress_amount: calculatedProgress,
-              status: isAchieved && p.status === 'ENROLLED' ? 'ACHIEVED' : p.status,
-            };
-          });
-          setMyParticipants(enrichedParts);
-        } else {
-          setMyParticipants([]);//]);
+          loadedParts = partData;
         }
-      } else {
-        // No dealer profile, so empty participants for Sales users
-        setMyParticipants([]);
+      }
+
+      // Merge Supabase + Local AsyncStorage
+      const mergedMap = new Map<string, any>();
+      for (const lp of localEnrolled) {
+        if (lp.program_id) mergedMap.set(lp.program_id, lp);
+      }
+      for (const dbp of loadedParts) {
+        const existingLocal = mergedMap.get(dbp.program_id) || {};
+        mergedMap.set(dbp.program_id, { ...existingLocal, ...dbp });
+      }
+
+      const finalParticipants: ParticipantRecord[] = Array.from(mergedMap.values()).map((p: any) => {
+        let photoBefore = p.photo_before_url || null;
+        let photoAfter = p.photo_after_url || null;
+        let selectedItemId = p.selected_item_id || null;
+        let selectedItemName = p.selected_item_name || null;
+        let qty = p.selected_item_qty || 1;
+
+        if (p.claim_notes) {
+          if (!photoBefore) {
+            const matchBefore = p.claim_notes.match(/\[BEFORE_URL:\s*([^\]\s]+)\]/i);
+            if (matchBefore) photoBefore = matchBefore[1].trim();
+          }
+          if (!photoAfter) {
+            const matchAfter = p.claim_notes.match(/\[AFTER_URL:\s*([^\]\s]+)\]/i);
+            if (matchAfter) photoAfter = matchAfter[1].trim();
+          }
+          const metaMatch = p.claim_notes.match(/__METADATA__:(.+)$/m);
+          if (metaMatch) {
+            try {
+              const meta = JSON.parse(metaMatch[1].trim());
+              if (!photoBefore && meta.photo_before_url) photoBefore = meta.photo_before_url;
+              if (!photoAfter && meta.photo_after_url) photoAfter = meta.photo_after_url;
+              if (!selectedItemId && meta.selected_item_id) selectedItemId = meta.selected_item_id;
+              if (!selectedItemName && meta.selected_item_name) selectedItemName = meta.selected_item_name;
+              if (!p.selected_item_qty && meta.selected_item_qty) qty = meta.selected_item_qty;
+            } catch (e) {}
+          }
+        }
+
+        const calculatedProgress = Math.max(
+          Number(p.current_progress_amount) || 0,
+          totalCompletedOrders
+        );
+        const matchedProg = loadedPrograms.find((pr) => pr.id === p.program_id);
+        const target =
+          p.custom_target_amount || (matchedProg ? matchedProg.target_amount : 999999999);
+        const isAchieved = calculatedProgress >= target;
+
+        return {
+          ...p,
+          photo_before_url: photoBefore,
+          photo_after_url: photoAfter,
+          selected_item_id: selectedItemId,
+          selected_item_name: selectedItemName,
+          selected_item_qty: qty,
+          current_progress_amount: calculatedProgress,
+          status: isAchieved && p.status === 'ENROLLED' ? 'ACHIEVED' : p.status,
+        };
+      });
+
+      setMyParticipants(finalParticipants);
+      if (finalParticipants.length > 0) {
+        AsyncStorage.setItem(storageKey, JSON.stringify(finalParticipants)).catch(() => {});
       }
     } catch (err) {
       console.error('Error init dealer programs:', err);
@@ -506,6 +563,8 @@ export default function DealerProgramsScreen() {
     setSupportItemQty(qty);
     setBeforePhotoUri(null);
     setBeforePhotoBase64(null);
+    setAfterPhotoUri(null);
+    setAfterPhotoBase64(null);
     setPlacementNotes('');
     setApplicationModalVisible(true);
   };
@@ -553,40 +612,22 @@ export default function DealerProgramsScreen() {
     ? programs.find((pr) => pr.id === activeParticipant.program_id)
     : null;
 
-  // Handle take photo (Camera or Gallery)
-  const handleCapturePhoto = async (type: 'before' | 'after', source: 'camera' | 'gallery') => {
+  // Handle take photo (Camera Only - No Gallery)
+  const handleCapturePhoto = async (type: 'before' | 'after') => {
     try {
-      let result: ImagePicker.ImagePickerResult;
-
-      if (source === 'camera') {
-        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert(
-            'Izin Kamera Dibutuhkan',
-            'Izinkan akses kamera untuk mengambil foto dokumentasi toko Anda.'
-          );
-          return;
-        }
-        result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          quality: 0.7,
-          base64: true,
-        });
-      } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert(
-            'Izin Galeri Dibutuhkan',
-            'Izinkan akses galeri untuk memilih foto dokumentasi toko Anda.'
-          );
-          return;
-        }
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          quality: 0.7,
-          base64: true,
-        });
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Izin Kamera Dibutuhkan',
+          'Izinkan akses kamera untuk mengambil foto dokumentasi toko Anda.'
+        );
+        return;
       }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.7,
+        base64: true,
+      });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
@@ -600,7 +641,7 @@ export default function DealerProgramsScreen() {
       }
     } catch (err: any) {
       console.warn('Error capturing photo:', err);
-      Alert.alert('Gagal Mengambil Foto', err.message || 'Terjadi kesalahan saat membuka kamera/galeri.');
+      Alert.alert('Gagal Mengambil Foto Kamera', err.message || 'Terjadi kesalahan saat membuka kamera.');
     }
   };
 
@@ -649,6 +690,8 @@ export default function DealerProgramsScreen() {
       setSupportItemQty(1);
       setBeforePhotoUri(null);
       setBeforePhotoBase64(null);
+      setAfterPhotoUri(null);
+      setAfterPhotoBase64(null);
       setPlacementNotes('');
       setApplicationModalVisible(true);
       return;
@@ -693,7 +736,7 @@ export default function DealerProgramsScreen() {
 
       if (error) throw error;
       if (data) {
-        setMyParticipants([]);//...myParticipants, data[0] as any]);
+        setMyParticipants([]);
       }
       Alert.alert('Pendaftaran Berhasil 🎉', `Toko Anda telah terdaftar pada program "${program.title}". Kumpulkan omset belanja Anda!`);
     } catch (err: any) {
@@ -703,14 +746,14 @@ export default function DealerProgramsScreen() {
     }
   };
 
-  // Submit Support Item Application (WITH BEFORE PHOTO & QUANTITY)
+  // Submit Support Item Application (WITH BEFORE & AFTER PHOTO VIA CAMERA)
   const submitSupportItemApplication = async () => {
     if (!programToEnroll || !selectedSupportItem) return;
 
     // VALIDATION: Wajib ada foto dokumentasi before!
     if (!beforePhotoUri && !beforePhotoBase64) {
       const msg =
-        'Wajib Melampirkan Foto Dokumentasi BEFORE!\n\nSilakan ambil foto lokasi / tempat di mana barang support (rak/etalase) akan diletakkan di toko Anda menggunakan tombol kamera atau galeri.';
+        'Wajib Melampirkan Foto Dokumentasi BEFORE!\n\nSilakan gunakan tombol kamera untuk mengambil foto lokasi/tempat di toko Anda di mana barang support (rak/etalase) akan ditempatkan.';
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('Foto Dokumentasi Wajib 📸', msg);
       return;
@@ -718,12 +761,22 @@ export default function DealerProgramsScreen() {
 
     setEnrolling(true);
     try {
-      // 1. Upload Before Photo
+      // 1. Upload Before Photo to Storage
       const uploadedBeforeUrl = await uploadPhotoToStorage(
         beforePhotoBase64,
         beforePhotoUri,
         'support_before'
       );
+
+      // 2. Upload After Photo to Storage if provided
+      let uploadedAfterUrl: string | null = null;
+      if (afterPhotoUri || afterPhotoBase64) {
+        uploadedAfterUrl = await uploadPhotoToStorage(
+          afterPhotoBase64,
+          afterPhotoUri,
+          'support_after'
+        );
+      }
 
       const applicantName = currentUserProfile?.full_name || 'Pemilik Toko';
       const storeName = currentDealerProfile?.store_name || 'Toko Dealer';
@@ -733,58 +786,120 @@ export default function DealerProgramsScreen() {
       const storePhone =
         currentUserProfile?.phone_number || currentDealerProfile?.phone || '-';
 
-      const qty = 1;
-      const targetAmount = programToEnroll.target_amount || 0;
-      const itemName = programToEnroll.title;
-      const snapshotNotes = `[PENGAJUAN PROGRAM SUPPORT DAP]\nNama: ${applicantName}\nToko: ${storeName}\nLokasi: ${storeLocation}\nKontak: ${storePhone}\nTarget Min. Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\nCatatan Penempatan: ${placementNotes.trim() || 'Sesuai foto before'}\nFoto Before: ${uploadedBeforeUrl || 'Terlampir'}`;
+      const qty = Math.max(1, supportItemQty || 1);
+      const targetAmount = selectedSupportItem.min_purchase * qty;
+      const itemName = `${selectedSupportItem.code} - ${selectedSupportItem.name}`;
 
-      if (!currentDealerId) {
-        Alert.alert('Perhatian', 'Hanya akun Toko (Dealer) yang dapat mendaftar program support ini.');
-        setApplicationModalVisible(false);
-        return;
-      }
+      const finalBefore = uploadedBeforeUrl || beforePhotoUri || '';
+      const finalAfter = uploadedAfterUrl || afterPhotoUri || '';
 
-      // 2. Prepare database payload
-      const payload: any = {
-        program_id: programToEnroll.id,
-        dealer_id: currentDealerId,
-        current_progress_amount: 0,
-        status: 'ENROLLED',
-        photo_before_url: uploadedBeforeUrl,
-        claim_notes: snapshotNotes,
+      const metaObj = {
+        photo_before_url: finalBefore,
+        photo_after_url: finalAfter || null,
+        selected_item_id: selectedSupportItem.id,
+        selected_item_name: itemName,
+        selected_item_qty: qty,
+        custom_target_amount: targetAmount,
+        applicant_name: applicantName,
+        applicant_store_name: storeName,
+        applicant_location: storeLocation,
+        applicant_phone: storePhone,
+        placement_notes: placementNotes.trim(),
+        enrolled_at: new Date().toISOString(),
       };
 
-      let insertResult: any = null;
-      let { data, error } = await supabase
-        .from('dealer_program_participants')
-        .insert([payload])
-        .select();
+      let snapshotNotes = `[BEFORE_URL: ${finalBefore}]\n`;
+      if (finalAfter) {
+        snapshotNotes += `[AFTER_URL: ${finalAfter}]\n`;
+      }
+      snapshotNotes += `[PILIHAN ITEM: ${itemName} | Qty: ${qty} Unit | Min. Belanja: Rp ${targetAmount.toLocaleString('id-ID')}]\n`;
+      snapshotNotes += `[PENGAJUAN PROGRAM SUPPORT DAP]\n`;
+      snapshotNotes += `Nama: ${applicantName}\nToko: ${storeName}\nLokasi: ${storeLocation}\nKontak: ${storePhone}\n`;
+      snapshotNotes += `Catatan Penempatan: ${placementNotes.trim() || 'Sesuai foto kamera'}\n`;
+      snapshotNotes += `__METADATA__:${JSON.stringify(metaObj)}`;
 
-      if (error) {
-        console.warn('Fallback insert without selected_item_qty:', error.message);
-        delete payload.selected_item_qty;
-        const retry = await supabase
+      let insertedId = `part-${Date.now()}`;
+
+      // Insert to Supabase if connected
+      if (currentDealerId) {
+        const payload: any = {
+          program_id: programToEnroll.id,
+          dealer_id: currentDealerId,
+          current_progress_amount: 0,
+          status: 'ENROLLED',
+          claim_notes: snapshotNotes,
+          custom_target_amount: targetAmount,
+          selected_item_qty: qty,
+        };
+
+        const { data, error } = await supabase
           .from('dealer_program_participants')
           .insert([payload])
           .select();
-        data = retry.data;
-        error = retry.error;
+
+        if (error) {
+          console.warn('First insert attempt with custom cols failed, retrying minimal payload:', error.message);
+          const minimalPayload = {
+            program_id: programToEnroll.id,
+            dealer_id: currentDealerId,
+            current_progress_amount: 0,
+            status: 'ENROLLED',
+            claim_notes: snapshotNotes,
+          };
+          const retry = await supabase
+            .from('dealer_program_participants')
+            .insert([minimalPayload])
+            .select();
+
+          if (retry.data && retry.data[0]) {
+            insertedId = retry.data[0].id;
+          }
+        } else if (data && data[0]) {
+          insertedId = data[0].id;
+        }
       }
 
-      insertResult = data && data[0] ? data[0] : null;
-      if (insertResult) {
-        setMyParticipants([
-          ...myParticipants,
-          {
-            ...insertResult,
-            photo_before_url: uploadedBeforeUrl || beforePhotoUri,
-            claim_notes: snapshotNotes,
-          },
-        ]);
+      const newRecord: ParticipantRecord = {
+        id: insertedId,
+        program_id: programToEnroll.id,
+        dealer_id: currentDealerId || 'demo-dealer-id',
+        current_progress_amount: 0,
+        status: 'ENROLLED',
+        claim_notes: snapshotNotes,
+        custom_target_amount: targetAmount,
+        selected_item_qty: qty,
+        selected_item_id: selectedSupportItem.id,
+        selected_item_name: itemName,
+        photo_before_url: finalBefore,
+        photo_after_url: finalAfter || null,
+        enrolled_at: new Date().toISOString(),
+      };
+
+      // Save to local AsyncStorage for 100% offline & reload persistence
+      try {
+        const storageKey = `@dap_enrolled_participants_${currentDealerId || 'demo'}`;
+        const existingStr = await AsyncStorage.getItem(storageKey);
+        let existing: ParticipantRecord[] = existingStr ? JSON.parse(existingStr) : [];
+        existing = [newRecord, ...existing.filter((p) => p.program_id !== programToEnroll.id)];
+        await AsyncStorage.setItem(storageKey, JSON.stringify(existing));
+      } catch (storageErr) {
+        console.warn('Error saving to AsyncStorage:', storageErr);
       }
+
+      // Update state immediately
+      setMyParticipants((prev) => [
+        newRecord,
+        ...prev.filter((p) => p.program_id !== programToEnroll.id),
+      ]);
 
       setApplicationModalVisible(false);
-      const msg = `Pengajuan Program Support Berhasil! 🎉\n\nTarget Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\n\nFoto dokumentasi lokasi toko telah tersimpan. Belanja dan capai targetnya!`;
+      setBeforePhotoUri(null);
+      setBeforePhotoBase64(null);
+      setAfterPhotoUri(null);
+      setAfterPhotoBase64(null);
+      setPlacementNotes('');
+
+      const msg = `Pengajuan Program Support Berhasil! 🎉\n\nTarget Belanja: Rp ${targetAmount.toLocaleString('id-ID')}\nFoto dokumentasi BEFORE ${finalAfter ? '& AFTER ' : ''}telah tersimpan rapi.\n\nToko resmi terdaftar! Kumpulkan omset belanja dan capai targetnya.`;
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('Pengajuan Berhasil 🎉', msg);
     } catch (err: any) {
@@ -800,7 +915,7 @@ export default function DealerProgramsScreen() {
 
     if (!afterPhotoUri) {
       const msg =
-        'Wajib Melampirkan Foto Dokumentasi AFTER!\n\nSilakan ambil foto bukti bahwa barang support (rak/etalase) resmi DAP telah selesai dipasang dan ditempatkan di toko Anda.';
+        'Wajib Melampirkan Foto Dokumentasi AFTER!\n\nSilakan ambil foto bukti menggunakan kamera bahwa barang support (rak/etalase) resmi DAP telah selesai dipasang dan ditempatkan di toko Anda.';
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('Foto Dokumentasi Wajib 📸', msg);
       return;
@@ -814,39 +929,47 @@ export default function DealerProgramsScreen() {
         'support_after'
       );
 
-      const appendNotes = `\n[FOTO AFTER TERPASANG: ${uploadedAfterUrl || 'Terlampir'}]\nCatatan Pemasangan Toko: ${afterNotes.trim() || 'Barang telah dipasang & ditempatkan rapi di toko'}`;
-
-      const payload: any = {
-        photo_after_url: uploadedAfterUrl || afterPhotoUri,
-        installed_at: new Date().toISOString(),
-        status: 'COMPLETED',
-        claim_notes: (activeAfterParticipant.claim_notes || '') + appendNotes,
-      };
+      const finalAfter = uploadedAfterUrl || afterPhotoUri;
+      const appendNotes = `\n[AFTER_URL: ${finalAfter}]\n[FOTO AFTER TERPASANG: ${finalAfter}]\nCatatan Pemasangan Toko: ${afterNotes.trim() || 'Barang telah dipasang & ditempatkan rapi di toko'}`;
+      const updatedNotes = (activeAfterParticipant.claim_notes || '') + appendNotes;
 
       if (currentDealerId) {
-        const { error } = await supabase
+        await supabase
           .from('dealer_program_participants')
-          .update(payload)
+          .update({
+            status: 'COMPLETED',
+            claim_notes: updatedNotes,
+          })
           .eq('id', activeAfterParticipant.id);
+      }
 
-        if (error) {
-          console.warn('Fallback update photo_after:', error.message);
-          // Fallback if photo_after_url column not present
-          await supabase
-            .from('dealer_program_participants')
-            .update({
-              status: 'COMPLETED',
-              claim_notes: (activeAfterParticipant.claim_notes || '') + appendNotes,
-            })
-            .eq('id', activeAfterParticipant.id);
-        }
+      const updatedRecord: ParticipantRecord = {
+        ...activeAfterParticipant,
+        status: 'COMPLETED',
+        photo_after_url: finalAfter,
+        claim_notes: updatedNotes,
+      };
+
+      // Update AsyncStorage
+      try {
+        const storageKey = `@dap_enrolled_participants_${currentDealerId || 'demo'}`;
+        const existingStr = await AsyncStorage.getItem(storageKey);
+        let existing: ParticipantRecord[] = existingStr ? JSON.parse(existingStr) : [];
+        existing = existing.map((p) =>
+          p.id === activeAfterParticipant.id || p.program_id === activeAfterParticipant.program_id
+            ? updatedRecord
+            : p
+        );
+        await AsyncStorage.setItem(storageKey, JSON.stringify(existing));
+      } catch (e) {
+        console.warn('AsyncStorage error:', e);
       }
 
       // Update local state
-      setMyParticipants(
-        myParticipants.map((p) =>
-          p.id === activeAfterParticipant.id
-            ? { ...p, ...payload, photo_after_url: uploadedAfterUrl || afterPhotoUri }
+      setMyParticipants((prev) =>
+        prev.map((p) =>
+          p.id === activeAfterParticipant.id || p.program_id === activeAfterParticipant.program_id
+            ? updatedRecord
             : p
         )
       );
@@ -1529,12 +1652,12 @@ export default function DealerProgramsScreen() {
                 </View>
               </View>
 
-              {/* 3. UPLOAD FOTO DOKUMENTASI BEFORE (WAJIB INPUT KAMERA/GALERI) */}
+              {/* 2. UPLOAD FOTO DOKUMENTASI BEFORE (WAJIB KAMERA) */}
               <View style={[styles.formSectionBox, { borderColor: beforePhotoUri ? '#86efac' : '#fde047' }]}>
                 <View style={styles.formSectionHeader}>
                   <Feather name="camera" size={16} color="#15803d" />
                   <Text style={styles.formSectionTitle}>
-                    Foto Dokumentasi BEFORE (Lokasi Penempatan)
+                    1. Foto BEFORE (Lokasi Penempatan Toko)
                   </Text>
                   <View style={styles.requiredBadge}>
                     <Text style={styles.requiredBadgeText}>WAJIB</Text>
@@ -1544,7 +1667,6 @@ export default function DealerProgramsScreen() {
                   Ambil foto sudut / lokasi ruangan toko Anda di mana barang support (rak / etalase) ini akan ditempatkan:
                 </Text>
 
-                {/* Photo Preview or Capture Buttons */}
                 {beforePhotoUri ? (
                   <View style={styles.photoPreviewCard}>
                     <TouchableOpacity
@@ -1569,7 +1691,7 @@ export default function DealerProgramsScreen() {
                     <View style={styles.photoPreviewBottomBar}>
                       <View style={styles.photoSuccessTagLight}>
                         <Feather name="check-circle" size={14} color="#15803d" />
-                        <Text style={styles.photoSuccessTagLightText}>Foto Siap Dikirim</Text>
+                        <Text style={styles.photoSuccessTagLightText}>Foto BEFORE Siap</Text>
                       </View>
 
                       <View style={styles.photoPreviewButtonsRow}>
@@ -1586,18 +1708,10 @@ export default function DealerProgramsScreen() {
 
                         <TouchableOpacity
                           style={styles.photoBtnSmallOutline}
-                          onPress={() => handleCapturePhoto('before', 'camera')}
+                          onPress={() => handleCapturePhoto('before')}
                         >
                           <Feather name="camera" size={13} color="#0f172a" />
-                          <Text style={styles.photoBtnSmallOutlineText}>Kamera</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.photoBtnSmallOutline}
-                          onPress={() => handleCapturePhoto('before', 'gallery')}
-                        >
-                          <Feather name="image" size={13} color="#0f172a" />
-                          <Text style={styles.photoBtnSmallOutlineText}>Galeri</Text>
+                          <Text style={styles.photoBtnSmallOutlineText}>Ulang Kamera</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -1617,35 +1731,125 @@ export default function DealerProgramsScreen() {
                     <View style={styles.photoEmptyIconCircle}>
                       <Feather name="camera" size={28} color="#15803d" />
                     </View>
-                    <Text style={styles.photoEmptyUploadTitle}>Ambil Foto Dokumentasi Lokasi</Text>
+                    <Text style={styles.photoEmptyUploadTitle}>Foto Lokasi Sebelum Barang Ditaruh</Text>
                     <Text style={styles.photoEmptyUploadSub}>
-                      Ambil foto sudut / lokasi ruangan toko langsung dengan kamera atau pilih dari galeri:
+                      Gunakan kamera untuk memotret langsung area/sudut toko Anda:
                     </Text>
 
-                    <View style={styles.photoChoiceButtonsRow}>
-                      <TouchableOpacity
-                        style={styles.cameraBtnHalf}
-                        onPress={() => handleCapturePhoto('before', 'camera')}
-                      >
-                        <Feather name="camera" size={18} color="white" />
-                        <Text style={styles.cameraBtnText}>Buka Kamera</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.galleryBtnHalf}
-                        onPress={() => handleCapturePhoto('before', 'gallery')}
-                      >
-                        <Feather name="image" size={18} color="#0f172a" />
-                        <Text style={styles.galleryBtnHalfText}>Pilih Galeri</Text>
-                      </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity
+                      style={styles.cameraBtnFull}
+                      onPress={() => handleCapturePhoto('before')}
+                    >
+                      <Feather name="camera" size={18} color="white" />
+                      <Text style={styles.cameraBtnFullText}>Buka Kamera (Foto BEFORE)</Text>
+                    </TouchableOpacity>
                   </View>
                 )}
+              </View>
 
-                {/* Catatan Tambahan Penempatan */}
-                <Text style={[styles.accountDataLabel, { marginTop: 12, marginBottom: 4 }]}>
-                  Catatan Rencana Penempatan Toko (Opsional):
+              {/* 3. UPLOAD FOTO DOKUMENTASI AFTER (SETELAH BARANG DIPAJANG - KAMERA) */}
+              <View style={[styles.formSectionBox, { marginTop: 14, borderColor: afterPhotoUri ? '#86efac' : '#cbd5e1' }]}>
+                <View style={styles.formSectionHeader}>
+                  <Feather name="camera" size={16} color="#0284c7" />
+                  <Text style={styles.formSectionTitle}>
+                    2. Foto AFTER (Setelah Barang Ditaruh)
+                  </Text>
+                  <View style={[styles.requiredBadge, { backgroundColor: afterPhotoUri ? '#dcfce7' : '#f1f5f9' }]}>
+                    <Text style={[styles.requiredBadgeText, { color: afterPhotoUri ? '#15803d' : '#64748b' }]}>
+                      {afterPhotoUri ? 'TERPASANG' : 'OPSIONAL / SETELAH DIPAJANG'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.formSectionSub}>
+                  Ambil foto bukti setelah barang support (rak / etalase) resmi DAP diletakkan & dipajang di toko Anda:
                 </Text>
+
+                {afterPhotoUri ? (
+                  <View style={styles.photoPreviewCard}>
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      onPress={() => {
+                        setPreviewModalImage(afterPhotoUri);
+                        setPreviewModalTitle('Dokumentasi AFTER (Barang Support Dipajang)');
+                      }}
+                      style={styles.photoPreviewTouchArea}
+                    >
+                      <Image
+                        source={{ uri: afterPhotoUri }}
+                        style={styles.photoPreviewImageLarge}
+                        contentFit="contain"
+                      />
+                      <View style={styles.photoZoomBadge}>
+                        <Feather name="maximize-2" size={13} color="white" />
+                        <Text style={styles.photoZoomBadgeText}>Ketuk untuk Perbesar / Cek Detail</Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <View style={styles.photoPreviewBottomBar}>
+                      <View style={styles.photoSuccessTagLight}>
+                        <Feather name="check-circle" size={14} color="#0284c7" />
+                        <Text style={[styles.photoSuccessTagLightText, { color: '#0369a1' }]}>Foto AFTER Siap</Text>
+                      </View>
+
+                      <View style={styles.photoPreviewButtonsRow}>
+                        <TouchableOpacity
+                          style={styles.photoBtnSmallOutline}
+                          onPress={() => {
+                            setPreviewModalImage(afterPhotoUri);
+                            setPreviewModalTitle('Dokumentasi AFTER (Barang Support Dipajang)');
+                          }}
+                        >
+                          <Feather name="eye" size={13} color="#0f172a" />
+                          <Text style={styles.photoBtnSmallOutlineText}>Lihat</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.photoBtnSmallOutline}
+                          onPress={() => handleCapturePhoto('after')}
+                        >
+                          <Feather name="camera" size={13} color="#0f172a" />
+                          <Text style={styles.photoBtnSmallOutlineText}>Ulang Kamera</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.photoBtnSmallDanger}
+                          onPress={() => {
+                            setAfterPhotoUri(null);
+                            setAfterPhotoBase64(null);
+                          }}
+                        >
+                          <Feather name="trash-2" size={13} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.photoEmptyUploadBox}>
+                    <View style={[styles.photoEmptyIconCircle, { backgroundColor: '#e0f2fe' }]}>
+                      <Feather name="camera" size={28} color="#0284c7" />
+                    </View>
+                    <Text style={styles.photoEmptyUploadTitle}>Foto Setelah Barang Ditaruh / Dipajang</Text>
+                    <Text style={styles.photoEmptyUploadSub}>
+                      Gunakan kamera untuk memotret rak/etalase yang sudah terpasang di toko (bisa sekarang atau nanti):
+                    </Text>
+
+                    <TouchableOpacity
+                      style={[styles.cameraBtnFull, { backgroundColor: '#0284c7' }]}
+                      onPress={() => handleCapturePhoto('after')}
+                    >
+                      <Feather name="camera" size={18} color="white" />
+                      <Text style={styles.cameraBtnFullText}>Buka Kamera (Foto AFTER)</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+
+              {/* 4. Catatan Tambahan Penempatan */}
+              <View style={[styles.formSectionBox, { marginTop: 14 }]}>
+                <View style={styles.formSectionHeader}>
+                  <Feather name="file-text" size={15} color="#15803d" />
+                  <Text style={styles.formSectionTitle}>Catatan Rencana Penempatan (Opsional)</Text>
+                </View>
                 <TextInput
                   style={styles.placementTextInput}
                   placeholder="misal: Diletakkan di samping etalase kaca depan kasir..."
@@ -2018,18 +2222,10 @@ export default function DealerProgramsScreen() {
 
                         <TouchableOpacity
                           style={styles.photoBtnSmallOutline}
-                          onPress={() => handleCapturePhoto('after', 'camera')}
+                          onPress={() => handleCapturePhoto('after')}
                         >
                           <Feather name="camera" size={13} color="#0f172a" />
-                          <Text style={styles.photoBtnSmallOutlineText}>Kamera</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.photoBtnSmallOutline}
-                          onPress={() => handleCapturePhoto('after', 'gallery')}
-                        >
-                          <Feather name="image" size={13} color="#0f172a" />
-                          <Text style={styles.photoBtnSmallOutlineText}>Galeri</Text>
+                          <Text style={styles.photoBtnSmallOutlineText}>Ulang Kamera</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -2051,26 +2247,16 @@ export default function DealerProgramsScreen() {
                     </View>
                     <Text style={styles.photoEmptyUploadTitle}>Ambil Foto Barang Support yang Sudah Dipasang</Text>
                     <Text style={styles.photoEmptyUploadSub}>
-                      Gunakan kamera atau pilih dari galeri untuk memotret rak/etalase yang sudah terpasang di toko:
+                      Gunakan kamera untuk memotret rak/etalase yang sudah terpasang di toko:
                     </Text>
 
-                    <View style={styles.photoChoiceButtonsRow}>
-                      <TouchableOpacity
-                        style={styles.cameraBtnHalf}
-                        onPress={() => handleCapturePhoto('after', 'camera')}
-                      >
-                        <Feather name="camera" size={18} color="white" />
-                        <Text style={styles.cameraBtnText}>Buka Kamera Toko</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.galleryBtnHalf}
-                        onPress={() => handleCapturePhoto('after', 'gallery')}
-                      >
-                        <Feather name="image" size={18} color="#0f172a" />
-                        <Text style={styles.galleryBtnHalfText}>Pilih Galeri</Text>
-                      </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity
+                      style={styles.cameraBtnFull}
+                      onPress={() => handleCapturePhoto('after')}
+                    >
+                      <Feather name="camera" size={18} color="white" />
+                      <Text style={styles.cameraBtnFullText}>Buka Kamera Toko (Foto AFTER)</Text>
+                    </TouchableOpacity>
                   </View>
                 )}
 
@@ -3609,6 +3795,21 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 6,
   },
+  cameraBtnFull: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#15803d',
+    paddingVertical: 13,
+    borderRadius: 12,
+  },
+  cameraBtnFullText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
   cameraBtnHalf: {
     flex: 1,
     flexDirection: 'row',
@@ -3650,16 +3851,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#15803d',
     paddingVertical: 10,
     borderRadius: 10,
-  },
-  cameraBtnFull: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#15803d',
-    paddingVertical: 13,
-    borderRadius: 12,
   },
   cameraBtnText: {
     color: 'white',

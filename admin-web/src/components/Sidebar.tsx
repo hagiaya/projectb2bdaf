@@ -21,16 +21,29 @@ import {
   AlertTriangle,
   CreditCard,
   LogOut,
-  X
+  X,
+  Boxes,
+  Truck,
+  Sliders,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { ThemeToggle } from '@/components/ThemeToggle';
+
+const erpSubItems = [
+  { name: '10 Laporan Persediaan ERP', href: '/inventory?tab=report', icon: FileText },
+  { name: 'Transfer Antar Gudang', href: '/inventory?tab=transfer', icon: Truck },
+  { name: 'Penyesuaian Persediaan (Opname)', href: '/inventory?tab=adjustment', icon: Sliders },
+  { name: 'Penyesuaian Harga Jual', href: '/inventory?tab=price', icon: DollarSign },
+  { name: 'Stok & Monitoring Realtime', href: '/inventory?tab=stock', icon: Archive },
+];
 
 const menuItems = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Master Kategori', href: '/categories', icon: Package },
   { name: 'Master Produk', href: '/products', icon: Package },
-  { name: 'Persediaan & Stok', href: '/inventory', icon: Archive },
+  { name: 'Modul Persediaan ERP', href: '/inventory', icon: Boxes, badgeText: 'ERP' },
   { name: 'Master Dealer', href: '/dealers', icon: Users },
   { name: 'Program Dealer', href: '/programs', icon: Award },
   { name: 'Master Karyawan', href: '/sales', icon: Users },
@@ -46,6 +59,7 @@ const menuItems = [
 ];
 
 const proMenuItems = [
+  { name: 'Modul Persediaan ERP', href: '/inventory?tab=report', icon: Boxes, badgeText: 'ERP' },
   { name: 'Target & SPV', href: '/targets', icon: Target },
   { name: 'CRM Dealer', href: '/crm', icon: Activity },
   { name: 'Peta Pelanggan', href: '/customers-map', icon: Map },
@@ -59,6 +73,7 @@ export default function Sidebar() {
   const [adminRole, setAdminRole] = useState('SUPER_ADMIN');
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isErpOpen, setIsErpOpen] = useState(true);
 
   useEffect(() => {
     setAdminRole(localStorage.getItem('adminRole') || 'SUPER_ADMIN');
@@ -130,6 +145,64 @@ export default function Sidebar() {
           const hasReturnBadge = item.badgeKey === 'returns' && activeReturnsCount > 0;
 
           return (
+            <div key={item.name}>
+              <Link
+                href={item.href}
+                className={`flex items-center justify-between px-3 py-2.5 rounded-xl transition-all group ${
+                  isActive 
+                    ? 'bg-[#a3e635] text-black font-extrabold shadow-sm' 
+                    : 'text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800/80 hover:text-gray-900 dark:hover:text-white font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Icon size={20} className="group-hover:scale-110 transition-transform" />
+                  <span className="text-sm font-semibold tracking-wide">{item.name}</span>
+                </div>
+
+                {hasReturnBadge && (
+                  <span className="px-2 py-0.5 text-[11px] font-black bg-amber-400 text-amber-950 rounded-full shadow-sm animate-pulse">
+                    {activeReturnsCount}
+                  </span>
+                )}
+
+                {(item as any).badgeText && !hasReturnBadge && (
+                  <span className="px-2 py-0.5 text-[10px] font-black bg-emerald-600 text-white rounded-md tracking-wider">
+                    {(item as any).badgeText}
+                  </span>
+                )}
+              </Link>
+
+              {item.href === '/inventory' && pathname.startsWith('/inventory') && (
+                <div className="ml-7 pl-3 border-l-2 border-emerald-500/40 space-y-1 my-1.5">
+                  {erpSubItems.map((sub) => {
+                    const SubIcon = sub.icon;
+                    return (
+                      <Link
+                        key={sub.name}
+                        href={sub.href}
+                        className="flex items-center gap-2 py-1 px-2 rounded-lg text-xs font-semibold text-gray-600 dark:text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-zinc-800 transition-colors"
+                      >
+                        <SubIcon size={13} className="text-emerald-600" />
+                        <span>{sub.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {adminRole === 'SUPER_ADMIN' && (
+          <div className="mt-8 mb-2 px-3 text-[10px] font-bold text-gray-500 dark:text-white/40 tracking-widest uppercase flex items-center justify-between">
+            <span>ADVANCED FEATURES</span>
+            <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[9px] font-black rounded">SUPER ADMIN</span>
+          </div>
+        )}
+        {adminRole === 'SUPER_ADMIN' && proMenuItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname === item.href;
+          return (
             <Link
               key={item.name}
               href={item.href}
@@ -143,36 +216,11 @@ export default function Sidebar() {
                 <Icon size={20} className="group-hover:scale-110 transition-transform" />
                 <span className="text-sm font-semibold tracking-wide">{item.name}</span>
               </div>
-
-              {hasReturnBadge && (
-                <span className="px-2 py-0.5 text-[11px] font-black bg-amber-400 text-amber-950 rounded-full shadow-sm animate-pulse">
-                  {activeReturnsCount}
+              {(item as any).badgeText && (
+                <span className="px-2 py-0.5 text-[10px] font-black bg-emerald-600 text-white rounded-md tracking-wider">
+                  {(item as any).badgeText}
                 </span>
               )}
-            </Link>
-          );
-        })}
-
-        {adminRole === 'SUPER_ADMIN' && (
-          <div className="mt-8 mb-2 px-3 text-[10px] font-bold text-gray-500 dark:text-white/40 tracking-widest uppercase flex items-center gap-2">
-            ADVANCED FEATURES
-          </div>
-        )}
-        {adminRole === 'SUPER_ADMIN' && proMenuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group ${
-                isActive 
-                  ? 'bg-[#a3e635] text-black font-extrabold shadow-sm' 
-                  : 'text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800/80 hover:text-gray-900 dark:hover:text-white font-medium'
-              }`}
-            >
-              <Icon size={20} className="group-hover:scale-110 transition-transform" />
-              <span className="text-sm font-semibold tracking-wide">{item.name}</span>
             </Link>
           );
         })}

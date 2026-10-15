@@ -161,6 +161,8 @@ interface Participant {
   selected_item_name?: string;
   selected_item_qty?: number;
   custom_target_amount?: number;
+  photo_before_url?: string;
+  photo_after_url?: string;
   dealers?: {
     id: string;
     store_name: string;
@@ -1174,6 +1176,27 @@ export default function ProgramsPage() {
                             Klaim: {new Date(part.claimed_at).toLocaleDateString('id-ID')}
                           </p>
                         )}
+                        {(() => {
+                          let hasB = !!part.photo_before_url;
+                          let hasA = !!part.photo_after_url;
+                          if (!hasB && part.claim_notes?.includes('[BEFORE_URL:')) hasB = true;
+                          if (!hasA && part.claim_notes?.includes('[AFTER_URL:')) hasA = true;
+                          if (!hasB && !hasA) return null;
+                          return (
+                            <div className="flex items-center gap-1.5 mt-1.5">
+                              {hasB && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  📷 Before
+                                </span>
+                              )}
+                              {hasA && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                                  ✨ After
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Aksi */}
@@ -1704,6 +1727,98 @@ export default function ProgramsPage() {
                     <p className="whitespace-pre-wrap mt-0.5 text-slate-600">{selectedParticipant.claim_notes}</p>
                   </div>
                 )}
+
+                {/* Foto Before & After Toko */}
+                {(() => {
+                  let beforeUrl = selectedParticipant.photo_before_url || null;
+                  let afterUrl = selectedParticipant.photo_after_url || null;
+                  if (selectedParticipant.claim_notes) {
+                    if (!beforeUrl) {
+                      const mb = selectedParticipant.claim_notes.match(/\[BEFORE_URL:\s*([^\]\s]+)\]/i);
+                      if (mb) beforeUrl = mb[1].trim();
+                    }
+                    if (!afterUrl) {
+                      const ma = selectedParticipant.claim_notes.match(/\[AFTER_URL:\s*([^\]\s]+)\]/i);
+                      if (ma) afterUrl = ma[1].trim();
+                    }
+                    if (!beforeUrl || !afterUrl) {
+                      const mm = selectedParticipant.claim_notes.match(/__METADATA__:(.+)$/m);
+                      if (mm) {
+                        try {
+                          const meta = JSON.parse(mm[1].trim());
+                          if (!beforeUrl && meta.photo_before_url) beforeUrl = meta.photo_before_url;
+                          if (!afterUrl && meta.photo_after_url) afterUrl = meta.photo_after_url;
+                        } catch (e) {}
+                      }
+                    }
+                  }
+
+                  if (!beforeUrl && !afterUrl) return null;
+
+                  return (
+                    <div className="mt-3 pt-3 border-t border-slate-200">
+                      <p className="text-xs font-bold text-slate-800 mb-2">📸 DOKUMENTASI FOTO TOKO:</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {beforeUrl ? (
+                          <div>
+                            <p className="text-[11px] font-bold text-emerald-700 mb-1 flex items-center gap-1">
+                              📷 Foto BEFORE (Lokasi)
+                            </p>
+                            <a
+                              href={beforeUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block rounded-lg overflow-hidden border border-slate-200 relative aspect-video bg-slate-100 group"
+                              title="Klik untuk melihat foto ukuran penuh"
+                            >
+                              <img
+                                src={beforeUrl}
+                                alt="Foto Before"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                              />
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[11px] font-semibold transition-opacity">
+                                Buka Foto Penuh ↗
+                              </div>
+                            </a>
+                          </div>
+                        ) : (
+                          <div className="p-3 border border-dashed border-slate-200 rounded-lg text-center text-slate-400 text-[11px] flex items-center justify-center">
+                            Foto BEFORE belum ada
+                          </div>
+                        )}
+
+                        {afterUrl ? (
+                          <div>
+                            <p className="text-[11px] font-bold text-blue-700 mb-1 flex items-center gap-1">
+                              ✨ Foto AFTER (Dipajang)
+                            </p>
+                            <a
+                              href={afterUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block rounded-lg overflow-hidden border border-slate-200 relative aspect-video bg-slate-100 group"
+                              title="Klik untuk melihat foto ukuran penuh"
+                            >
+                              <img
+                                src={afterUrl}
+                                alt="Foto After"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                              />
+                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[11px] font-semibold transition-opacity">
+                                Buka Foto Penuh ↗
+                              </div>
+                            </a>
+                          </div>
+                        ) : (
+                          <div className="p-3 border border-dashed border-amber-300 rounded-lg text-center text-amber-700 bg-amber-50 text-[11px] flex flex-col justify-center items-center">
+                            <span>⏳ Menunggu Foto AFTER</span>
+                            <span className="text-[10px] text-amber-600 mt-0.5">Setelah barang tiba</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>
