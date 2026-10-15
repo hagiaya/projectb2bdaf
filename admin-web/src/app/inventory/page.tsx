@@ -28,11 +28,18 @@ import {
   Sliders, 
   Package,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Truck,
+  DollarSign,
+  Menu
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ProductImage from '@/components/ProductImage';
 import StockReportTab from '@/components/inventory/StockReportTab';
+import WarehouseTransferTab from '@/components/inventory/WarehouseTransferTab';
+import StockAdjustmentTab from '@/components/inventory/StockAdjustmentTab';
+import PriceAdjustmentTab from '@/components/inventory/PriceAdjustmentTab';
+import InventoryReportsTab, { ERPReportType } from '@/components/inventory/InventoryReportsTab';
 
 interface Category {
   id: string;
@@ -64,13 +71,21 @@ interface StockLog {
   created_at: string;
 }
 
+export type InventoryTabType = 'stock' | 'transfer' | 'adjustment' | 'price' | 'report' | 'restock';
+
 function InventoryContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const initialTab: 'stock' | 'restock' | 'report' = 
-    tabParam === 'restock' ? 'restock' : tabParam === 'report' ? 'report' : 'stock';
+  const initialTab: InventoryTabType = 
+    tabParam === 'restock' ? 'restock' :
+    tabParam === 'transfer' ? 'transfer' :
+    tabParam === 'adjustment' ? 'adjustment' :
+    tabParam === 'price' ? 'price' :
+    tabParam === 'report' ? 'report' : 'stock';
   
-  const [activeTab, setActiveTab] = useState<'stock' | 'restock' | 'report'>(initialTab);
+  const [activeTab, setActiveTab] = useState<InventoryTabType>(initialTab);
+  const [selectedERPReport, setSelectedERPReport] = useState<ERPReportType>('LAPORAN_PERSEDIAAN_BARANG');
+  const [isERPMenuOpen, setIsERPMenuOpen] = useState(false);
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -164,12 +179,19 @@ function InventoryContent() {
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab === 'restock') {
-      setActiveTab('restock');
-    } else if (tab === 'report') {
+    const rep = searchParams.get('report') as ERPReportType;
+    if (rep) {
+      setSelectedERPReport(rep);
       setActiveTab('report');
-    } else if (tab === 'stock') {
-      setActiveTab('stock');
+    } else if (
+      tab === 'transfer' ||
+      tab === 'adjustment' ||
+      tab === 'price' ||
+      tab === 'report' ||
+      tab === 'restock' ||
+      tab === 'stock'
+    ) {
+      setActiveTab(tab);
     }
   }, [searchParams]);
 
@@ -448,7 +470,17 @@ function InventoryContent() {
             </div>
             <div>
               <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-                {activeTab === 'restock' ? 'Restok Produk' : activeTab === 'report' ? 'Laporan Riwayat Mutasi Stok' : 'Manajemen Stok'}
+                {activeTab === 'restock'
+                  ? 'Restok Produk'
+                  : activeTab === 'transfer'
+                  ? 'Transfer Antar Gudang'
+                  : activeTab === 'adjustment'
+                  ? 'Penyesuaian Persediaan (Opname)'
+                  : activeTab === 'price'
+                  ? 'Penyesuaian Harga Produk'
+                  : activeTab === 'report'
+                  ? 'Pusat Laporan Persediaan ERP'
+                  : 'Manajemen Persediaan & Stok'}
               </h1>
               <div className="flex flex-wrap items-center gap-2 mt-0.5">
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
@@ -471,14 +503,109 @@ function InventoryContent() {
           <p className="text-sm text-slate-500 font-medium">
             {activeTab === 'restock'
               ? 'Kelola pengisian restok produk dengan filter dan pengelompokan rapi per kategori.'
+              : activeTab === 'transfer'
+              ? 'Pindahkan stok antar gudang pusat, cabang, toko/display, dan transit dengan cetak surat jalan.'
+              : activeTab === 'adjustment'
+              ? 'Catat stock opname fisik, hitung selisih kuantitas dan nilai rupiah, serta audit otomatis.'
+              : activeTab === 'price'
+              ? 'Sesuaikan harga jual produk karena kurs, principal, atau promo dengan update katalog live.'
               : activeTab === 'report'
-              ? 'Laporan historis barang yang dilakukan penambahan dan pengurangan stok per bulan / periode.'
+              ? 'Pusat laporan lengkap persediaan awal, mutasi, kartu stok, historis barang, dan status S/N.'
               : 'Pantau stok live dari Master Produk, mutasi barang, dan riwayat penyesuaian per produk.'}
           </p>
         </div>
 
         {/* TOP ACTION BUTTONS */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* TOMBOL MENU PERSEDIAAN ERP POPUP (MENIRU MENU FOTO USER) */}
+          <div className="relative">
+            <button
+              onClick={() => setIsERPMenuOpen(!isERPMenuOpen)}
+              className="bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-md flex items-center gap-2 text-sm"
+            >
+              <Menu size={16} />
+              <span>Menu Persediaan ERP</span>
+              <ChevronDown size={14} className={isERPMenuOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
+            </button>
+
+            {isERPMenuOpen && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setIsERPMenuOpen(false)} 
+                />
+                <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-2xl shadow-2xl z-50 py-2 text-xs divide-y divide-gray-100 dark:divide-zinc-800 animate-in fade-in zoom-in-95">
+                  <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30">
+                    Transaksi Persediaan
+                  </div>
+                  <div className="py-1">
+                    <button
+                      onClick={() => {
+                        setActiveTab('transfer');
+                        setIsERPMenuOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-emerald-50 dark:hover:bg-zinc-800 font-semibold text-gray-800 dark:text-zinc-200 flex items-center justify-between"
+                    >
+                      <span>Transfer Gudang</span>
+                      <Truck size={14} className="text-gray-400" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveTab('adjustment');
+                        setIsERPMenuOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-emerald-50 dark:hover:bg-zinc-800 font-semibold text-gray-800 dark:text-zinc-200 flex items-center justify-between"
+                    >
+                      <span>Penyesuaian Persediaan</span>
+                      <Sliders size={14} className="text-gray-400" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveTab('price');
+                        setIsERPMenuOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-emerald-50 dark:hover:bg-zinc-800 font-semibold text-gray-800 dark:text-zinc-200 flex items-center justify-between"
+                    >
+                      <span>Penyesuaian Harga</span>
+                      <DollarSign size={14} className="text-gray-400" />
+                    </button>
+                  </div>
+
+                  <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30">
+                    Laporan Persediaan Lengkap
+                  </div>
+                  <div className="py-1 max-h-64 overflow-y-auto">
+                    {[
+                      { id: 'LAPORAN_PERSEDIAAN_AWAL', label: 'Laporan Persediaan Awal' },
+                      { id: 'LAPORAN_PERSEDIAAN_BARANG', label: 'Laporan Persediaan Barang' },
+                      { id: 'LAPORAN_MUTASI_PERSEDIAAN', label: 'Laporan Mutasi Persediaan' },
+                      { id: 'LAPORAN_KARTU_STOCK', label: 'Laporan Kartu Stock' },
+                      { id: 'LAPORAN_HISTORIS_BARANG', label: 'Laporan Historis Barang' },
+                      { id: 'LAPORAN_STATUS_SN', label: 'Laporan Status S/N' },
+                      { id: 'LAPORAN_TRANSFER_GUDANG', label: 'Laporan Transfer Gudang' },
+                      { id: 'LAPORAN_REKAP_TRANSFER', label: 'Laporan Rekap Transfer Gudang' },
+                      { id: 'LAPORAN_PENYESUAIAN_PERSEDIAAN', label: 'Laporan Penyesuaian Persediaan' },
+                      { id: 'LAPORAN_PENYESUAIAN_HARGA', label: 'Laporan Penyesuaian Harga' },
+                    ].map((rep) => (
+                      <button
+                        key={rep.id}
+                        onClick={() => {
+                          setSelectedERPReport(rep.id as ERPReportType);
+                          setActiveTab('report');
+                          setIsERPMenuOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-1.5 hover:bg-emerald-50 dark:hover:bg-zinc-800 text-gray-700 dark:text-zinc-300 font-medium flex items-center justify-between"
+                      >
+                        <span>{rep.label}</span>
+                        <FileText size={12} className="text-gray-400" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           <button 
             onClick={() => fetchInitialData()}
             disabled={isLoading}
@@ -486,18 +613,6 @@ function InventoryContent() {
             title="Muat Ulang Data"
           >
             <RefreshCw size={17} className={isLoading ? 'animate-spin text-emerald-600' : ''} />
-          </button>
-
-          <button 
-            onClick={() => setActiveTab(activeTab === 'report' ? 'stock' : 'report')}
-            className={`px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm flex items-center gap-2 text-sm ${
-              activeTab === 'report'
-                ? 'bg-indigo-600 text-white shadow-indigo-600/20 ring-2 ring-indigo-400/40'
-                : 'bg-white border border-slate-200 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700'
-            }`}
-          >
-            <FileText size={16} strokeWidth={2.2} className={activeTab === 'report' ? 'text-white' : 'text-indigo-600'} />
-            {activeTab === 'report' ? 'Tutup Laporan' : 'Laporan Mutasi Stok'}
           </button>
 
           <button 
@@ -525,61 +640,123 @@ function InventoryContent() {
         </div>
       </div>
 
-      {/* STATISTIK RINGKAS STOK */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3.5">
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-            <Boxes size={22} />
+      {/* STATISTIK RINGKAS STOK (KHUSUS TAB STOK & RESTOK) */}
+      {(activeTab === 'stock' || activeTab === 'restock') && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3.5">
+            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+              <Boxes size={22} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Produk Master</p>
+              <p className="text-2xl font-black text-slate-900">{totalSku} <span className="text-xs font-semibold text-slate-400">SKU</span></p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Produk Master</p>
-            <p className="text-2xl font-black text-slate-900">{totalSku} <span className="text-xs font-semibold text-slate-400">SKU</span></p>
+
+          <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3.5">
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+              <Package size={22} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Unit Fisik</p>
+              <p className="text-2xl font-black text-slate-900">{totalUnits.toLocaleString('id-ID')} <span className="text-xs font-semibold text-slate-400">Pcs</span></p>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3.5">
+            <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+              <AlertTriangle size={22} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Butuh Restok (≤ 20)</p>
+              <p className="text-2xl font-black text-amber-600">{lowStockCount} <span className="text-xs font-semibold text-slate-400">SKU</span></p>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3.5">
+            <div className="p-3 bg-red-50 text-red-600 rounded-xl">
+              <AlertCircle size={22} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Stok Kosong (0)</p>
+              <p className="text-2xl font-black text-red-600">{outOfStockCount} <span className="text-xs font-semibold text-slate-400">SKU</span></p>
+            </div>
           </div>
         </div>
+      )}
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3.5">
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
-            <Package size={22} />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Unit Fisik</p>
-            <p className="text-2xl font-black text-slate-900">{totalUnits.toLocaleString('id-ID')} <span className="text-xs font-semibold text-slate-400">Pcs</span></p>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3.5">
-          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-            <AlertTriangle size={22} />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Butuh Restok (≤ 20)</p>
-            <p className="text-2xl font-black text-amber-600">{lowStockCount} <span className="text-xs font-semibold text-slate-400">SKU</span></p>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3.5">
-          <div className="p-3 bg-red-50 text-red-600 rounded-xl">
-            <AlertCircle size={22} />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Stok Kosong (0)</p>
-            <p className="text-2xl font-black text-red-600">{outOfStockCount} <span className="text-xs font-semibold text-slate-400">SKU</span></p>
-          </div>
-        </div>
-      </div>
-
-      {/* TAB NAVIGATOR: RESTOK PRODUK vs MANAJEMEN STOK vs LAPORAN */}
+      {/* TAB NAVIGATOR: PERSEDIAAN ERP SUITE */}
       <div className="flex flex-wrap items-center gap-2 mb-6 border-b border-slate-200/80 pb-3">
         <button
+          onClick={() => setActiveTab('stock')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+            activeTab === 'stock'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <Archive size={16} strokeWidth={2.5} />
+          Stok & Katalog
+        </button>
+
+        <button
+          onClick={() => setActiveTab('transfer')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+            activeTab === 'transfer'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <Truck size={16} strokeWidth={2.5} />
+          Transfer Gudang
+        </button>
+
+        <button
+          onClick={() => setActiveTab('adjustment')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+            activeTab === 'adjustment'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <Sliders size={16} strokeWidth={2.5} />
+          Penyesuaian Persediaan
+        </button>
+
+        <button
+          onClick={() => setActiveTab('price')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+            activeTab === 'price'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <DollarSign size={16} strokeWidth={2.5} />
+          Penyesuaian Harga
+        </button>
+
+        <button
+          onClick={() => setActiveTab('report')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+            activeTab === 'report'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          <FileText size={16} strokeWidth={2.5} />
+          Laporan Persediaan ERP
+        </button>
+
+        <button
           onClick={() => setActiveTab('restock')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
             activeTab === 'restock'
               ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
               : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
           }`}
         >
           <ArrowDownToLine size={16} strokeWidth={2.5} />
-          Restok Produk (Per Kategori)
+          Restok Cepat
           {lowStockCount > 0 && (
             <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold ${
               activeTab === 'restock' ? 'bg-white text-emerald-800' : 'bg-red-500 text-white'
@@ -588,34 +765,10 @@ function InventoryContent() {
             </span>
           )}
         </button>
-
-        <button
-          onClick={() => setActiveTab('stock')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
-            activeTab === 'stock'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-          }`}
-        >
-          <Archive size={16} strokeWidth={2.5} />
-          Manajemen Stok & Monitoring
-        </button>
-
-        <button
-          onClick={() => setActiveTab('report')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${
-            activeTab === 'report'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-          }`}
-        >
-          <FileText size={16} strokeWidth={2.5} />
-          Laporan Riwayat Mutasi Stok
-        </button>
       </div>
 
       {/* FILTER CONTROL BAR UNTUK TAB STOK & RESTOK */}
-      {activeTab !== 'report' && (
+      {(activeTab === 'stock' || activeTab === 'restock') && (
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-6 space-y-3">
         <div className="flex flex-col md:flex-row gap-3">
           {/* SEARCH INPUT */}
@@ -727,16 +880,33 @@ function InventoryContent() {
       )}
 
       {/* ======================================================== */}
-      {/* KONTEN TAB: REPORT vs RESTOK vs STOK                     */}
+      {/* KONTEN TAB: TRANSFER vs ADJ vs PRICE vs REPORT vs STOK    */}
       {/* ======================================================== */}
-      {activeTab === 'report' ? (
-        <StockReportTab
+      {activeTab === 'transfer' ? (
+        <WarehouseTransferTab
+          products={products}
+          adminEmail={adminEmail}
+          onRefreshStock={() => fetchInitialData(true)}
+        />
+      ) : activeTab === 'adjustment' ? (
+        <StockAdjustmentTab
+          products={products}
+          adminEmail={adminEmail}
+          onRefreshStock={() => fetchInitialData(true)}
+        />
+      ) : activeTab === 'price' ? (
+        <PriceAdjustmentTab
+          products={products}
+          adminEmail={adminEmail}
+          onRefreshStock={() => fetchInitialData(true)}
+        />
+      ) : activeTab === 'report' ? (
+        <InventoryReportsTab
+          products={products}
           categories={categories}
-          onOpenProductHistory={(product) => {
-            const found = products.find(p => p.id === product.id) || product;
-            openHistoryModal(found);
-          }}
-          refreshTrigger={refreshLogsCount}
+          adminEmail={adminEmail}
+          selectedReport={selectedERPReport}
+          onReportChange={(rep) => setSelectedERPReport(rep)}
         />
       ) : activeTab === 'restock' && isGroupedByCategory ? (
         <div className="space-y-6">

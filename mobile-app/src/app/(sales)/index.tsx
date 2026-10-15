@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, RefreshControl, Modal, TextInput, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, RefreshControl, Modal, TextInput, Platform, Share, Linking } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { router } from 'expo-router';
@@ -269,11 +269,21 @@ export default function SalesHome() {
   const handleCheckIn = async () => {
     const now = new Date();
     const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
 
-    if (currentHour < 10 || currentHour >= 19) {
+    // Presensi dibuka mulai pukul 09:00 WIB hingga 19:00 WIB
+    if (currentHour < 9) {
       Alert.alert(
-        'Di Luar Jam Kerja',
-        'Presensi masuk (Check-in) hanya dapat dilakukan antara pukul 10:00 hingga 19:00 WIB.'
+        'Presensi Belum Dibuka',
+        'Presensi masuk (Check-in) baru dibuka mulai pukul 09:00 WIB. Jam masuk standar adalah pukul 10:00 WIB.'
+      );
+      return;
+    }
+
+    if (currentHour >= 19) {
+      Alert.alert(
+        'Presensi Ditutup',
+        'Batas waktu presensi masuk (Check-in) adalah pukul 19:00 WIB.'
       );
       return;
     }
@@ -282,7 +292,8 @@ export default function SalesHome() {
     try {
       const today = now.toISOString().split('T')[0];
       const checkInTime = now.toISOString();
-      const isLate = currentHour >= 10 && now.getMinutes() > 0;
+      // Terlambat jika lewat jam 10:00 (jam > 10 atau jam == 10 dan menit > 0)
+      const isLate = currentHour > 10 || (currentHour === 10 && currentMinute > 0);
 
       if (!salesData?.id || salesData.id === 'dummy-sales-id') {
         setTodayAttendance({
@@ -292,7 +303,12 @@ export default function SalesHome() {
           is_late: isLate,
           status: 'PRESENT',
         });
-        Alert.alert('Sukses', 'Berhasil Check-in hari ini!');
+        Alert.alert(
+          'Sukses Check-in',
+          isLate
+            ? 'Presensi berhasil dicatat (Status: Terlambat, lewat pukul 10:00 WIB).'
+            : 'Presensi berhasil dicatat! Status: Tepat Waktu (antara 09:00 - 10:00 WIB).'
+        );
         setLoading(false);
         return;
       }
@@ -309,7 +325,12 @@ export default function SalesHome() {
 
       if (error) throw error;
 
-      Alert.alert('Sukses', 'Berhasil Check-in hari ini!');
+      Alert.alert(
+        'Sukses Check-in',
+        isLate
+          ? 'Presensi berhasil dicatat (Status: Terlambat, lewat pukul 10:00 WIB).'
+          : 'Presensi berhasil dicatat! Status: Tepat Waktu (antara 09:00 - 10:00 WIB).'
+      );
       fetchDashboardData();
     } catch (err: any) {
       Alert.alert('Error Check-in', err.message || 'Gagal menyimpan presensi.');
@@ -458,6 +479,86 @@ export default function SalesHome() {
     }
   };
 
+  const generateAttendanceReportText = () => {
+    if (!todayAttendance) return '';
+    const dateStr = new Date().toLocaleDateString('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    const inTime = todayAttendance.check_in_time
+      ? new Date(todayAttendance.check_in_time).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      : '-';
+    const outTime = todayAttendance.check_out_time
+      ? new Date(todayAttendance.check_out_time).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      : 'Sedang Bertugas';
+    const salesName = profile?.full_name || 'Sales DAP';
+    const regionName = salesData?.regions?.name || 'Area DAP';
+    const lateStatus = todayAttendance.is_late ? '⚠️ Terlambat' : '✅ Tepat Waktu';
+    const statusText = todayAttendance.check_out_time ? '✅ Presensi Lengkap' : '🟡 Sedang Bertugas Lapangan';
+
+    return `📋 *LAPORAN PRESENSI HARIAN SALES DAP*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `👤 *Nama Sales*: ${salesName}\n` +
+      `📍 *Wilayah*: ${regionName}\n` +
+      `📅 *Tanggal*: ${dateStr}\n\n` +
+      `⏰ *Check-in Masuk*: ${inTime} WIB (${lateStatus})\n` +
+      `⏰ *Check-out Pulang*: ${outTime}${todayAttendance.check_out_time ? ' WIB' : ''}\n` +
+      `🏢 *Display Produk*: ${todayAttendance.unit_percentage ?? 0}%\n` +
+      `🏬 *Realisasi Visit*: ${stats.completedVisits} Outlet Selesai\n` +
+      `🏪 *Total Toko Binaan*: ${stats.totalDealers} Toko\n` +
+      (todayAttendance.notes ? `📝 *Catatan*: ${todayAttendance.notes}\n` : '') +
+      `📌 *Status*: ${statusText}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `*PT DISTRIBUSI AKSESORIS PRIMA*`;
+  };
+
+  const handleShareAttendance = async () => {
+    const text = generateAttendanceReportText();
+    if (!text) {
+      Alert.alert('Info', 'Belum ada data presensi untuk dibagikan.');
+      return;
+    }
+    try {
+      if (Platform.OS === 'web') {
+        if (typeof navigator !== 'undefined' && (navigator as any).share) {
+          await (navigator as any).share({ title: 'Laporan Presensi Sales DAP', text });
+        } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(text);
+          Alert.alert('Teks Disalin', 'Laporan presensi berhasil disalin ke clipboard.');
+        }
+      } else {
+        await Share.share({
+          title: 'Laporan Presensi Sales DAP',
+          message: text,
+        });
+      }
+    } catch (err: any) {
+      console.error('Share error:', err);
+    }
+  };
+
+  const handleShareAttendanceWhatsApp = async () => {
+    const text = generateAttendanceReportText();
+    if (!text) {
+      Alert.alert('Info', 'Belum ada data presensi untuk dibagikan.');
+      return;
+    }
+    const url = `whatsapp://send?text=${encodeURIComponent(text)}`;
+    const webUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        await Linking.openURL(webUrl);
+      }
+    } catch {
+      await Linking.openURL(webUrl);
+    }
+  };
+
   const formatRupiah = (number: number) => {
     return new Intl.NumberFormat('id-ID', {
       style: 'currency',
@@ -578,7 +679,7 @@ export default function SalesHome() {
             </View>
             <Text style={styles.attTitle}>Belum Presensi Masuk</Text>
             <Text style={styles.attendanceDesc}>
-              Batas waktu jam kerja adalah pukul 10:00 - 19:00 WIB. Presensi di atas jam 10:00 terhitung terlambat. Batas upload paling terlambat pulang yakni jam 21:00 (Jam 9 Malam).
+              Presensi masuk dibuka mulai pukul 09:00 WIB. Jam masuk standar pukul 10:00 WIB (presensi lewat pukul 10:00 terhitung Terlambat). Batas upload foto kepulangan maksimal jam 21:00 WIB.
             </Text>
             <TouchableOpacity style={styles.checkInBtn} onPress={handleCheckIn}>
               <Feather name="log-in" size={18} color="white" />
@@ -592,9 +693,13 @@ export default function SalesHome() {
               <Text style={styles.attendanceStatus}>
                 {todayAttendance.check_out_time ? 'Presensi Hari Ini Selesai' : 'Sedang Bertugas'}
               </Text>
-              {todayAttendance.is_late && (
+              {todayAttendance.is_late ? (
                 <View style={styles.lateBadge}>
-                  <Text style={styles.lateText}>Terlambat</Text>
+                  <Text style={styles.lateText}>Terlambat (&gt; 10:00)</Text>
+                </View>
+              ) : (
+                <View style={[styles.lateBadge, { backgroundColor: '#dcfce7' }]}>
+                  <Text style={[styles.lateText, { color: '#15803d' }]}>Tepat Waktu</Text>
                 </View>
               )}
             </View>
@@ -676,6 +781,26 @@ export default function SalesHome() {
                 </TouchableOpacity>
               </View>
             )}
+
+            {/* Bagikan Presensi Sales */}
+            <View style={styles.shareAttContainer}>
+              <TouchableOpacity
+                style={styles.shareAttBtnWa}
+                onPress={handleShareAttendanceWhatsApp}
+                activeOpacity={0.8}
+              >
+                <Feather name="message-circle" size={15} color="white" />
+                <Text style={styles.shareAttBtnWaText}>Bagikan via WA</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.shareAttBtnNative}
+                onPress={handleShareAttendance}
+                activeOpacity={0.8}
+              >
+                <Feather name="share-2" size={15} color="#0f766e" />
+                <Text style={styles.shareAttBtnNativeText}>Bagikan Presensi</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </View>
@@ -1973,5 +2098,51 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: '#475569',
+  },
+  shareAttContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  shareAttBtnWa: {
+    flex: 1.2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#16a34a',
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 6,
+    shadowColor: '#16a34a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  shareAttBtnWaText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: 'white',
+  },
+  shareAttBtnNative: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 6,
+  },
+  shareAttBtnNativeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#15803d',
   },
 });

@@ -15,8 +15,8 @@ const IOS_EXTRA = 8;
 
 export function useSafeBottom(extra = 0): number {
   const insets = useSafeAreaInsets();
-  // On Android, insets.bottom is usually correct for edge-to-edge. If 0, fallback to 24 just in case.
-  const baseBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 24) : insets.bottom;
+  // On Android, insets.bottom is usually correct for edge-to-edge. If 0 or small (e.g. inside Modal dialogs), fallback to 48 for standard 3-button nav bar.
+  const baseBottom = Platform.OS === 'android' ? Math.max(insets.bottom, 48) : insets.bottom;
   return baseBottom + extra;
 }
 

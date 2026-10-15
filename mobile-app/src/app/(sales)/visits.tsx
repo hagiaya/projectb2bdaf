@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Linking, Platform, Share } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { router } from 'expo-router';
@@ -8,6 +8,7 @@ export default function SalesVisits() {
   const [loading, setLoading] = useState(true);
   const [dealers, setDealers] = useState<any[]>([]);
   const [salesId, setSalesId] = useState<string | null>(null);
+  const [salesName, setSalesName] = useState('Sales DAP');
   const [filterTab, setFilterTab] = useState<'assigned' | 'history'>('assigned');
   const [visitHistory, setVisitHistory] = useState<any[]>([]);
 
@@ -26,12 +27,15 @@ export default function SalesVisits() {
       // Real User Fetch
       const { data: sData } = await supabase
         .from('sales')
-        .select('id')
+        .select('id, profiles(full_name)')
         .eq('profile_id', user.id)
         .maybeSingle();
 
       if (sData) {
         setSalesId(sData.id);
+        if ((sData as any).profiles?.full_name) {
+          setSalesName((sData as any).profiles.full_name);
+        }
 
         // 1. Fetch Assigned Dealers
         const { data: dealerData, error } = await supabase
@@ -139,6 +143,89 @@ export default function SalesVisits() {
     }
   };
 
+  const handleShareStoreVisit = async (dealer: any) => {
+    const lastVisit = dealer.lastVisit;
+    let visitStatusDesc = 'Belum dikunjungi periode ini';
+    if (lastVisit) {
+      if (lastVisit.status === 'IN_PROGRESS') {
+        visitStatusDesc = 'Sedang Berlangsung Kunjungan';
+      } else if (lastVisit.status === 'COMPLETED') {
+        const lastDate = new Date(lastVisit.created_at).toLocaleDateString('id-ID');
+        visitStatusDesc = `Selesai Kunjungan (${lastDate})`;
+      }
+    }
+
+    const text = `📍 *LAPORAN STATUS KUNJUNGAN TOKO DAP*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `👤 *Sales Lapangan*: ${salesName}\n` +
+      `🏪 *Nama Toko*: ${dealer.store_name}\n` +
+      `📌 *Alamat*: ${dealer.address || '-'}\n` +
+      `📊 *Status Visit*: ${visitStatusDesc}\n` +
+      `📅 *Tanggal Laporan*: ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `*PT DISTRIBUSI AKSESORIS PRIMA*`;
+
+    try {
+      if (Platform.OS === 'web') {
+        if (typeof navigator !== 'undefined' && (navigator as any).share) {
+          await (navigator as any).share({ title: `Status Kunjungan ${dealer.store_name}`, text });
+        } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(text);
+          Alert.alert('Teks Disalin', 'Laporan status kunjungan berhasil disalin ke clipboard.');
+        }
+      } else {
+        await Share.share({
+          title: `Status Kunjungan ${dealer.store_name}`,
+          message: text,
+        });
+      }
+    } catch (e) {
+      console.error('Share store error:', e);
+    }
+  };
+
+  const handleShareHistoryVisit = async (item: any) => {
+    const inTime = item.check_in_time
+      ? new Date(item.check_in_time).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      : '-';
+    const outTime = item.check_out_time
+      ? new Date(item.check_out_time).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      : '-';
+    const dateStr = item.check_in_time
+      ? new Date(item.check_in_time).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      : '-';
+
+    const text = `📋 *LAPORAN HASIL KUNJUNGAN OUTLET DAP*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `👤 *Sales Lapangan*: ${salesName}\n` +
+      `🏪 *Nama Toko*: ${item.store_name}\n` +
+      `📅 *Tanggal Visit*: ${dateStr}\n` +
+      `⏰ *Durasi/Jam*: ${inTime} s/d ${outTime} WIB\n` +
+      `🤝 *Bertemu Owner*: ${item.owner_met ? '✅ Ya, Bertemu' : '❌ Tidak Bertemu'}\n` +
+      `🏢 *Ketersediaan Display*: ${item.unit_percentage ?? 0}%\n` +
+      `📌 *Status*: SELESAI DIKUNJUNGI\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `*PT DISTRIBUSI AKSESORIS PRIMA*`;
+
+    try {
+      if (Platform.OS === 'web') {
+        if (typeof navigator !== 'undefined' && (navigator as any).share) {
+          await (navigator as any).share({ title: `Hasil Kunjungan ${item.store_name}`, text });
+        } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(text);
+          Alert.alert('Teks Disalin', 'Laporan hasil kunjungan berhasil disalin.');
+        }
+      } else {
+        await Share.share({
+          title: `Hasil Kunjungan ${item.store_name}`,
+          message: text,
+        });
+      }
+    } catch (e) {
+      console.error('Share history error:', e);
+    }
+  };
+
   const renderDealerItem = ({ item }: { item: any }) => {
     const lastVisit = item.lastVisit;
     let isLocked = false;
@@ -222,6 +309,15 @@ export default function SalesVisits() {
             <Feather name="file-text" size={14} color="#8ec44a" />
             <Text style={styles.btnOrderText}>Pesanan</Text>
           </TouchableOpacity>
+
+          {/* Share Store Visit Status */}
+          <TouchableOpacity
+            style={styles.btnShare}
+            onPress={() => handleShareStoreVisit(item)}
+          >
+            <Feather name="share-2" size={14} color="#0284c7" />
+            <Text style={styles.btnShareText}>Bagikan</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -242,10 +338,19 @@ export default function SalesVisits() {
           {item.check_out_time ? new Date(item.check_out_time).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
         </Text>
         <View style={styles.historyFooter}>
-          <Text style={styles.historyDetail}>Unit Toko: {item.unit_percentage ?? '-'}%</Text>
-          <Text style={styles.historyDetail}>
-            {item.owner_met ? '✓ Bertemu Owner' : '✗ Tidak Bertemu Owner'}
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.historyDetail}>Unit Toko: {item.unit_percentage ?? '-'}%</Text>
+            <Text style={styles.historyDetail}>
+              {item.owner_met ? '✓ Bertemu Owner' : '✗ Tidak Bertemu Owner'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.historyShareBtn}
+            onPress={() => handleShareHistoryVisit(item)}
+          >
+            <Feather name="share-2" size={13} color="#15803d" />
+            <Text style={styles.historyShareBtnText}>Bagikan Laporan</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -438,6 +543,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   btnOrderText: { color: '#16a34a', fontWeight: '700', fontSize: 13 },
+  btnShare: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  btnShareText: { color: '#0284c7', fontWeight: '700', fontSize: 13 },
   historyCard: {
     backgroundColor: 'white',
     padding: 16,
@@ -451,8 +568,31 @@ const styles = StyleSheet.create({
   historyBadge: { backgroundColor: '#dcfce7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
   historyBadgeText: { fontSize: 10, fontWeight: '800', color: '#15803d' },
   historyTime: { fontSize: 12, color: '#64748b', marginTop: 4, marginBottom: 8 },
-  historyFooter: { flexDirection: 'row', gap: 16, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f8fafc' },
+  historyFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f8fafc',
+  },
   historyDetail: { fontSize: 12, color: '#475569', fontWeight: '500' },
+  historyShareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  historyShareBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803d',
+  },
   emptyContainer: { alignItems: 'center', marginTop: 60, paddingHorizontal: 30 },
   emptyTitle: { fontSize: 16, fontWeight: 'bold', color: '#334155', marginTop: 16 },
   emptyText: { textAlign: 'center', color: '#94a3b8', marginTop: 8, lineHeight: 20, fontSize: 13 },

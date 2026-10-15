@@ -55,8 +55,15 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanPhone = normalizePhone(phone_number);
-    const roleUpper = role === 'SPV' ? 'SPV' : 'SALES';
+    const validRoles = ['SALES', 'SPV', 'WAREHOUSE', 'STAFF'];
+    const roleUpper = validRoles.includes(String(role).toUpperCase()) ? String(role).toUpperCase() : 'SALES';
     const isSpv = roleUpper === 'SPV';
+    const isFieldSales = roleUpper === 'SALES';
+
+    const roleLabel = 
+      roleUpper === 'SPV' ? 'Supervisor (SPV)' :
+      roleUpper === 'WAREHOUSE' ? 'Staf Gudang' :
+      roleUpper === 'STAFF' ? 'Staf Biasa / Kantor' : 'Sales Lapangan';
 
     // Format login email
     const finalEmail = (email && email.trim()) 
@@ -82,11 +89,11 @@ export async function POST(req: NextRequest) {
         p_region_id: region_id || null,
         p_spv_id: isSpv ? null : (spv_id || null),
         p_base_salary: isSpv ? 0 : Number(base_salary) || 0,
-        p_direct_commission_pct: Number(direct_commission_pct) || 0,
-        p_team_bonus_pct: Number(team_bonus_pct) || 0,
-        p_transport_allowance: isSpv ? 0 : Number(transport_allowance) || 0,
-        p_daily_visit_target: isSpv ? 0 : Number(daily_visit_target) || 6,
-        p_work_days_per_month: isSpv ? 0 : Number(work_days_per_month) || 26,
+        p_direct_commission_pct: isFieldSales ? Number(direct_commission_pct) || 0 : 0,
+        p_team_bonus_pct: isSpv ? Number(team_bonus_pct) || 0 : 0,
+        p_transport_allowance: isFieldSales ? Number(transport_allowance) || 0 : 0,
+        p_daily_visit_target: isFieldSales ? Number(daily_visit_target) || 6 : 0,
+        p_work_days_per_month: Number(work_days_per_month) || 26,
       });
 
       if (!rpcErr && rpcRes) {
@@ -95,7 +102,7 @@ export async function POST(req: NextRequest) {
             success: true,
             user_id: rpcRes.user_id,
             sales_id: rpcRes.sales_id,
-            message: `Akun ${isSpv ? 'Supervisor (SPV)' : 'Sales Lapangan'} "${full_name}" berhasil didaftarkan.`,
+            message: `Akun ${roleLabel} "${full_name}" berhasil didaftarkan.`,
           });
         } else if (rpcRes.error) {
           if (rpcRes.error.toLowerCase().includes('transport_allowance')) {

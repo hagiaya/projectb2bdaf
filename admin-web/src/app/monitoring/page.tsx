@@ -1,7 +1,26 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Activity, Search, Calendar, Clock, MapPin, CheckCircle, XCircle, FileText, Image as ImageIcon, ExternalLink, Filter, Check, X, Eye } from 'lucide-react';
+import { 
+  Activity, 
+  Search, 
+  Calendar, 
+  Clock, 
+  MapPin, 
+  CheckCircle, 
+  XCircle, 
+  FileText, 
+  Image as ImageIcon, 
+  ExternalLink, 
+  Filter, 
+  Check, 
+  X, 
+  Eye,
+  Users,
+  Award,
+  Package,
+  Briefcase
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function MonitoringPage() {
@@ -11,6 +30,7 @@ export default function MonitoringPage() {
   // Filter Date
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [attendanceRoleFilter, setAttendanceRoleFilter] = useState<'ALL' | 'SALES' | 'SPV' | 'WAREHOUSE' | 'STAFF'>('ALL');
 
   // Data States
   const [attendances, setAttendances] = useState<any[]>([]);
@@ -54,7 +74,8 @@ export default function MonitoringPage() {
             notes,
             sales (
               id,
-              profiles (full_name, phone_number)
+              is_spv,
+              profiles (full_name, phone_number, role)
             )
           `)
           .eq('attendance_date', selectedDate)
@@ -86,7 +107,8 @@ export default function MonitoringPage() {
             dealers (id, store_name, address),
             sales (
               id,
-              profiles (full_name, phone_number)
+              is_spv,
+              profiles (full_name, phone_number, role)
             )
           `)
           .gte('created_at', startOfDay)
@@ -111,7 +133,8 @@ export default function MonitoringPage() {
             created_at,
             sales (
               id,
-              profiles (full_name, phone_number)
+              is_spv,
+              profiles (full_name, phone_number, role)
             )
           `)
           .order('created_at', { ascending: false });
@@ -161,8 +184,57 @@ export default function MonitoringPage() {
     return `${Math.max(0, mins)} menit`;
   };
 
+  const getEmployeeRole = (salesItem: any): 'SALES' | 'SPV' | 'WAREHOUSE' | 'STAFF' => {
+    const rawRole = (salesItem?.profiles?.role || '').toUpperCase();
+    if (rawRole === 'WAREHOUSE' || rawRole === 'GUDANG') return 'WAREHOUSE';
+    if (rawRole === 'STAFF' || rawRole === 'OFFICE' || rawRole === 'KANTOR') return 'STAFF';
+    if (rawRole === 'SPV' || salesItem?.is_spv) return 'SPV';
+    return 'SALES';
+  };
+
+  const renderRoleBadge = (role: 'SALES' | 'SPV' | 'WAREHOUSE' | 'STAFF') => {
+    switch (role) {
+      case 'SPV':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-700">
+            <Award size={11} /> SPV
+          </span>
+        );
+      case 'WAREHOUSE':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800">
+            <Package size={11} /> Gudang
+          </span>
+        );
+      case 'STAFF':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-700">
+            <Briefcase size={11} /> Kantor
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800">
+            <Users size={11} /> Sales
+          </span>
+        );
+    }
+  };
+
+  const filteredAttendances = attendances.filter((att) => {
+    const role = getEmployeeRole(att.sales);
+    if (attendanceRoleFilter !== 'ALL' && role !== attendanceRoleFilter) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const name = (att.sales?.profiles?.full_name || '').toLowerCase();
+      const phone = (att.sales?.profiles?.phone_number || '').toLowerCase();
+      return name.includes(q) || phone.includes(q);
+    }
+    return true;
+  });
+
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50/50 p-8">
+    <div className="flex-1 overflow-y-auto bg-slate-50/50 p-4 md:p-8 min-w-0 max-w-full">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
         <div>
@@ -170,10 +242,10 @@ export default function MonitoringPage() {
             <div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl">
               <Activity size={24} />
             </div>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Monitoring Sales</h1>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Monitoring Karyawan</h1>
           </div>
           <p className="text-sm text-slate-500 font-medium">
-            Pantau kehadiran harian, kepatuhan jam kerja, verifikasi foto kunjungan lapangan, dan persetujuan cuti.
+            Pantau kehadiran harian seluruh personil (Sales, SPV, Gudang, Kantor). Jam masuk standar pukul 10:00 WIB (check-in dibuka sejak 09:00 WIB, lewat 10:00 terhitung Terlambat).
           </p>
         </div>
 
@@ -211,7 +283,7 @@ export default function MonitoringPage() {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <MapPin size={16} /> Log Kunjungan Toko ({visits.length})
+          <MapPin size={16} /> Log Kunjungan Toko (Sales Field) ({visits.length})
         </button>
 
         <button
@@ -226,7 +298,7 @@ export default function MonitoringPage() {
         </button>
       </div>
 
-      {/* TAB 1: Presensi Harian */}
+      {/* TAB 1: Presensi Harian Karyawan */}
       {activeTab === 'attendance' && (
         <div className="space-y-6">
           {/* Quick Metrics */}
@@ -236,7 +308,7 @@ export default function MonitoringPage() {
               <p className="text-2xl font-black text-slate-800 mt-1">{attendances.length}</p>
             </div>
             <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-              <p className="text-xs font-bold text-emerald-600 uppercase">Hadir Tepat Waktu</p>
+              <p className="text-xs font-bold text-emerald-600 uppercase">Hadir Tepat Waktu (09:00 - 10:00)</p>
               <p className="text-2xl font-black text-emerald-700 mt-1">
                 {attendances.filter((a) => !a.is_late).length}
               </p>
@@ -255,15 +327,55 @@ export default function MonitoringPage() {
             </div>
           </div>
 
+          {/* Filter Role & Search */}
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+            {/* Role Pills */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 uppercase mr-1">Jabatan:</span>
+              {[
+                { key: 'ALL', label: 'Semua Karyawan', count: attendances.length },
+                { key: 'SALES', label: 'Sales Lapangan', count: attendances.filter(a => getEmployeeRole(a.sales) === 'SALES').length },
+                { key: 'SPV', label: 'Supervisor / SPV', count: attendances.filter(a => getEmployeeRole(a.sales) === 'SPV').length },
+                { key: 'WAREHOUSE', label: 'Staf Gudang', count: attendances.filter(a => getEmployeeRole(a.sales) === 'WAREHOUSE').length },
+                { key: 'STAFF', label: 'Staf Kantor', count: attendances.filter(a => getEmployeeRole(a.sales) === 'STAFF').length },
+              ].map((pill) => (
+                <button
+                  key={pill.key}
+                  onClick={() => setAttendanceRoleFilter(pill.key as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    attendanceRoleFilter === pill.key
+                      ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {pill.label} ({pill.count})
+                </button>
+              ))}
+            </div>
+
+            {/* Search Box */}
+            <div className="relative min-w-[260px]">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                placeholder="Cari nama atau no. telepon..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-800 placeholder-slate-400"
+              />
+            </div>
+          </div>
+
           <div className="bg-white rounded-2xl shadow-sm border border-emerald-100/50 overflow-hidden">
-            <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto w-full">
+              <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
                 <tr className="bg-white text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
-                  <th className="p-5 font-semibold">Nama Sales</th>
+                  <th className="p-5 font-semibold">Nama Karyawan & Jabatan</th>
                   <th className="p-5 font-semibold">Nomor Kontak</th>
                   <th className="p-5 font-semibold">Jam Masuk</th>
                   <th className="p-5 font-semibold">Jam Pulang</th>
-                  <th className="p-5 font-semibold">Foto Selfie & 2 Display</th>
+                  <th className="p-5 font-semibold">Foto Selfie & Display</th>
                   <th className="p-5 font-semibold">Status Presensi</th>
                 </tr>
               </thead>
@@ -274,103 +386,113 @@ export default function MonitoringPage() {
                       Memuat presensi...
                     </td>
                   </tr>
-                ) : attendances.length === 0 ? (
+                ) : filteredAttendances.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="p-10 text-center text-gray-400">
-                      Tidak ada data presensi pada tanggal {selectedDate}.
+                      Tidak ada data presensi yang sesuai pada tanggal {selectedDate}.
                     </td>
                   </tr>
                 ) : (
-                  attendances.map((att) => (
-                    <tr key={att.id} className="hover:bg-slate-50/50">
-                      <td className="p-5 font-bold text-slate-900">
-                        {att.sales?.profiles?.full_name || 'Sales Representative'}
-                      </td>
-                      <td className="p-5 text-slate-600">{att.sales?.profiles?.phone_number || '-'}</td>
-                      <td className="p-5 font-bold text-slate-800">
-                        {att.check_in_time
-                          ? new Date(att.check_in_time).toLocaleTimeString('id-ID', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : '-'}
-                      </td>
-                      <td className="p-5 text-slate-600 font-medium">
-                        {att.check_out_time
-                          ? new Date(att.check_out_time).toLocaleTimeString('id-ID', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : <span className="text-amber-600 font-semibold text-xs">Belum Check-out</span>}
-                      </td>
-                      <td className="p-5">
-                        <div className="flex flex-col gap-1.5">
-                          <div className="flex items-center gap-1.5">
-                            {att.selfie_url && (
-                              <button
-                                onClick={() => setPreviewImageUrl(att.selfie_url)}
-                                className="group relative w-9 h-9 rounded-lg overflow-hidden border border-emerald-200 hover:ring-2 hover:ring-emerald-500 transition-all"
-                                title="Foto Selfie Pulang"
-                              >
-                                <img src={att.selfie_url} alt="Selfie" className="w-full h-full object-cover" />
-                                <span className="absolute inset-0 bg-black/40 text-[8px] font-bold text-white flex items-center justify-center opacity-0 group-hover:opacity-100">Selfie</span>
-                              </button>
-                            )}
-                            {att.display_image_1_url && (
-                              <button
-                                onClick={() => setPreviewImageUrl(att.display_image_1_url)}
-                                className="group relative w-9 h-9 rounded-lg overflow-hidden border border-blue-200 hover:ring-2 hover:ring-blue-500 transition-all"
-                                title="Foto Display 1"
-                              >
-                                <img src={att.display_image_1_url} alt="Display 1" className="w-full h-full object-cover" />
-                                <span className="absolute inset-0 bg-black/40 text-[8px] font-bold text-white flex items-center justify-center opacity-0 group-hover:opacity-100">Disp 1</span>
-                              </button>
-                            )}
-                            {att.display_image_2_url && (
-                              <button
-                                onClick={() => setPreviewImageUrl(att.display_image_2_url)}
-                                className="group relative w-9 h-9 rounded-lg overflow-hidden border border-blue-200 hover:ring-2 hover:ring-blue-500 transition-all"
-                                title="Foto Display 2"
-                              >
-                                <img src={att.display_image_2_url} alt="Display 2" className="w-full h-full object-cover" />
-                                <span className="absolute inset-0 bg-black/40 text-[8px] font-bold text-white flex items-center justify-center opacity-0 group-hover:opacity-100">Disp 2</span>
-                              </button>
-                            )}
-                            {!att.selfie_url && !att.display_image_1_url && (
-                              <span className="text-xs text-gray-400 italic">-</span>
+                  filteredAttendances.map((att) => {
+                    const role = getEmployeeRole(att.sales);
+                    return (
+                      <tr key={att.id} className="hover:bg-slate-50/50">
+                        <td className="p-5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900">
+                              {att.sales?.profiles?.full_name || 'Karyawan'}
+                            </span>
+                            {renderRoleBadge(role)}
+                          </div>
+                        </td>
+                        <td className="p-5 text-slate-600 font-medium">{att.sales?.profiles?.phone_number || '-'}</td>
+                        <td className="p-5 font-bold text-slate-800">
+                          {att.check_in_time
+                            ? new Date(att.check_in_time).toLocaleTimeString('id-ID', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : '-'}
+                        </td>
+                        <td className="p-5 text-slate-600 font-medium">
+                          {att.check_out_time
+                            ? new Date(att.check_out_time).toLocaleTimeString('id-ID', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : <span className="text-amber-600 font-semibold text-xs">Belum Check-out</span>}
+                        </td>
+                        <td className="p-5">
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                              {att.selfie_url && (
+                                <button
+                                  onClick={() => setPreviewImageUrl(att.selfie_url)}
+                                  className="group relative w-9 h-9 rounded-lg overflow-hidden border border-emerald-200 hover:ring-2 hover:ring-emerald-500 transition-all"
+                                  title="Foto Selfie Presensi"
+                                >
+                                  <img src={att.selfie_url} alt="Selfie" className="w-full h-full object-cover" />
+                                  <span className="absolute inset-0 bg-black/40 text-[8px] font-bold text-white flex items-center justify-center opacity-0 group-hover:opacity-100">Selfie</span>
+                                </button>
+                              )}
+                              {att.display_image_1_url && (
+                                <button
+                                  onClick={() => setPreviewImageUrl(att.display_image_1_url)}
+                                  className="group relative w-9 h-9 rounded-lg overflow-hidden border border-blue-200 hover:ring-2 hover:ring-blue-500 transition-all"
+                                  title="Foto Display 1"
+                                >
+                                  <img src={att.display_image_1_url} alt="Display 1" className="w-full h-full object-cover" />
+                                  <span className="absolute inset-0 bg-black/40 text-[8px] font-bold text-white flex items-center justify-center opacity-0 group-hover:opacity-100">Disp 1</span>
+                                </button>
+                              )}
+                              {att.display_image_2_url && (
+                                <button
+                                  onClick={() => setPreviewImageUrl(att.display_image_2_url)}
+                                  className="group relative w-9 h-9 rounded-lg overflow-hidden border border-blue-200 hover:ring-2 hover:ring-blue-500 transition-all"
+                                  title="Foto Display 2"
+                                >
+                                  <img src={att.display_image_2_url} alt="Display 2" className="w-full h-full object-cover" />
+                                  <span className="absolute inset-0 bg-black/40 text-[8px] font-bold text-white flex items-center justify-center opacity-0 group-hover:opacity-100">Disp 2</span>
+                                </button>
+                              )}
+                              {!att.selfie_url && !att.display_image_1_url && !att.display_image_2_url && (
+                                <span className="text-xs text-gray-400 italic">-</span>
+                              )}
+                            </div>
+                            {att.check_out_time && (role === 'SALES' || role === 'SPV') && (
+                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded inline-block w-fit">
+                                Display: {att.unit_percentage ?? 0}%
+                              </span>
                             )}
                           </div>
-                          {att.check_out_time && (
-                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded inline-block w-fit">
-                              Display: {att.unit_percentage ?? 0}%
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-5">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
-                            att.is_late
-                              ? 'bg-rose-100 text-rose-800'
-                              : 'bg-emerald-100 text-emerald-800'
-                          }`}
-                        >
-                          {att.is_late ? 'Terlambat (> 10:00)' : 'Tepat Waktu'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="p-5">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                              att.is_late
+                                ? 'bg-rose-100 text-rose-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
+                            {att.is_late ? 'Terlambat (> 10:00)' : 'Tepat Waktu (09:00 - 10:00)'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </div>
+      </div>
       )}
 
       {/* TAB 2: Log Kunjungan Toko */}
       {activeTab === 'visits' && (
         <div className="bg-white rounded-2xl shadow-sm border border-emerald-100/50 overflow-hidden">
-          <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left border-collapse min-w-[950px]">
             <thead>
               <tr className="bg-white text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
                 <th className="p-5 font-semibold">Sales Representative</th>
@@ -503,15 +625,17 @@ export default function MonitoringPage() {
             </tbody>
           </table>
         </div>
-      )}
+      </div>
+    )}
 
       {/* TAB 3: Permohonan Cuti & Izin */}
       {activeTab === 'leaves' && (
         <div className="bg-white rounded-2xl shadow-sm border border-emerald-100/50 overflow-hidden">
-          <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-white text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
-                <th className="p-5 font-semibold">Nama Sales</th>
+                <th className="p-5 font-semibold">Nama Karyawan</th>
                 <th className="p-5 font-semibold">Tipe Permohonan</th>
                 <th className="p-5 font-semibold">Rentang Tanggal</th>
                 <th className="p-5 font-semibold">Alasan</th>
@@ -538,12 +662,16 @@ export default function MonitoringPage() {
                   const isPending = leave.status === 'PENDING';
                   const isApproved = leave.status === 'APPROVED';
                   const isRejected = leave.status === 'REJECTED';
+                  const role = getEmployeeRole(leave.sales);
 
                   return (
                     <tr key={leave.id} className="hover:bg-slate-50/50">
                       <td className="p-5">
-                        <p className="font-bold text-slate-900">{leave.sales?.profiles?.full_name || 'Sales'}</p>
-                        <p className="text-xs text-slate-500">{leave.sales?.profiles?.phone_number || '-'}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-slate-900">{leave.sales?.profiles?.full_name || 'Karyawan'}</p>
+                          {renderRoleBadge(role)}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">{leave.sales?.profiles?.phone_number || '-'}</p>
                       </td>
 
                       <td className="p-5">
@@ -635,7 +763,8 @@ export default function MonitoringPage() {
             </tbody>
           </table>
         </div>
-      )}
+      </div>
+    )}
 
       {/* MODAL: Image Preview */}
       {previewImageUrl && (

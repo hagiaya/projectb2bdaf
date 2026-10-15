@@ -26,7 +26,8 @@ import {
   Lock,
   Copy,
   FileCode,
-  Trash2
+  Trash2,
+  Package
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -86,7 +87,7 @@ export default function SalesPage() {
   const [allDealers, setAllDealers] = useState<Dealer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'ALL' | 'SALES' | 'SPV'>('ALL');
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'SALES' | 'SPV' | 'WAREHOUSE' | 'STAFF'>('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [regionFilter, setRegionFilter] = useState('ALL');
 
@@ -101,17 +102,17 @@ export default function SalesPage() {
   const [selectedNewRegion, setSelectedNewRegion] = useState('');
   const [selectedEditProvince, setSelectedEditProvince] = useState('');
 
-  // Modal: Add/Assign New Sales or SPV
+  // Modal: Add/Assign New Employee (Sales, SPV, Warehouse, Staff)
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addModalTab, setAddModalTab] = useState<'NEW_ACCOUNT' | 'EXISTING_USER'>('NEW_ACCOUNT');
   const [newFullName, setNewFullName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('sales123');
+  const [newPassword, setNewPassword] = useState('karyawan123');
   const [sqlModalOpen, setSqlModalOpen] = useState(false);
   const [availableProfiles, setAvailableProfiles] = useState<any[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState('');
-  const [newAccountType, setNewAccountType] = useState<'SALES' | 'SPV'>('SALES');
+  const [newAccountType, setNewAccountType] = useState<'SALES' | 'SPV' | 'WAREHOUSE' | 'STAFF'>('SALES');
   const [selectedProvince, setSelectedProvince] = useState('');
   const [newSalesRegion, setNewSalesRegion] = useState('');
   const [newSpvParent, setNewSpvParent] = useState('');
@@ -127,6 +128,7 @@ export default function SalesPage() {
   const [spvModalOpen, setSpvModalOpen] = useState(false);
   const [activeSalesForSpv, setActiveSalesForSpv] = useState<SalesRep | null>(null);
   const [isSpvToggle, setIsSpvToggle] = useState(false);
+  const [selectedEditRole, setSelectedEditRole] = useState<'SALES' | 'SPV' | 'WAREHOUSE' | 'STAFF'>('SALES');
   const [selectedSpvParent, setSelectedSpvParent] = useState('');
   const [baseSalaryInput, setBaseSalaryInput] = useState('4500000');
   const [directCommissionInput, setDirectCommissionInput] = useState('1.00');
@@ -210,11 +212,11 @@ export default function SalesPage() {
         sData = fullSalesData;
       }
 
-      // Check for profiles with role 'SALES' or 'SPV' that don't have a sales row yet
+      // Check for profiles with role 'SALES', 'SPV', 'WAREHOUSE', or 'STAFF' that don't have a sales row yet
       const { data: pData } = await supabase
         .from('profiles')
         .select('id, full_name, phone_number, role, approval_status')
-        .in('role', ['SALES', 'SPV']);
+        .in('role', ['SALES', 'SPV', 'WAREHOUSE', 'STAFF']);
 
       // Deduplicate sales records by profile_id so each person has exactly 1 primary record
       const uniqueSalesMap = new Map<string, any>();
@@ -240,14 +242,16 @@ export default function SalesPage() {
       const unlinkedProfiles = (pData || []).filter((p) => !uniqueSalesMap.has(p.id) && p.approval_status !== 'REJECTED');
 
       if (unlinkedProfiles.length > 0) {
-        // Auto-heal: create corresponding sales record for any profile with role SALES or SPV
+        // Auto-heal: create corresponding sales record for any profile with role SALES, SPV, WAREHOUSE, or STAFF
         const rowsToInsert = unlinkedProfiles.map((up) => ({
           profile_id: up.id,
           status: up.approval_status === 'APPROVED' ? 'ACTIVE' : 'PENDING',
           is_spv: up.role === 'SPV',
           base_salary: up.role === 'SPV' ? 0 : 4500000,
-          direct_commission_pct: 1.0,
-          team_bonus_pct: 0.25,
+          direct_commission_pct: (up.role === 'WAREHOUSE' || up.role === 'STAFF') ? 0 : 1.0,
+          team_bonus_pct: (up.role === 'WAREHOUSE' || up.role === 'STAFF') ? 0 : 0.25,
+          daily_visit_target: (up.role === 'WAREHOUSE' || up.role === 'STAFF' || up.role === 'SPV') ? 0 : 6,
+          work_days_per_month: 26,
           balance: 0,
         }));
         await supabase.from('sales').insert(rowsToInsert);
@@ -362,8 +366,17 @@ export default function SalesPage() {
     return created.id;
   };
 
+  const getEmployeeRoleLabel = (sales: SalesRep) => {
+    const r = sales.profiles?.role || (sales.is_spv ? 'SPV' : 'SALES');
+    if (r === 'SPV') return 'Supervisor (SPV)';
+    if (r === 'WAREHOUSE') return 'Staf Gudang';
+    if (r === 'STAFF') return 'Staf Kantor';
+    return 'Sales Lapangan';
+  };
+
   const handleApprove = async (sales: SalesRep) => {
-    const roleName = sales.is_spv ? 'SPV' : 'Sales';
+    const roleName = getEmployeeRoleLabel(sales);
+    const r = sales.profiles?.role || (sales.is_spv ? 'SPV' : 'SALES');
     if (!confirm(`Setujui akun ${roleName} "${sales.profiles?.full_name}"?`)) return;
 
     try {
@@ -388,6 +401,7 @@ export default function SalesPage() {
           profile_id: sales.profile_id,
           status: 'ACTIVE',
           is_spv: sales.is_spv,
+          role: r,
         }),
       });
 
@@ -406,7 +420,8 @@ export default function SalesPage() {
 
   const handleToggleStatus = async (sales: SalesRep) => {
     const nextStatus = sales.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    const roleName = sales.is_spv ? 'SPV' : 'Sales';
+    const roleName = getEmployeeRoleLabel(sales);
+    const r = sales.profiles?.role || (sales.is_spv ? 'SPV' : 'SALES');
     if (!confirm(`Ubah status ${roleName} "${sales.profiles?.full_name}" menjadi ${nextStatus}?`)) return;
 
     try {
@@ -426,6 +441,7 @@ export default function SalesPage() {
           profile_id: sales.profile_id,
           status: nextStatus,
           is_spv: sales.is_spv,
+          role: r,
         }),
       });
 
@@ -443,7 +459,7 @@ export default function SalesPage() {
   };
 
   const handleDeleteSales = async (sales: SalesRep) => {
-    const roleName = sales.is_spv ? 'SPV' : 'Sales';
+    const roleName = getEmployeeRoleLabel(sales);
     if (!confirm(`Apakah Anda yakin ingin menghapus akun ${roleName} "${sales.profiles?.full_name}"? Tindakan ini tidak dapat dibatalkan.`)) return;
 
     try {
@@ -500,18 +516,21 @@ export default function SalesPage() {
     setSavingSpv(true);
     try {
       const realSalesId = await ensureRealSalesId(activeSalesForSpv);
-      const isSpv = isSpvToggle;
+      const isSpv = selectedEditRole === 'SPV';
+      const isFieldSales = selectedEditRole === 'SALES';
+      const isWarehouseOrStaff = selectedEditRole === 'WAREHOUSE' || selectedEditRole === 'STAFF';
 
       // Standar Kompensasi:
       // Sales: Gaji Pokok, Bonus (%), Insentif (%), Transport (Rp), Target Visit
       // SPV: Cuman Insentif (%) & Bonus (%) (Gaji Pokok & Transport = 0)
+      // Warehouse & Staff: Gaji Pokok, Transport, Hari Kerja (tanpa insentif omzet/target visit)
       const baseSalary = isSpv ? 0 : (Number(baseSalaryInput) || 0);
-      const directComm = Number(directCommissionInput) || 0;
-      const teamBonus = Number(teamBonusInput) || 0;
+      const directComm = isWarehouseOrStaff ? 0 : (Number(directCommissionInput) || 0);
+      const teamBonus = isWarehouseOrStaff ? 0 : (Number(teamBonusInput) || 0);
       const transport = isSpv ? 0 : (Number(transportAllowanceInput) || 0);
-      const dailyVisits = isSpv ? 0 : (Number(dailyVisitsInput) || 6);
+      const dailyVisits = isFieldSales ? (Number(dailyVisitsInput) || 6) : 0;
       const workDays = isSpv ? 0 : (Number(workDaysInput) || 26);
-      const spvId = isSpv ? null : (selectedSpvParent || null);
+      const spvId = isFieldSales ? (selectedSpvParent || null) : null;
 
       const payload: any = {
         is_spv: isSpv,
@@ -538,13 +557,19 @@ export default function SalesPage() {
       if (error) throw error;
 
       // Update role on profiles table
-      const newRole = isSpv ? 'SPV' : 'SALES';
       await supabase
         .from('profiles')
-        .update({ role: newRole })
+        .update({ role: selectedEditRole })
         .eq('id', activeSalesForSpv.profile_id);
 
-      alert(`Berhasil menyimpan pengaturan standar kompensasi untuk ${isSpv ? 'Supervisor (SPV)' : 'Sales Lapangan'}!`);
+      const roleLabels: Record<string, string> = {
+        SALES: 'Sales Lapangan',
+        SPV: 'Supervisor (SPV)',
+        WAREHOUSE: 'Staf Gudang',
+        STAFF: 'Staf Kantor/Biasa',
+      };
+
+      alert(`Berhasil menyimpan pengaturan standar kompensasi untuk ${roleLabels[selectedEditRole]}!`);
       setSpvModalOpen(false);
       setActiveSalesForSpv(null);
       fetchData();
@@ -630,7 +655,16 @@ export default function SalesPage() {
     setSavingNewSales(true);
     try {
       const isSpv = newAccountType === 'SPV';
-      const roleName = isSpv ? 'SPV' : 'SALES';
+      const isField = newAccountType === 'SALES';
+      const isWarehouseOrStaff = newAccountType === 'WAREHOUSE' || newAccountType === 'STAFF';
+      const roleName = newAccountType;
+
+      const roleTitles: Record<string, string> = {
+        SALES: 'Sales Lapangan',
+        SPV: 'Supervisor (SPV)',
+        WAREHOUSE: 'Staf Gudang',
+        STAFF: 'Staf Kantor/Biasa',
+      };
 
       if (addModalTab === 'NEW_ACCOUNT') {
         if (!newFullName.trim()) {
@@ -655,13 +689,13 @@ export default function SalesPage() {
             email: newEmail.trim() || undefined,
             password: newPassword.trim(),
             role: roleName,
-            region_id: newSalesRegion || null,
-            spv_id: isSpv ? null : (newSpvParent || null),
+            region_id: isField ? (newSalesRegion || null) : null,
+            spv_id: isField ? (newSpvParent || null) : null,
             base_salary: isSpv ? 0 : (Number(newBaseSalary) || 0),
-            direct_commission_pct: Number(newDirectCommission) || 0,
-            team_bonus_pct: Number(newTeamBonus) || 0,
+            direct_commission_pct: isWarehouseOrStaff ? 0 : (Number(newDirectCommission) || 0),
+            team_bonus_pct: isWarehouseOrStaff ? 0 : (Number(newTeamBonus) || 0),
             transport_allowance: isSpv ? 0 : (Number(newTransportAllowance) || 0),
-            daily_visit_target: isSpv ? 0 : (Number(newDailyVisits) || 6),
+            daily_visit_target: isField ? (Number(newDailyVisits) || 6) : 0,
             work_days_per_month: isSpv ? 0 : (Number(newWorkDays) || 26),
           }),
         });
@@ -675,12 +709,12 @@ export default function SalesPage() {
           throw new Error(resData.error || 'Gagal mendaftarkan akun baru.');
         }
 
-        alert(resData.message || `Berhasil mendaftarkan akun ${isSpv ? 'Supervisor (SPV)' : 'Sales Lapangan'} baru!`);
+        alert(resData.message || `Berhasil mendaftarkan akun ${roleTitles[newAccountType]} baru!`);
         setAddModalOpen(false);
         setNewFullName('');
         setNewPhone('');
         setNewEmail('');
-        setNewPassword('sales123');
+        setNewPassword('karyawan123');
         setNewSalesRegion('');
         setSelectedProfileId('');
         fetchData();
@@ -693,7 +727,7 @@ export default function SalesPage() {
         return;
       }
 
-      // 1. Update profile role to SALES or SPV
+      // 1. Update profile role to chosen role
       const { error: profErr } = await supabase
         .from('profiles')
         .update({ role: roleName, approval_status: 'APPROVED' })
@@ -701,14 +735,14 @@ export default function SalesPage() {
 
       if (profErr) throw profErr;
 
-      // 2. Prepare sales record with standard compensation
+      // 2. Prepare sales/employee record with standard compensation
       const baseSalary = isSpv ? 0 : (Number(newBaseSalary) || 0);
-      const directComm = Number(newDirectCommission) || 1.0;
-      const teamBonus = Number(newTeamBonus) || 0.25;
+      const directComm = isWarehouseOrStaff ? 0 : (Number(newDirectCommission) || 1.0);
+      const teamBonus = isWarehouseOrStaff ? 0 : (Number(newTeamBonus) || 0.25);
       const transport = isSpv ? 0 : (Number(newTransportAllowance) || 0);
-      const dailyVisits = isSpv ? 0 : (Number(newDailyVisits) || 6);
+      const dailyVisits = isField ? (Number(newDailyVisits) || 6) : 0;
       const workDays = isSpv ? 0 : (Number(newWorkDays) || 26);
-      const spvId = isSpv ? null : (newSpvParent || null);
+      const spvId = isField ? (newSpvParent || null) : null;
 
       const payload: any = {
         profile_id: selectedProfileId,
@@ -722,7 +756,7 @@ export default function SalesPage() {
         work_days_per_month: workDays,
         balance: 0,
       };
-      if (newSalesRegion) payload.region_id = newSalesRegion;
+      if (isField && newSalesRegion) payload.region_id = newSalesRegion;
 
       // Check if sales record exists for this profile
       const { data: existingSales } = await supabase
@@ -755,7 +789,7 @@ export default function SalesPage() {
 
       if (salesErr) throw salesErr;
 
-      alert(`Berhasil menetapkan akun ${isSpv ? 'Supervisor (SPV)' : 'Sales Lapangan'}!`);
+      alert(`Berhasil menetapkan akun ${roleTitles[newAccountType]}!`);
       setAddModalOpen(false);
       setSelectedProfileId('');
       setSelectedProvince('');
@@ -784,10 +818,9 @@ export default function SalesPage() {
     const matchQuery =
       name.toLowerCase().includes(searchQuery.toLowerCase()) || phone.includes(searchQuery);
 
+    const sRole = s.profiles?.role || (s.is_spv ? 'SPV' : 'SALES');
     const matchRole =
-      roleFilter === 'ALL' ||
-      (roleFilter === 'SPV' && s.is_spv) ||
-      (roleFilter === 'SALES' && !s.is_spv);
+      roleFilter === 'ALL' || sRole === roleFilter;
 
     const matchStatus = statusFilter === 'ALL' || s.status === statusFilter;
     const matchRegion = regionFilter === 'ALL' || s.region_id === regionFilter;
@@ -795,13 +828,15 @@ export default function SalesPage() {
     return matchQuery && matchRole && matchStatus && matchRegion;
   });
 
-  const totalSalesCount = salesList.filter((s) => !s.is_spv).length;
-  const totalSpvCount = salesList.filter((s) => s.is_spv).length;
+  const totalSalesCount = salesList.filter((s) => (s.profiles?.role || (s.is_spv ? 'SPV' : 'SALES')) === 'SALES').length;
+  const totalSpvCount = salesList.filter((s) => (s.profiles?.role || (s.is_spv ? 'SPV' : 'SALES')) === 'SPV').length;
+  const totalWarehouseCount = salesList.filter((s) => s.profiles?.role === 'WAREHOUSE').length;
+  const totalStaffCount = salesList.filter((s) => s.profiles?.role === 'STAFF').length;
   const activeCount = salesList.filter((s) => s.status === 'ACTIVE').length;
   const totalBalance = salesList.reduce((sum, s) => sum + (Number(s.balance) || 0), 0);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50/50 p-8">
+    <div className="flex-1 overflow-y-auto bg-slate-50/50 p-4 md:p-8 min-w-0 max-w-full">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
         <div>
@@ -809,10 +844,10 @@ export default function SalesPage() {
             <div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl">
               <Users size={24} />
             </div>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Master Sales & SPV</h1>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Master Karyawan</h1>
           </div>
           <p className="text-sm text-slate-500 font-medium">
-            Kelola personil Sales Lapangan & Supervisor (SPV), standar persentase kompensasi, penugasan wilayah, dan toko binaan.
+            Kelola seluruh personil perusahaan: Sales Lapangan, Supervisor (SPV), Staf Gudang, dan Staf Kantor/Biasa.
           </p>
         </div>
 
@@ -823,7 +858,7 @@ export default function SalesPage() {
           }}
           className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 text-sm shadow-sm hover:shadow transition-all cursor-pointer"
         >
-          <UserPlus size={18} strokeWidth={2.5} /> Tambah Sales / SPV Baru
+          <UserPlus size={18} strokeWidth={2.5} /> Tambah Karyawan Baru
         </button>
       </div>
 
@@ -831,7 +866,7 @@ export default function SalesPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Personil</span>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Karyawan</span>
             <Users size={18} className="text-emerald-600" />
           </div>
           <p className="text-2xl font-black text-slate-800">{salesList.length}</p>
@@ -853,40 +888,44 @@ export default function SalesPage() {
 
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Akun Aktif</span>
-            <CheckCircle size={18} className="text-emerald-500" />
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Staf Gudang & Kantor</span>
+            <Package size={18} className="text-purple-600" />
           </div>
-          <p className="text-2xl font-black text-slate-800">{activeCount}</p>
-          <p className="text-xs text-slate-500 mt-1">Dari total {salesList.length} personil terdaftar</p>
+          <p className="text-2xl font-black text-slate-800">{totalWarehouseCount + totalStaffCount}</p>
+          <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 font-semibold">
+            <span className="text-purple-700 font-bold">{totalWarehouseCount} Gudang</span>
+            <span>•</span>
+            <span className="text-blue-700 font-bold">{totalStaffCount} Kantor</span>
+          </div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Akumulasi Saldo</span>
-            <DollarSign size={18} className="text-blue-500" />
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Akun Karyawan Aktif</span>
+            <CheckCircle size={18} className="text-emerald-500" />
           </div>
-          <p className="text-2xl font-black text-slate-800">{formatRupiah(totalBalance)}</p>
-          <p className="text-xs text-slate-500 mt-1">Saldo komisi personil berjalan</p>
+          <p className="text-2xl font-black text-slate-800">{activeCount}</p>
+          <p className="text-xs text-slate-500 mt-1">Dari total {salesList.length} personil terdaftar</p>
         </div>
       </div>
 
       {/* Main Table Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-emerald-100/50 overflow-hidden">
         {/* Role Tabs */}
-        <div className="flex border-b border-gray-100 bg-slate-50/70 p-2 gap-2">
+        <div className="flex border-b border-gray-100 bg-slate-50/70 p-2 gap-2 overflow-x-auto">
           <button
             onClick={() => setRoleFilter('ALL')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               roleFilter === 'ALL'
                 ? 'bg-white text-emerald-800 shadow-sm border border-emerald-100'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
-            Semua Personil ({salesList.length})
+            Semua Karyawan ({salesList.length})
           </button>
           <button
             onClick={() => setRoleFilter('SALES')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
               roleFilter === 'SALES'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50'
@@ -897,7 +936,7 @@ export default function SalesPage() {
           </button>
           <button
             onClick={() => setRoleFilter('SPV')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
               roleFilter === 'SPV'
                 ? 'bg-amber-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-amber-700 hover:bg-amber-50'
@@ -906,11 +945,33 @@ export default function SalesPage() {
             <Award size={14} />
             Supervisor / SPV ({totalSpvCount})
           </button>
+          <button
+            onClick={() => setRoleFilter('WAREHOUSE')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              roleFilter === 'WAREHOUSE'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-purple-700 hover:bg-purple-50'
+            }`}
+          >
+            <Package size={14} />
+            Staf Gudang ({totalWarehouseCount})
+          </button>
+          <button
+            onClick={() => setRoleFilter('STAFF')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              roleFilter === 'STAFF'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-blue-700 hover:bg-blue-50'
+            }`}
+          >
+            <Briefcase size={14} />
+            Staf Biasa / Kantor ({totalStaffCount})
+          </button>
         </div>
 
         {/* Search & Filters */}
-        <div className="p-5 border-b border-gray-100 flex flex-col md:flex-row gap-4 bg-gray-50/50">
-          <div className="relative flex-1">
+        <div className="p-4 md:p-5 border-b border-gray-100 flex flex-col md:flex-row gap-3 md:gap-4 bg-gray-50/50">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
@@ -921,7 +982,7 @@ export default function SalesPage() {
             />
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-2.5 flex-wrap sm:flex-nowrap">
             {/* Status Filter */}
             <select
               value={statusFilter}
@@ -938,7 +999,7 @@ export default function SalesPage() {
             <select
               value={regionFilter}
               onChange={(e) => setRegionFilter(e.target.value)}
-              className="px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              className="px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 max-w-[220px]"
             >
               <option value="ALL">Semua Wilayah</option>
               {regions.map((reg) => (
@@ -950,19 +1011,20 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-white text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
-              <th className="p-5 font-semibold">Personil & Jabatan</th>
-              <th className="p-5 font-semibold">Standar Kompensasi</th>
-              <th className="p-5 font-semibold">Wilayah Kerja</th>
-              <th className="p-5 font-semibold">Toko Binaan</th>
-              <th className="p-5 font-semibold">Saldo Komisi</th>
-              <th className="p-5 font-semibold">Status</th>
-              <th className="p-5 font-semibold text-right">Aksi</th>
-            </tr>
-          </thead>
+        {/* Table with horizontal scroll */}
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left border-collapse min-w-[1050px]">
+            <thead>
+              <tr className="bg-white text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100">
+                <th className="p-5 font-semibold">Personil & Jabatan</th>
+                <th className="p-5 font-semibold">Standar Kompensasi</th>
+                <th className="p-5 font-semibold">Wilayah Kerja</th>
+                <th className="p-5 font-semibold">Toko Binaan</th>
+                <th className="p-5 font-semibold">Saldo Komisi</th>
+                <th className="p-5 font-semibold">Status</th>
+                <th className="p-5 font-semibold text-right">Aksi</th>
+              </tr>
+            </thead>
           <tbody className="text-sm divide-y divide-gray-50">
             {loading ? (
               <tr>
@@ -982,35 +1044,56 @@ export default function SalesPage() {
               filteredSales.map((sales) => {
                 const isActive = sales.status === 'ACTIVE';
                 const isPending = sales.status === 'PENDING';
-                const isSpv = Boolean(sales.is_spv);
+                const sRole = (sales.profiles?.role || (sales.is_spv ? 'SPV' : 'SALES')) as 'SALES' | 'SPV' | 'WAREHOUSE' | 'STAFF';
+                const isSpv = sRole === 'SPV';
+                const isField = sRole === 'SALES';
+                const isWarehouse = sRole === 'WAREHOUSE';
+                const isStaff = sRole === 'STAFF';
+
+                const avatarStyle = isSpv
+                  ? 'bg-amber-100 text-amber-800'
+                  : isWarehouse
+                  ? 'bg-purple-100 text-purple-800'
+                  : isStaff
+                  ? 'bg-blue-100 text-blue-800'
+                  : 'bg-emerald-100 text-emerald-800';
 
                 return (
                   <tr key={sales.id} className="hover:bg-slate-50/50 transition-colors">
                     {/* Personil Profile */}
                     <td className="p-5">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl font-bold flex items-center justify-center text-sm ${
-                          isSpv ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                        }`}>
-                          {sales.profiles?.full_name?.[0]?.toUpperCase() || (isSpv ? 'SPV' : 'S')}
+                        <div className={`w-10 h-10 rounded-xl font-bold flex items-center justify-center text-sm ${avatarStyle}`}>
+                          {sales.profiles?.full_name?.[0]?.toUpperCase() || (isSpv ? 'SPV' : isWarehouse ? 'G' : isStaff ? 'K' : 'S')}
                         </div>
                         <div>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <p className="font-bold text-slate-900">{sales.profiles?.full_name || 'Tanpa Nama'}</p>
-                            {isSpv ? (
+                            {isSpv && (
                               <span className="px-2 py-0.5 bg-gradient-to-r from-amber-100 to-amber-200 text-amber-900 text-[10px] font-black rounded-md border border-amber-300 flex items-center gap-1 shadow-2xs">
                                 <Award size={10} /> SPV SUPERVISOR
                               </span>
-                            ) : (
-                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-bold rounded border border-emerald-200">
-                                SALES
+                            )}
+                            {isField && (
+                              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-bold rounded border border-emerald-200 flex items-center gap-1">
+                                <Users size={10} /> SALES LAPANGAN
+                              </span>
+                            )}
+                            {isWarehouse && (
+                              <span className="px-2 py-0.5 bg-purple-50 text-purple-800 text-[10px] font-bold rounded border border-purple-200 flex items-center gap-1">
+                                <Package size={10} /> STAF GUDANG
+                              </span>
+                            )}
+                            {isStaff && (
+                              <span className="px-2 py-0.5 bg-blue-50 text-blue-800 text-[10px] font-bold rounded border border-blue-200 flex items-center gap-1">
+                                <Briefcase size={10} /> STAF KANTOR
                               </span>
                             )}
                           </div>
                           <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                             <Phone size={11} /> {sales.profiles?.phone_number || '-'}
                           </p>
-                          {sales.spv?.profiles?.full_name && !isSpv && (
+                          {sales.spv?.profiles?.full_name && isField && (
                             <span className="text-[11px] text-blue-600 font-semibold block mt-0.5">
                               SPV: {sales.spv.profiles.full_name}
                             </span>
@@ -1035,7 +1118,7 @@ export default function SalesPage() {
                             (SPV murni Insentif & Bonus)
                           </span>
                         </div>
-                      ) : (
+                      ) : isField ? (
                         <div className="space-y-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-bold text-slate-800 text-xs">
@@ -1055,43 +1138,85 @@ export default function SalesPage() {
                             </span>
                           </div>
                         </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-slate-800 text-xs">
+                              {formatRupiah(sales.base_salary ?? 4000000)}
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-medium">/bln</span>
+                          </div>
+                          <div className="flex items-center gap-1 flex-wrap text-[11px]">
+                            <span className="px-1.5 py-0.2 bg-slate-100 text-slate-700 rounded font-semibold border border-slate-200">
+                              Kerja: {sales.work_days_per_month || 26} hr/bln
+                            </span>
+                            {Number(sales.transport_allowance || 0) > 0 && (
+                              <span className="px-1.5 py-0.2 bg-purple-50 text-purple-800 rounded font-semibold border border-purple-100">
+                                Trp: {formatRupiah(sales.transport_allowance ?? 0)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </td>
 
                     {/* Region */}
                     <td className="p-5">
-                      <button
-                        onClick={() => {
-                          setActiveSalesForRegion(sales);
-                          setSelectedNewRegion(sales.region_id || '');
-                          if (sales.region_id) {
-                            const reg = regions.find(r => r.id === sales.region_id);
-                            setSelectedEditProvince(reg ? reg.name : '');
-                          } else {
-                            setSelectedEditProvince('');
-                          }
-                          setRegionModalOpen(true);
-                        }}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all group cursor-pointer"
-                      >
-                        <MapPin size={12} className="text-emerald-600" />
-                        <span>{sales.regions?.name ? `${sales.regions.name} ${sales.regions.city_name ? '- ' + sales.regions.city_name : ''}` : 'Belum diatur'}</span>
-                        <Edit2 size={11} className="opacity-0 group-hover:opacity-100 text-slate-400 ml-1" />
-                      </button>
+                      {isField ? (
+                        <button
+                          onClick={() => {
+                            setActiveSalesForRegion(sales);
+                            setSelectedNewRegion(sales.region_id || '');
+                            if (sales.region_id) {
+                              const reg = regions.find(r => r.id === sales.region_id);
+                              setSelectedEditProvince(reg ? reg.name : '');
+                            } else {
+                              setSelectedEditProvince('');
+                            }
+                            setRegionModalOpen(true);
+                          }}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all group cursor-pointer"
+                        >
+                          <MapPin size={12} className="text-emerald-600" />
+                          <span>{sales.regions?.name ? `${sales.regions.name} ${sales.regions.city_name ? '- ' + sales.regions.city_name : ''}` : 'Belum diatur'}</span>
+                          <Edit2 size={11} className="opacity-0 group-hover:opacity-100 text-slate-400 ml-1" />
+                        </button>
+                      ) : isSpv ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                          <MapPin size={12} className="text-amber-600" />
+                          <span>{sales.regions?.name || 'Seluruh Area'}</span>
+                        </span>
+                      ) : isWarehouse ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-800 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
+                          <Package size={12} className="text-purple-600" />
+                          <span>Gudang Pusat</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-800 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+                          <Briefcase size={12} className="text-blue-600" />
+                          <span>Kantor Pusat</span>
+                        </span>
+                      )}
                     </td>
 
                     {/* Assigned Dealers */}
                     <td className="p-5">
-                      <button
-                        onClick={() => {
-                          setActiveSalesForDealers(sales);
-                          setDealerModalOpen(true);
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        <Store size={13} />
-                        <span>{sales.assignedDealersCount || 0} Toko</span>
-                      </button>
+                      {isField ? (
+                        <button
+                          onClick={() => {
+                            setActiveSalesForDealers(sales);
+                            setDealerModalOpen(true);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          <Store size={13} />
+                          <span>{sales.assignedDealersCount || 0} Toko</span>
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 text-xs font-medium">
+                          Non-Lapangan
+                        </span>
+                      )}
                     </td>
 
                     {/* Balance */}
@@ -1141,25 +1266,30 @@ export default function SalesPage() {
                         <button
                           onClick={() => {
                             setActiveSalesForSpv(sales);
-                            setIsSpvToggle(Boolean(sales.is_spv));
+                            setSelectedEditRole(sRole);
+                            setIsSpvToggle(sRole === 'SPV');
                             setSelectedSpvParent(sales.spv_id || '');
-                            setBaseSalaryInput(String(sales.base_salary ?? 4500000));
-                            setDirectCommissionInput(String(sales.direct_commission_pct ?? 1.0));
-                            setTeamBonusInput(String(sales.team_bonus_pct ?? 0.25));
-                            setTransportAllowanceInput(String(sales.transport_allowance ?? 500000));
-                            setDailyVisitsInput(String(sales.daily_visit_target ?? 6));
+                            setBaseSalaryInput(String(sales.base_salary ?? (sRole === 'WAREHOUSE' || sRole === 'STAFF' ? 4000000 : 4500000)));
+                            setDirectCommissionInput(String(sales.direct_commission_pct ?? (sRole === 'WAREHOUSE' || sRole === 'STAFF' ? 0 : 1.0)));
+                            setTeamBonusInput(String(sales.team_bonus_pct ?? (sRole === 'WAREHOUSE' || sRole === 'STAFF' ? 0 : 0.25)));
+                            setTransportAllowanceInput(String(sales.transport_allowance ?? (sRole === 'SPV' ? 0 : 500000)));
+                            setDailyVisitsInput(String(sales.daily_visit_target ?? (sRole === 'SALES' ? 6 : 0)));
                             setWorkDaysInput(String(sales.work_days_per_month ?? 26));
                             setSpvModalOpen(true);
                           }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer ${
                             isSpv 
                               ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200' 
-                              : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
+                              : isWarehouse
+                              ? 'bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200'
+                              : isStaff
+                              ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
+                              : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
                           }`}
                           title="Atur Jabatan & Standar Kompensasi (Gaji, Bonus, Insentif, Transport)"
                         >
                           <Briefcase size={13} />
-                          <span>Atur Kompensasi</span>
+                          <span>Atur Jabatan</span>
                         </button>
 
                         {isPending ? (
@@ -1197,6 +1327,7 @@ export default function SalesPage() {
           </tbody>
         </table>
       </div>
+    </div>
 
       {/* MODAL 1: Manage Assigned Dealers */}
       {dealerModalOpen && activeSalesForDealers && (
@@ -1341,7 +1472,7 @@ export default function SalesPage() {
         </div>
       )}
 
-      {/* MODAL 3: Add / Assign New Sales or SPV */}
+      {/* MODAL 3: Add / Assign New Employee (Sales, SPV, Warehouse, Staff) */}
       {addModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-emerald-100 max-h-[90vh] overflow-y-auto">
@@ -1351,8 +1482,8 @@ export default function SalesPage() {
                   <UserPlus size={20} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-lg">Tambah Personil Sales / SPV</h3>
-                  <p className="text-[11px] text-slate-500">Daftarkan akun baru atau tetapkan dari pengguna non-dealer</p>
+                  <h3 className="font-bold text-slate-900 text-lg">Tambah Karyawan Baru</h3>
+                  <p className="text-[11px] text-slate-500">Daftarkan personil baru (Sales, SPV, Gudang, Staf Kantor)</p>
                 </div>
               </div>
               <button onClick={() => setAddModalOpen(false)} className="text-gray-400 hover:text-gray-600">
@@ -1392,7 +1523,7 @@ export default function SalesPage() {
               {/* TAB 1: FORM PENDAFTARAN AKUN BARU */}
               {addModalTab === 'NEW_ACCOUNT' ? (
                 <div className="p-4 bg-emerald-50/40 rounded-xl border border-emerald-100 space-y-3">
-                  <p className="text-xs font-bold text-emerald-900 uppercase">Informasi Akun Personil Baru</p>
+                  <p className="text-xs font-bold text-emerald-900 uppercase">Informasi Akun Karyawan Baru</p>
 
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
@@ -1428,7 +1559,7 @@ export default function SalesPage() {
                         type="text"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="sales123"
+                        placeholder="karyawan123"
                         className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
@@ -1446,7 +1577,7 @@ export default function SalesPage() {
                       className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                     />
                     <span className="text-[10px] text-slate-400 mt-0.5 block">
-                      Default: {newPhone ? `${newPhone.replace(/\D/g, '')}@sales.b2b.app` : 'nomorhp@sales.b2b.app'}
+                      Default: {newPhone ? `${newPhone.replace(/\D/g, '')}@karyawan.b2b.app` : 'nomorhp@karyawan.b2b.app'}
                     </span>
                   </div>
                 </div>
@@ -1458,7 +1589,7 @@ export default function SalesPage() {
                   </label>
                   {availableProfiles.length === 0 ? (
                     <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 leading-relaxed">
-                      📌 <b>Info Filter Dealer:</b> Seluruh akun terdaftar saat ini bertipe <b>Dealer</b> atau sudah terdaftar sebagai <b>Sales/SPV</b>. Akun dealer secara otomatis <u>tidak ditampilkan</u> agar tidak salah ditugaskan.
+                      📌 <b>Info Filter Dealer:</b> Seluruh akun terdaftar saat ini bertipe <b>Dealer</b> atau sudah terdaftar sebagai <b>Karyawan</b>. Akun dealer secara otomatis <u>tidak ditampilkan</u> agar tidak salah ditugaskan.
                       <br />
                       Silakan gunakan tab <b>"Daftar Akun Baru (Langsung)"</b> di atas untuk mendaftarkan personil baru.
                     </div>
@@ -1479,51 +1610,93 @@ export default function SalesPage() {
                 </div>
               )}
 
-              {/* 2. Pilihan Jenis Akun / Jabatan */}
+              {/* 2. Pilihan Jenis Akun / Jabatan (4 Pilihan) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
-                  Jenis Akun / Jabatan *
+                  Pilih Jabatan / Divisi Karyawan *
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
                     onClick={() => setNewAccountType('SALES')}
-                    className={`p-3.5 rounded-xl border text-left transition-all ${
+                    className={`p-3 rounded-xl border text-left transition-all ${
                       newAccountType === 'SALES'
                         ? 'border-emerald-500 bg-emerald-50/70 text-emerald-950 ring-2 ring-emerald-500/20'
                         : 'border-gray-200 bg-white hover:bg-gray-50 text-slate-700'
                     }`}
                   >
-                    <div className="flex items-center gap-2 mb-1">
-                      <Users size={16} className={newAccountType === 'SALES' ? 'text-emerald-600' : 'text-slate-400'} />
-                      <span className="font-bold text-sm">Sales Lapangan</span>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Users size={15} className={newAccountType === 'SALES' ? 'text-emerald-600' : 'text-slate-400'} />
+                      <span className="font-bold text-xs">Sales Lapangan</span>
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      Gaji Pokok, Bonus Tim, Insentif Omzet & Uang Transport.
+                    <p className="text-[10px] text-slate-500 leading-snug">
+                      Gaji, Insentif, Bonus, Transport & Kunjungan Toko.
                     </p>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setNewAccountType('SPV')}
-                    className={`p-3.5 rounded-xl border text-left transition-all ${
+                    className={`p-3 rounded-xl border text-left transition-all ${
                       newAccountType === 'SPV'
                         ? 'border-amber-500 bg-amber-50/70 text-amber-950 ring-2 ring-amber-500/20'
                         : 'border-gray-200 bg-white hover:bg-gray-50 text-slate-700'
                     }`}
                   >
-                    <div className="flex items-center gap-2 mb-1">
-                      <Award size={16} className={newAccountType === 'SPV' ? 'text-amber-600' : 'text-slate-400'} />
-                      <span className="font-bold text-sm">Supervisor (SPV)</span>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Award size={15} className={newAccountType === 'SPV' ? 'text-amber-600' : 'text-slate-400'} />
+                      <span className="font-bold text-xs">Supervisor (SPV)</span>
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      Hanya Insentif (%) & Bonus Tim (%), tanpa Gaji & Transport.
+                    <p className="text-[10px] text-slate-500 leading-snug">
+                      Insentif Direct & Bonus Override Tim.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewAccountType('WAREHOUSE');
+                      if (newBaseSalary === '4500000') setNewBaseSalary('4000000');
+                    }}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      newAccountType === 'WAREHOUSE'
+                        ? 'border-purple-500 bg-purple-50/70 text-purple-950 ring-2 ring-purple-500/20'
+                        : 'border-gray-200 bg-white hover:bg-gray-50 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Package size={15} className={newAccountType === 'WAREHOUSE' ? 'text-purple-600' : 'text-slate-400'} />
+                      <span className="font-bold text-xs">Staf Gudang</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-snug">
+                      Gaji Pokok, Transport & Penanganan Stok/Logistik.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewAccountType('STAFF');
+                      if (newBaseSalary === '4500000') setNewBaseSalary('4000000');
+                    }}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      newAccountType === 'STAFF'
+                        ? 'border-blue-500 bg-blue-50/70 text-blue-950 ring-2 ring-blue-500/20'
+                        : 'border-gray-200 bg-white hover:bg-gray-50 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Briefcase size={15} className={newAccountType === 'STAFF' ? 'text-blue-600' : 'text-slate-400'} />
+                      <span className="font-bold text-xs">Staf Biasa / Kantor</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-snug">
+                      Gaji Pokok, Transport & Operasional Administrasi.
                     </p>
                   </button>
                 </div>
               </div>
 
-              {/* 3. Wilayah Kerja */}
+              {/* 3. Wilayah Kerja Berdasarkan Role */}
               {newAccountType === 'SALES' ? (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1559,7 +1732,7 @@ export default function SalesPage() {
                     </select>
                   </div>
                 </div>
-              ) : (
+              ) : newAccountType === 'SPV' ? (
                 <div className="grid grid-cols-1">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase mb-1">PILIH WILAYAH / AREA SPV</label>
@@ -1576,6 +1749,13 @@ export default function SalesPage() {
                       ))}
                     </select>
                   </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-100 rounded-xl flex items-center gap-2.5 text-xs text-slate-700">
+                  <MapPin size={16} className="text-slate-500" />
+                  <span>
+                    Penempatan: <b>{newAccountType === 'WAREHOUSE' ? 'Gudang Pusat / Logistik Distribusi' : 'Kantor Pusat / Administrasi Operasional'}</b>
+                  </span>
                 </div>
               )}
 
@@ -1674,7 +1854,7 @@ export default function SalesPage() {
                     </div>
                   </div>
                 </div>
-              ) : (
+              ) : newAccountType === 'SPV' ? (
                 <div className="p-4 bg-amber-50/40 rounded-xl border border-amber-200 space-y-3">
                   <div className="flex items-center gap-1.5">
                     <Award size={16} className="text-amber-600" />
@@ -1712,6 +1892,54 @@ export default function SalesPage() {
                     </div>
                   </div>
                 </div>
+              ) : (
+                /* STAF GUDANG / STAF BIASA */
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                  <div className="flex items-center gap-1.5">
+                    {newAccountType === 'WAREHOUSE' ? (
+                      <Package size={16} className="text-purple-600" />
+                    ) : (
+                      <Briefcase size={16} className="text-blue-600" />
+                    )}
+                    <p className="text-xs font-bold text-slate-800 uppercase">
+                      Standar Kompensasi {newAccountType === 'WAREHOUSE' ? 'Staf Gudang' : 'Staf Kantor'}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Gaji Pokok (Rp)</label>
+                      <input
+                        type="number"
+                        value={newBaseSalary}
+                        onChange={(e) => setNewBaseSalary(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold"
+                        placeholder="4000000"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Uang Transport (Rp)</label>
+                      <input
+                        type="number"
+                        value={newTransportAllowance}
+                        onChange={(e) => setNewTransportAllowance(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold"
+                        placeholder="500000"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Hari Kerja / Bulan</label>
+                    <input
+                      type="number"
+                      value={newWorkDays}
+                      onChange={(e) => setNewWorkDays(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-semibold"
+                      placeholder="26"
+                    />
+                  </div>
+                </div>
               )}
             </div>
 
@@ -1730,8 +1958,8 @@ export default function SalesPage() {
                 {savingNewSales
                   ? 'Memproses...'
                   : addModalTab === 'NEW_ACCOUNT'
-                  ? (newAccountType === 'SPV' ? 'Daftarkan Akun SPV' : 'Daftarkan Akun Sales')
-                  : (newAccountType === 'SPV' ? 'Jadikan SPV' : 'Jadikan Sales')}
+                  ? `Daftarkan ${newAccountType === 'SPV' ? 'SPV' : newAccountType === 'WAREHOUSE' ? 'Staf Gudang' : newAccountType === 'STAFF' ? 'Staf Kantor' : 'Sales'}`
+                  : `Jadikan ${newAccountType === 'SPV' ? 'SPV' : newAccountType === 'WAREHOUSE' ? 'Staf Gudang' : newAccountType === 'STAFF' ? 'Staf Kantor' : 'Sales'}`}
               </button>
             </div>
           </div>
@@ -1927,42 +2155,82 @@ CREATE POLICY "Allow authenticated full access to returns" ON public.returns FOR
                 Personil: <b className="text-slate-900">{activeSalesForSpv.profiles?.full_name}</b> ({activeSalesForSpv.regions?.name ? `${activeSalesForSpv.regions.name} ${activeSalesForSpv.regions.city_name ? '- ' + activeSalesForSpv.regions.city_name : ''}` : 'Tanpa Wilayah'})
               </div>
 
-              {/* Pilihan Jabatan */}
+              {/* Pilihan Jabatan (4 Pilihan) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
-                  Penetapan Jabatan
+                  Penetapan Jabatan / Divisi
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setIsSpvToggle(false)}
+                    onClick={() => {
+                      setSelectedEditRole('SALES');
+                      setIsSpvToggle(false);
+                    }}
                     className={`p-3 rounded-xl border text-left transition-all ${
-                      !isSpvToggle
-                        ? 'border-emerald-500 bg-emerald-50/60 text-emerald-950 ring-2 ring-emerald-500/20'
+                      selectedEditRole === 'SALES'
+                        ? 'border-emerald-500 bg-emerald-50/70 text-emerald-950 ring-2 ring-emerald-500/20'
                         : 'border-gray-200 bg-white hover:bg-gray-50 text-slate-700'
                     }`}
                   >
-                    <span className="font-bold text-sm block mb-0.5">Sales Lapangan</span>
-                    <span className="text-[11px] text-slate-500">Gaji, Bonus, Insentif, Transport</span>
+                    <span className="font-bold text-xs block mb-0.5 text-emerald-800">Sales Lapangan</span>
+                    <span className="text-[10px] text-slate-500 leading-snug">Gaji, Bonus, Insentif, Transport, Visit</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setIsSpvToggle(true)}
+                    onClick={() => {
+                      setSelectedEditRole('SPV');
+                      setIsSpvToggle(true);
+                    }}
                     className={`p-3 rounded-xl border text-left transition-all ${
-                      isSpvToggle
-                        ? 'border-amber-500 bg-amber-50/60 text-amber-950 ring-2 ring-amber-500/20'
+                      selectedEditRole === 'SPV'
+                        ? 'border-amber-500 bg-amber-50/70 text-amber-950 ring-2 ring-amber-500/20'
                         : 'border-gray-200 bg-white hover:bg-gray-50 text-slate-700'
                     }`}
                   >
-                    <span className="font-bold text-sm block mb-0.5">Supervisor (SPV)</span>
-                    <span className="text-[11px] text-slate-500">Hanya Insentif & Bonus Tim</span>
+                    <span className="font-bold text-xs block mb-0.5 text-amber-800">Supervisor (SPV)</span>
+                    <span className="text-[10px] text-slate-500 leading-snug">Hanya Insentif & Bonus Tim</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedEditRole('WAREHOUSE');
+                      setIsSpvToggle(false);
+                      if (baseSalaryInput === '4500000') setBaseSalaryInput('4000000');
+                    }}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      selectedEditRole === 'WAREHOUSE'
+                        ? 'border-purple-500 bg-purple-50/70 text-purple-950 ring-2 ring-purple-500/20'
+                        : 'border-gray-200 bg-white hover:bg-gray-50 text-slate-700'
+                    }`}
+                  >
+                    <span className="font-bold text-xs block mb-0.5 text-purple-800">Staf Gudang</span>
+                    <span className="text-[10px] text-slate-500 leading-snug">Gaji Pokok, Transport, Logistik</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedEditRole('STAFF');
+                      setIsSpvToggle(false);
+                      if (baseSalaryInput === '4500000') setBaseSalaryInput('4000000');
+                    }}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      selectedEditRole === 'STAFF'
+                        ? 'border-blue-500 bg-blue-50/70 text-blue-950 ring-2 ring-blue-500/20'
+                        : 'border-gray-200 bg-white hover:bg-gray-50 text-slate-700'
+                    }`}
+                  >
+                    <span className="font-bold text-xs block mb-0.5 text-blue-800">Staf Biasa / Kantor</span>
+                    <span className="text-[10px] text-slate-500 leading-snug">Gaji Pokok, Transport, Administrasi</span>
                   </button>
                 </div>
               </div>
 
               {/* JIKA SALES LAPANGAN */}
-              {!isSpvToggle ? (
+              {selectedEditRole === 'SALES' ? (
                 <div className="space-y-3 p-4 bg-emerald-50/30 rounded-xl border border-emerald-100">
                   <p className="text-xs font-bold text-emerald-900 uppercase">Standar Kompensasi Sales Lapangan</p>
 
@@ -2083,7 +2351,7 @@ CREATE POLICY "Allow authenticated full access to returns" ON public.returns FOR
                     <span className="font-bold">Formula Gaji Visit Sales:</span> Total {(Number(dailyVisitsInput) || 6) * (Number(workDaysInput) || 26)} visit/bulan. Nilai per visit: <b className="text-blue-950">Rp {Math.round((Number(baseSalaryInput) || 4500000) / ((Number(dailyVisitsInput) || 6) * (Number(workDaysInput) || 26))).toLocaleString('id-ID')}</b>.
                   </div>
                 </div>
-              ) : (
+              ) : selectedEditRole === 'SPV' ? (
                 /* JIKA SUPERVISOR (SPV) */
                 <div className="space-y-3 p-4 bg-amber-50/40 rounded-xl border border-amber-200">
                   <div className="flex items-center gap-1.5">
@@ -2131,6 +2399,67 @@ CREATE POLICY "Allow authenticated full access to returns" ON public.returns FOR
                         Bonus override dari omzet seluruh sales binaan
                       </span>
                     </div>
+                  </div>
+                </div>
+              ) : (
+                /* JIKA STAF GUDANG / KANTOR */
+                <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="flex items-center gap-1.5">
+                    {selectedEditRole === 'WAREHOUSE' ? (
+                      <Package size={16} className="text-purple-600" />
+                    ) : (
+                      <Briefcase size={16} className="text-blue-600" />
+                    )}
+                    <p className="text-xs font-bold text-slate-800 uppercase">
+                      Standar Kompensasi {selectedEditRole === 'WAREHOUSE' ? 'Staf Gudang' : 'Staf Kantor'}
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-100 rounded-lg text-[11px] text-slate-600">
+                    ℹ️ Staf operasional menerima <b>Gaji Pokok & Uang Transport</b> tetap bulanan (tanpa target kunjungan toko lapangan atau komisi omzet).
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Gaji Pokok (Rp)
+                      </label>
+                      <input
+                        type="number"
+                        value={baseSalaryInput}
+                        onChange={(e) => setBaseSalaryInput(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                        placeholder="4000000"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Uang Transport (Rp)
+                      </label>
+                      <input
+                        type="number"
+                        value={transportAllowanceInput}
+                        onChange={(e) => setTransportAllowanceInput(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold"
+                        placeholder="500000"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Hari Kerja / Bulan
+                    </label>
+                    <input
+                      type="number"
+                      value={workDaysInput}
+                      onChange={(e) => setWorkDaysInput(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold"
+                      placeholder="26"
+                      required
+                    />
                   </div>
                 </div>
               )}

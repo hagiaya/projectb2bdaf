@@ -1357,18 +1357,94 @@ export default function OrdersPage() {
       }
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
+    const finalY = (doc as any).lastAutoTable.finalY + 8;
     
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
     doc.text('Total Keseluruhan:', 130, finalY);
     doc.text(`Rp ${Number(order.total_amount || 0).toLocaleString('id-ID')}`, 196, finalY, { align: 'right' });
 
+    let noteY = finalY + 8;
     if (order.unique_code) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.text(`Termasuk Kode Unik: Rp ${order.unique_code}`, 196, finalY + 6, { align: 'right' });
+      doc.setFontSize(8.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Termasuk Kode Unik: Rp ${order.unique_code}`, 196, finalY + 5, { align: 'right' });
+      noteY += 4;
     }
+
+    // Check if we need a new page for notes and signatures
+    if (noteY + 70 > 280) {
+      doc.addPage();
+      noteY = 20;
+    }
+
+    // Horizontal separator
+    doc.setDrawColor(226, 232, 240);
+    doc.line(14, noteY, 196, noteY);
+    noteY += 6;
+
+    // Left Box: Rekening Pembayaran Resmi
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text('INFORMASI REKENING PEMBAYARAN RESMI:', 14, noteY);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text('Bank: Bank Central Asia (BCA)', 14, noteY + 4.5);
+    doc.text('No. Rekening: 829-019-8821', 14, noteY + 9);
+    doc.text('Atas Nama: PT RAJA AKSESORIS INDONESIA', 14, noteY + 13.5);
+    doc.setFont('helvetica', 'italic');
+    doc.text(`*Harap cantumkan No. Order (${order.order_number}) pada berita transfer.`, 14, noteY + 18);
+
+    // Syarat & Ketentuan
+    const termsY = noteY + 23;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(30, 41, 59);
+    doc.text('SYARAT & KETENTUAN TRANSAKSI:', 14, termsY);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    const terms = [
+      '1. Pembayaran sah hanya apabila ditransfer ke rekening resmi PT Raja Aksesoris Indonesia di atas.',
+      '2. Pembayaran tempo/kredit wajib dilunasi paling lambat pada tanggal jatuh tempo yang telah disepakati.',
+      '3. Klaim kekurangan / kerusakan barang wajib menyertakan video unboxing utuh tanpa jeda maksimal 2x24 jam sejak barang diterima.',
+      '4. Barang yang telah dibeli sesuai pesanan tidak dapat ditukar atau dikembalikan tanpa persetujuan tertulis manajemen DAP.'
+    ];
+    let currTermY = termsY + 3.5;
+    terms.forEach((term) => {
+      const splitTerm = doc.splitTextToSize(term, 105);
+      doc.text(splitTerm, 14, currTermY);
+      currTermY += splitTerm.length * 3.2;
+    });
+
+    // Right Side: Signatures (Tanda Tangan Penerima & Pengirim)
+    const sigY = noteY;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text('Penerima / Toko,', 130, sigY);
+    doc.text('Hormat Kami,', 165, sigY);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('(Tanda Tangan & Cap Toko)', 130, sigY + 4);
+    doc.text('PT Raja Aksesoris Indonesia', 165, sigY + 4);
+
+    doc.setDrawColor(203, 213, 225);
+    doc.line(130, sigY + 28, 155, sigY + 28);
+    doc.line(165, sigY + 28, 196, sigY + 28);
+
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text('( ........................... )', 130, sigY + 32);
+    doc.text('( Bag. Keuangan / Admin )', 165, sigY + 32);
 
     doc.save(`Invoice_${order.order_number}.pdf`);
   };
@@ -1381,10 +1457,32 @@ export default function OrdersPage() {
     let itemsText = '';
     items.forEach((item, index) => {
       const pName = item.products?.name || 'Produk';
-      itemsText += `${index + 1}. ${pName} (${item.quantity} x Rp ${Number(item.unit_price).toLocaleString('id-ID')})\n`;
+      itemsText += `${index + 1}. *${pName}*\n   Qty: ${item.quantity} x Rp ${Number(item.unit_price).toLocaleString('id-ID')} = Rp ${Number(item.total_price).toLocaleString('id-ID')}\n`;
     });
 
-    const text = `Halo ${storeName},\n\nBerikut adalah rincian Pesanan Anda dari DAP B2B:\n\n*Nomor Order*: ${order.order_number}\n*Tanggal*: ${dateStr}\n*Status*: ${getStageBadge(order.status).label}\n\n*Rincian Barang*:\n${itemsText}\n*Total Tagihan*: Rp ${Number(order.total_amount || 0).toLocaleString('id-ID')}\n\nTerima kasih atas pesanan Anda.`;
+    const uniqueCodeText = order.unique_code ? `\n*Kode Unik*: Rp ${order.unique_code.toLocaleString('id-ID')}` : '';
+
+    const text = `*FAKTUR / INVOICE PESANAN DAP B2B*\n` +
+      `-------------------------------------------\n` +
+      `Kepada Yth: *${storeName}*\n` +
+      `*No. Order*: ${order.order_number}\n` +
+      `*Tanggal*: ${dateStr}\n` +
+      `*Status Pesanan*: ${getStageBadge(order.status).label}\n` +
+      `*Metode Pembayaran*: ${order.payment_method || '-'}\n` +
+      `-------------------------------------------\n\n` +
+      `*RINCIAN PRODUK*:\n${itemsText}\n` +
+      `-------------------------------------------\n` +
+      `*TOTAL TAGIHAN*: *Rp ${Number(order.total_amount || 0).toLocaleString('id-ID')}*${uniqueCodeText}\n\n` +
+      `*REKENING PEMBAYARAN RESMI*:\n` +
+      `• Bank: *BCA (Bank Central Asia)*\n` +
+      `• No. Rekening: *829-019-8821*\n` +
+      `• Atas Nama: *PT RAJA AKSESORIS INDONESIA*\n` +
+      `*(Harap cantumkan No. Order ${order.order_number} pada berita transfer)*\n\n` +
+      `*CATATAN & KETENTUAN*:\n` +
+      `1. Pembayaran sah hanya apabila ditransfer ke rekening PT Raja Aksesoris Indonesia di atas.\n` +
+      `2. Untuk pesanan tempo/kredit, pelunasan wajib diselesaikan sebelum tanggal jatuh tempo.\n` +
+      `3. Klaim kekurangan / kerusakan barang wajib menyertakan video unboxing utuh tanpa jeda maksimal 2x24 jam sejak barang diterima.\n\n` +
+      `Terima kasih atas kerja sama dan kepercayaan Anda berbelanja di DAP Accessories! 🙏`;
     
     const encodedText = encodeURIComponent(text);
     const waUrl = phone ? `https://wa.me/${phone.replace(/^0/, '62')}?text=${encodedText}` : `https://api.whatsapp.com/send?text=${encodedText}`;

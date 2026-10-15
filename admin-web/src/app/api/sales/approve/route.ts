@@ -24,7 +24,7 @@ if (!SUPABASE_URL || SUPABASE_URL.includes('rbezcgrxokzhtslrxuta')) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { sales_id, profile_id, status = 'ACTIVE', is_spv = false } = body;
+    const { sales_id, profile_id, status = 'ACTIVE', is_spv = false, role } = body;
 
     if (!sales_id && !profile_id) {
       return NextResponse.json({ error: 'ID personil diperlukan.' }, { status: 400 });
@@ -37,7 +37,10 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const targetRole = is_spv ? 'SPV' : 'SALES';
+    const validRoles = ['SALES', 'SPV', 'WAREHOUSE', 'STAFF'];
+    const targetRole = role && validRoles.includes(String(role).toUpperCase())
+      ? String(role).toUpperCase()
+      : (is_spv ? 'SPV' : 'SALES');
     const targetApprovalStatus = status === 'ACTIVE' ? 'APPROVED' : 'PENDING';
 
     // Strategy 1: Try calling RPC admin_approve_sales_account

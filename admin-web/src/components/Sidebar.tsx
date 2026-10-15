@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { 
   Home, 
   Package, 
@@ -19,7 +19,9 @@ import {
   Award, 
   Target, 
   AlertTriangle,
-  CreditCard
+  CreditCard,
+  LogOut,
+  X
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -28,11 +30,11 @@ const menuItems = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Master Kategori', href: '/categories', icon: Package },
   { name: 'Master Produk', href: '/products', icon: Package },
-  { name: 'Manajemen Stok', href: '/inventory', icon: Archive },
+  { name: 'Persediaan & Stok', href: '/inventory', icon: Archive },
   { name: 'Master Dealer', href: '/dealers', icon: Users },
   { name: 'Program Dealer', href: '/programs', icon: Award },
-  { name: 'Master Sales & SPV', href: '/sales', icon: Users },
-  { name: 'Monitoring Sales', href: '/monitoring', icon: Activity },
+  { name: 'Master Karyawan', href: '/sales', icon: Users },
+  { name: 'Monitoring Karyawan', href: '/monitoring', icon: Activity },
   { name: 'Penggajian Sales', href: '/payroll', icon: DollarSign },
   { name: 'Master Wilayah', href: '/regions', icon: Map },
   { name: 'Manajemen Order', href: '/orders', icon: ShoppingCart },
@@ -52,8 +54,11 @@ const proMenuItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [activeReturnsCount, setActiveReturnsCount] = useState(0);
   const [adminRole, setAdminRole] = useState('SUPER_ADMIN');
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     setAdminRole(localStorage.getItem('adminRole') || 'SUPER_ADMIN');
@@ -90,8 +95,20 @@ export default function Sidebar() {
     }
   };
 
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      localStorage.removeItem('adminRole');
+      router.push('/login');
+    }
+  };
+
   return (
-    <div className="w-64 bg-white dark:bg-black text-gray-900 dark:text-white min-h-screen flex flex-col shadow-xl z-10 relative border-r border-gray-200 dark:border-zinc-800">
+    <div className="w-64 flex-shrink-0 bg-white dark:bg-black text-gray-900 dark:text-white min-h-screen flex flex-col shadow-xl z-10 relative border-r border-gray-200 dark:border-zinc-800">
       <div className="p-6">
         <h1 className="text-2xl font-black tracking-wider text-emerald-600 dark:text-emerald-300 drop-shadow-sm flex items-center gap-2">
           <img src="/LOGO%20DAP.svg" alt="Logo" className="h-8 object-contain" />
@@ -106,7 +123,7 @@ export default function Sidebar() {
         {menuItems.filter(item => {
           if (adminRole === 'SUPER_ADMIN') return true;
           // Restricted ADMIN role access
-          return ['/', '/programs', '/monitoring', '/orders', '/returns'].includes(item.href);
+          return ['/', '/programs', '/monitoring', '/orders', '/returns', '/inventory'].includes(item.href);
         }).map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
@@ -162,18 +179,63 @@ export default function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-gray-200 dark:border-zinc-800/50 bg-gray-50 dark:bg-zinc-900 m-4 rounded-2xl">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-[#a3e635] flex items-center justify-center font-black text-black shadow-inner shadow-white/20">
-            A
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[#a3e635] flex items-center justify-center font-black text-black shadow-inner shadow-white/20">
+              A
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-900 dark:text-white">
+                {adminRole === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin Operasional'}
+              </p>
+              <p className="text-xs text-emerald-600 dark:text-[#a3e635] font-medium">{adminRole}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-bold text-gray-900 dark:text-white">
-              {adminRole === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin Operasional'}
-            </p>
-            <p className="text-xs text-emerald-600 dark:text-[#a3e635] font-medium">{adminRole}</p>
-          </div>
+
+          <button
+            onClick={() => setLogoutConfirmOpen(true)}
+            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors"
+            title="Keluar / Logout Akun"
+          >
+            <LogOut size={18} />
+          </button>
         </div>
       </div>
+
+      {/* MODAL KONFIRMASI LOGOUT (POIN 6) */}
+      {logoutConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 dark:border-zinc-800 text-center">
+            <div className="w-14 h-14 bg-red-100 dark:bg-red-950/40 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <LogOut size={26} />
+            </div>
+            <h3 className="text-lg font-black text-slate-900 dark:text-white">
+              Konfirmasi Keluar
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1.5 leading-relaxed">
+              Apakah Anda yakin ingin keluar dari sesi {adminRole === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin'}? Anda harus login kembali untuk mengakses panel kontrol.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setLogoutConfirmOpen(false)}
+                className="py-2.5 px-4 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-bold text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isLoggingOut}
+                onClick={handleLogout}
+                className="py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all shadow-md shadow-red-600/20"
+              >
+                {isLoggingOut ? 'Keluar...' : 'Ya, Keluar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

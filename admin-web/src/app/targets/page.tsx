@@ -5,7 +5,7 @@ import {
   DollarSign, Search, Plus, Trash2, Edit2, CheckCircle2, 
   TrendingUp, Users, Target, X, RefreshCw, Calendar, 
   MapPin, Shield, Award, AlertCircle, Percent, Eye, ChevronRight,
-  Briefcase, Check, ArrowRight
+  Briefcase, Check, ArrowRight, Package
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -118,6 +118,13 @@ export default function TargetsPage() {
   const [assignSalesId, setAssignSalesId] = useState<string>('');
   const [savingAssign, setSavingAssign] = useState(false);
 
+  // Modal: Detail Order Realisasi Penjualan
+  const [orderDetailModalOpen, setOrderDetailModalOpen] = useState(false);
+  const [selectedTargetForOrders, setSelectedTargetForOrders] = useState<SalesTarget | null>(null);
+  const [targetDetailedOrders, setTargetDetailedOrders] = useState<any[]>([]);
+  const [loadingDetailedOrders, setLoadingDetailedOrders] = useState(false);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+
   useEffect(() => {
     fetchData();
   }, [periodMonth, periodYear]);
@@ -207,6 +214,109 @@ export default function TargetsPage() {
     }
   };
 
+  // Buka Modal & Ambil Detailed Order yang Terhubung ke Realisasi Sales
+  const handleOpenDetailedOrders = async (target: SalesTarget) => {
+    setSelectedTargetForOrders(target);
+    setOrderDetailModalOpen(true);
+    setLoadingDetailedOrders(true);
+    setTargetDetailedOrders([]);
+    setExpandedOrderId(null);
+
+    try {
+      const monthIndex = MONTHS.indexOf(target.period_month || periodMonth);
+      const year = target.period_year || periodYear;
+      const startDate = new Date(year, monthIndex, 1).toISOString();
+      const endDate = new Date(year, monthIndex + 1, 0, 23, 59, 59).toISOString();
+
+      // 1. Ambil ID dealer binaan sales ini
+      const { data: dealerList } = await supabase
+        .from('dealers')
+        .select('id, store_name, address')
+        .eq('sales_id', target.sales_id);
+
+      const dealerIds = (dealerList || []).map(d => d.id);
+
+      // 2. Fetch orders dengan sales_id = target.sales_id
+      const { data: directSalesOrders, error: dErr } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          order_number,
+          total_amount,
+          discount_amount,
+          shipping_cost,
+          status,
+          payment_method,
+          created_at,
+          dealer_id,
+          is_spv_direct_sale,
+          dealers (id, store_name, address, profiles(full_name, phone_number)),
+          order_items (
+            id,
+            quantity,
+            unit_price,
+            total_price,
+            products (id, name, sku, image_url)
+          )
+        `)
+        .eq('sales_id', target.sales_id)
+        .neq('status', 'CANCELLED')
+        .gte('created_at', startDate)
+        .lte('created_at', endDate);
+
+      if (dErr) console.error('Error fetching direct orders:', dErr);
+
+      // 3. Fetch orders dari dealer binaan
+      let assignedDealerOrders: any[] = [];
+      if (dealerIds.length > 0) {
+        const { data: adOrders, error: adErr } = await supabase
+          .from('orders')
+          .select(`
+            id,
+            order_number,
+            total_amount,
+            discount_amount,
+            shipping_cost,
+            status,
+            payment_method,
+            created_at,
+            dealer_id,
+            is_spv_direct_sale,
+            dealers (id, store_name, address, profiles(full_name, phone_number)),
+            order_items (
+              id,
+              quantity,
+              unit_price,
+              total_price,
+              products (id, name, sku, image_url)
+            )
+          `)
+          .in('dealer_id', dealerIds)
+          .neq('status', 'CANCELLED')
+          .gte('created_at', startDate)
+          .lte('created_at', endDate);
+
+        if (adErr) console.error('Error fetching assigned dealer orders:', adErr);
+        if (adOrders) assignedDealerOrders = adOrders;
+      }
+
+      // Merge order unik berdasarkan ID
+      const mergedMap = new Map<string, any>();
+      (directSalesOrders || []).forEach(o => mergedMap.set(o.id, o));
+      assignedDealerOrders.forEach(o => mergedMap.set(o.id, o));
+
+      const ordersList = Array.from(mergedMap.values()).sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      setTargetDetailedOrders(ordersList);
+    } catch (err: any) {
+      console.error('Error fetching detailed orders:', err);
+    } finally {
+      setLoadingDetailedOrders(false);
+    }
+  };
+
   // Sinkronisasi Otomatis Realisasi Penjualan & Realisasi Visit dari DB
   const handleSyncRealization = async () => {
     setIsSyncing(true);
@@ -230,19 +340,43 @@ export default function TargetsPage() {
         const visitPct = t.target_visits > 0 ? (realVisits / t.target_visits) * 100 : 0;
 
         // B. Hitung realisasi omzet pesanan aktual
-        const { data: orderData } = await supabase
+        const { data: myDealers } = await supabase
+          .from('dealers')
+          .select('id')
+          .eq('sales_id', t.sales_id);
+
+        const dealerIds = (myDealers || []).map(d => d.id);
+
+        const { data: directOrders } = await supabase
           .from('orders')
-          .select('id, final_amount, total_amount, status, is_spv_direct_sale')
-          .or(`sales_id.eq.${t.sales_id},dealer_id.in.(select id from dealers where sales_id = '${t.sales_id}')`)
+          .select('id, total_amount, status, is_spv_direct_sale')
+          .eq('sales_id', t.sales_id)
           .neq('status', 'CANCELLED')
           .gte('created_at', startDate)
           .lte('created_at', endDate);
 
+        let dealerOrders: any[] = [];
+        if (dealerIds.length > 0) {
+          const { data: dOrders } = await supabase
+            .from('orders')
+            .select('id, total_amount, status, is_spv_direct_sale')
+            .in('dealer_id', dealerIds)
+            .neq('status', 'CANCELLED')
+            .gte('created_at', startDate)
+            .lte('created_at', endDate);
+          if (dOrders) dealerOrders = dOrders;
+        }
+
+        const mergedOrdersMap = new Map();
+        (directOrders || []).forEach(o => mergedOrdersMap.set(o.id, o));
+        dealerOrders.forEach(o => mergedOrdersMap.set(o.id, o));
+        const allOrders = Array.from(mergedOrdersMap.values());
+
         let realOmzet = 0;
         let realDirectSpv = 0;
 
-        (orderData || []).forEach((ord: any) => {
-          const val = Number(ord.final_amount || ord.total_amount || 0);
+        allOrders.forEach((ord: any) => {
+          const val = Number(ord.total_amount || 0);
           if (ord.is_spv_direct_sale) {
             realDirectSpv += val;
           } else {
@@ -699,13 +833,24 @@ export default function TargetsPage() {
                             </div>
                           </td>
 
-                          {/* Realisasi Penjualan */}
+                          {/* Realisasi Penjualan (Terkoneksi ke Detailed Order) */}
                           <td className="py-3.5 px-4">
-                            <div className="font-bold text-blue-700 text-sm">
-                              Rp {t.achieved_amount.toLocaleString('id-ID')}
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDetailedOrders(t)}
+                              className="text-left group flex flex-col items-start hover:opacity-90 transition-opacity"
+                              title="Klik untuk melihat Detail Order Realisasi Penjualan"
+                            >
+                              <div className="font-bold text-blue-700 text-sm flex items-center gap-1 group-hover:underline">
+                                Rp {t.achieved_amount.toLocaleString('id-ID')}
+                                <Eye size={13} className="text-blue-500 opacity-60 group-hover:opacity-100" />
+                              </div>
+                              <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 group-hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200 mt-0.5 flex items-center gap-1">
+                                <Eye size={10} /> Detail Order
+                              </span>
+                            </button>
                             {t.spv_direct_achieved_amount && t.spv_direct_achieved_amount > 0 ? (
-                              <div className="text-[10px] font-semibold text-purple-600">
+                              <div className="text-[10px] font-semibold text-purple-600 mt-1">
                                 + Rp {t.spv_direct_achieved_amount.toLocaleString('id-ID')} (Direct SPV)
                               </div>
                             ) : null}
@@ -749,6 +894,13 @@ export default function TargetsPage() {
                           {/* Aksi */}
                           <td className="py-3.5 px-4 text-center">
                             <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleOpenDetailedOrders(t)}
+                                className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors"
+                                title="Lihat Detail Order Realisasi"
+                              >
+                                <Eye size={14} />
+                              </button>
                               <button
                                 onClick={() => handleOpenEdit(t)}
                                 className="p-1.5 bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-700 rounded-lg transition-colors"
@@ -938,7 +1090,21 @@ export default function TargetsPage() {
                                   <td className="py-2.5 px-4 font-bold text-slate-900">{ts.profiles?.full_name}</td>
                                   <td className="py-2.5 px-4 text-slate-600">{ts.regions?.name || 'Tanpa Wilayah'}</td>
                                   <td className="py-2.5 px-4 font-semibold">Rp {tAmt.toLocaleString('id-ID')}</td>
-                                  <td className="py-2.5 px-4 font-bold text-blue-700">Rp {aAmt.toLocaleString('id-ID')}</td>
+                                  <td className="py-2.5 px-4 font-bold text-blue-700">
+                                    {targetItem ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenDetailedOrders(targetItem)}
+                                        className="text-left font-bold text-blue-700 hover:underline flex items-center gap-1 group"
+                                        title="Lihat Detail Order"
+                                      >
+                                        Rp {aAmt.toLocaleString('id-ID')}
+                                        <Eye size={12} className="text-blue-500 opacity-60 group-hover:opacity-100" />
+                                      </button>
+                                    ) : (
+                                      `Rp ${aAmt.toLocaleString('id-ID')}`
+                                    )}
+                                  </td>
                                   <td className="py-2.5 px-4 font-semibold text-amber-600">Rp {remAmt.toLocaleString('id-ID')}</td>
                                   <td className="py-2.5 px-4 font-bold">
                                     <span className={`${pct >= 90 ? 'text-blue-700' : 'text-slate-700'}`}>
@@ -1247,6 +1413,233 @@ export default function TargetsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DETAIL ORDER REALISASI PENJUALAN SALES */}
+      {orderDetailModalOpen && selectedTargetForOrders && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-400/30 rounded text-[11px] font-extrabold uppercase tracking-wider">
+                    Detailed Order Penjualan
+                  </span>
+                  <span className="text-slate-400 text-xs">•</span>
+                  <span className="text-slate-300 text-xs font-semibold">
+                    Periode: {selectedTargetForOrders.period_month} {selectedTargetForOrders.period_year}
+                  </span>
+                </div>
+                <h3 className="text-xl font-black mt-1 flex items-center gap-2">
+                  {selectedTargetForOrders.sales?.profiles?.full_name || 'Sales DAP'}
+                  {selectedTargetForOrders.sales?.is_spv && (
+                    <span className="px-1.5 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-extrabold rounded">
+                      SPV
+                    </span>
+                  )}
+                </h3>
+                <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                  <MapPin size={12} /> Wilayah: {selectedTargetForOrders.sales?.regions?.name || 'Area DAP'} • HP: {selectedTargetForOrders.sales?.profiles?.phone_number || '-'}
+                </p>
+              </div>
+              <button
+                onClick={() => setOrderDetailModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Metrics Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-slate-50 border-b border-slate-200">
+              <div className="bg-white p-3 rounded-xl border border-slate-200">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Target Omzet</span>
+                <p className="text-sm font-black text-slate-900 mt-0.5">
+                  Rp {Number(selectedTargetForOrders.target_amount || 0).toLocaleString('id-ID')}
+                </p>
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-blue-200">
+                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">Realisasi Aktual</span>
+                <p className="text-sm font-black text-blue-700 mt-0.5">
+                  Rp {targetDetailedOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0).toLocaleString('id-ID')}
+                </p>
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-slate-200">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Transaksi</span>
+                <p className="text-sm font-black text-slate-900 mt-0.5">
+                  {targetDetailedOrders.length} Pesanan
+                </p>
+              </div>
+              <div className="bg-white p-3 rounded-xl border border-emerald-200">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">% Pencapaian</span>
+                <p className="text-sm font-black text-emerald-700 mt-0.5">
+                  {selectedTargetForOrders.target_amount > 0
+                    ? ((targetDetailedOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0) / selectedTargetForOrders.target_amount) * 100).toFixed(1)
+                    : 0}%
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Body / Orders List */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {loadingDetailedOrders ? (
+                <div className="py-16 text-center text-slate-400">
+                  <RefreshCw className="animate-spin inline mr-2 text-blue-600" size={24} />
+                  <p className="mt-2 text-sm font-semibold">Memuat rincian pesanan toko binaan...</p>
+                </div>
+              ) : targetDetailedOrders.length === 0 ? (
+                <div className="py-16 text-center text-slate-400">
+                  <Package size={44} className="mx-auto mb-2 text-slate-300" />
+                  <p className="font-bold text-slate-700">Belum Ada Detailed Order</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+                    Belum ditemukan pesanan non-batal dari toko binaan sales ini pada periode {selectedTargetForOrders.period_month} {selectedTargetForOrders.period_year}.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {targetDetailedOrders.map((ord: any) => {
+                    const isExpanded = expandedOrderId === ord.id;
+                    const items = ord.order_items || [];
+                    const itemCount = items.reduce((acc: number, it: any) => acc + (Number(it.quantity) || 0), 0);
+
+                    return (
+                      <div
+                        key={ord.id}
+                        className="bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-blue-300 transition-all shadow-sm"
+                      >
+                        {/* Order Header Summary */}
+                        <div
+                          onClick={() => setExpandedOrderId(isExpanded ? null : ord.id)}
+                          className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/70"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-slate-900 text-sm">
+                                {ord.order_number}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                ord.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
+                                ord.status === 'SHIPPED' ? 'bg-blue-100 text-blue-800' :
+                                ord.status === 'PACKING' ? 'bg-purple-100 text-purple-800' :
+                                ord.status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
+                                'bg-slate-100 text-slate-700'
+                              }`}>
+                                {ord.status}
+                              </span>
+                              {ord.is_spv_direct_sale && (
+                                <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold rounded">
+                                  Direct SPV
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-600 font-bold mt-1 flex items-center gap-2">
+                              <span>🏪 {ord.dealers?.store_name || 'Toko'}</span>
+                              {ord.dealers?.profiles?.full_name && (
+                                <span className="text-slate-400 font-normal">
+                                  (PIC: {ord.dealers.profiles.full_name})
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 mt-0.5">
+                              {new Date(ord.created_at).toLocaleDateString('id-ID', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })} WIB • Metode: {ord.payment_method || 'Transfer Bank'}
+                            </div>
+                          </div>
+
+                          <div className="flex sm:flex-col items-end justify-between sm:justify-center">
+                            <span className="text-sm font-black text-blue-700">
+                              Rp {Number(ord.total_amount || 0).toLocaleString('id-ID')}
+                            </span>
+                            <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5 font-semibold">
+                              {items.length} SKU ({itemCount} pcs)
+                              <ChevronRight
+                                size={14}
+                                className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                              />
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Accordion Product Items */}
+                        {isExpanded && (
+                          <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-2">
+                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                              Rincian Produk yang Dipesan:
+                            </p>
+                            {items.length === 0 ? (
+                              <p className="text-xs text-slate-400 italic">Tidak ada rincian item produk.</p>
+                            ) : (
+                              <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                                <table className="w-full text-left text-xs">
+                                  <thead className="bg-slate-100 font-bold text-slate-600 border-b border-slate-200">
+                                    <tr>
+                                      <th className="py-2 px-3">Produk</th>
+                                      <th className="py-2 px-3">SKU</th>
+                                      <th className="py-2 px-3 text-center">Qty</th>
+                                      <th className="py-2 px-3 text-right">Harga Satuan</th>
+                                      <th className="py-2 px-3 text-right">Subtotal</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {items.map((it: any) => (
+                                      <tr key={it.id} className="hover:bg-slate-50/80">
+                                        <td className="py-2.5 px-3 font-semibold text-slate-900">
+                                          {it.products?.name || 'Produk'}
+                                        </td>
+                                        <td className="py-2.5 px-3 text-slate-500 font-mono">
+                                          {it.products?.sku || '-'}
+                                        </td>
+                                        <td className="py-2.5 px-3 text-center font-bold text-slate-800">
+                                          {it.quantity}
+                                        </td>
+                                        <td className="py-2.5 px-3 text-right text-slate-600">
+                                          Rp {Number(it.unit_price || 0).toLocaleString('id-ID')}
+                                        </td>
+                                        <td className="py-2.5 px-3 text-right font-bold text-blue-700">
+                                          Rp {Number(it.total_price || 0).toLocaleString('id-ID')}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+
+                            {ord.dealers?.address && (
+                              <p className="text-[11px] text-slate-500 mt-2">
+                                📍 <b>Alamat Outlet</b>: {ord.dealers.address}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <span className="text-xs text-slate-500 font-medium">
+                Total {targetDetailedOrders.length} transaksi pesanan terhubung ke sales ini
+              </span>
+              <button
+                type="button"
+                onClick={() => setOrderDetailModalOpen(false)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-bold transition-colors shadow-sm"
+              >
+                Tutup
+              </button>
+            </div>
           </div>
         </div>
       )}
