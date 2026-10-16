@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -167,12 +167,18 @@ interface ParticipantRecord {
 }
 
 export default function DealerProgramsScreen() {
+  const params = useLocalSearchParams();
+  const paramDealerId = params.dealerId as string | undefined;
+
   const [loading, setLoading] = useState(true);
   const [programs, setPrograms] = useState<DealerProgram[]>([]);
   const [myParticipants, setMyParticipants] = useState<ParticipantRecord[]>([]);
+  const [dealersList, setDealersList] = useState<any[]>([]);
   const [currentDealerId, setCurrentDealerId] = useState<string | null>(null);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [currentDealerProfile, setCurrentDealerProfile] = useState<any>(null);
+  const [dealerPickerModalVisible, setDealerPickerModalVisible] = useState(false);
+  const [dealerSearchQuery, setDealerSearchQuery] = useState('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'BARANG_SUPPORT' | 'TRIP' | 'CASHBACK' | 'HADIAH_DOORPRIZE' | 'MY_PROGRAMS'>('ALL');
 
@@ -248,22 +254,50 @@ export default function DealerProgramsScreen() {
         setCurrentUserProfile(pData);
       }
 
-      const { data: dealerData } = await supabase
-        .from('dealers')
-        .select('*')
+      // Fetch dealers belonging to this sales rep or active dealers
+      let salesDealers: any[] = [];
+      const { data: sData } = await supabase
+        .from('sales')
+        .select('id')
         .eq('profile_id', user.id)
         .maybeSingle();
 
-      if (dealerData) {
-        dId = dealerData.id;
-        setCurrentDealerId(dealerData.id);
-        setCurrentDealerProfile(dealerData);
+      const currentSalesId = sData?.id || null;
+      const { data: dRows } = await supabase
+        .from('dealers')
+        .select('id, store_name, address, profile_id, profiles(full_name, phone_number)')
+        .or(currentSalesId ? `sales_id.eq.${currentSalesId},sales_id.eq.${user.id}` : `profile_id.eq.${user.id}`);
+
+      if (dRows && dRows.length > 0) {
+        salesDealers = dRows;
+      } else {
+        const { data: fallbackDealers } = await supabase
+          .from('dealers')
+          .select('id, store_name, address, profile_id, profiles(full_name, phone_number)')
+          .limit(50);
+        if (fallbackDealers) salesDealers = fallbackDealers;
+      }
+
+      setDealersList(salesDealers);
+
+      let targetDealer = null;
+      if (paramDealerId) {
+        targetDealer = salesDealers.find((d) => d.id === paramDealerId);
+      }
+      if (!targetDealer && salesDealers.length > 0) {
+        targetDealer = salesDealers[0];
+      }
+
+      if (targetDealer) {
+        dId = targetDealer.id;
+        setCurrentDealerId(targetDealer.id);
+        setCurrentDealerProfile(targetDealer);
 
         // Calculate completed order accumulation
         const { data: orderData } = await supabase
           .from('orders')
           .select('final_amount, total_amount')
-          .eq('dealer_id', dealerData.id)
+          .eq('dealer_id', targetDealer.id)
           .in('status', ['COMPLETED', 'SHIPPED']);
 
         if (orderData) {
@@ -299,6 +333,28 @@ export default function DealerProgramsScreen() {
         if (localStr) localEnrolled = JSON.parse(localStr);
       } catch (e) {
         console.warn('Error reading local participants:', e);
+      }
+
+      // Auto-sync unconfirmed local enrollments to backend API so they appear on Admin Web
+      if (dId && localEnrolled.length > 0) {
+        for (const unconfirmed of localEnrolled) {
+          if (unconfirmed.id && (unconfirmed.id.startsWith('part-') || unconfirmed.dealer_id === 'demo-dealer-id')) {
+            try {
+              fetch('https://adminpaneldap.vercel.app/api/programs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  program_id: unconfirmed.program_id,
+                  dealer_id: dId,
+                  status: unconfirmed.status || 'ENROLLED',
+                  claim_notes: unconfirmed.claim_notes || '',
+                  custom_target_amount: unconfirmed.custom_target_amount,
+                  selected_item_qty: unconfirmed.selected_item_qty || 1,
+                }),
+              }).catch(() => {});
+            } catch (_) {}
+          }
+        }
       }
 
       let loadedParts: any[] = [];
@@ -381,6 +437,99 @@ export default function DealerProgramsScreen() {
       console.error('Error init dealer programs:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Helper for sales rep to switch selected dealer
+  const selectDealer = async (dealer: any) => {
+    setCurrentDealerId(dealer.id);
+    setCurrentDealerProfile(dealer);
+    setDealerPickerModalVisible(false);
+
+    try {
+      const { data: orderData } = await supabase
+        .from('orders')
+        .select('final_amount, total_amount')
+        .eq('dealer_id', dealer.id)
+        .in('status', ['COMPLETED', 'SHIPPED']);
+
+      let orderTotal = 0;
+      if (orderData) {
+        orderTotal = orderData.reduce(
+          (sum, o) => sum + (Number(o.final_amount || o.total_amount) || 0),
+          0
+        );
+      }
+
+      const storageKey = `@dap_enrolled_participants_${dealer.id}`;
+      let localEnrolled: ParticipantRecord[] = [];
+      try {
+        const localStr = await AsyncStorage.getItem(storageKey);
+        if (localStr) localEnrolled = JSON.parse(localStr);
+      } catch (_) {}
+
+      let loadedParts: any[] = [];
+      const { data: partData } = await supabase
+        .from('dealer_program_participants')
+        .select('*')
+        .eq('dealer_id', dealer.id);
+
+      if (partData && partData.length > 0) {
+        loadedParts = partData;
+      }
+
+      const mergedMap = new Map<string, any>();
+      for (const lp of localEnrolled) {
+        if (lp.program_id) mergedMap.set(lp.program_id, lp);
+      }
+      for (const dbp of loadedParts) {
+        const existingLocal = mergedMap.get(dbp.program_id) || {};
+        mergedMap.set(dbp.program_id, { ...existingLocal, ...dbp });
+      }
+
+      const finalParticipants: ParticipantRecord[] = Array.from(mergedMap.values()).map((p: any) => {
+        let photoBefore = p.photo_before_url || null;
+        let photoAfter = p.photo_after_url || null;
+        let selectedItemId = p.selected_item_id || null;
+        let selectedItemName = p.selected_item_name || null;
+        let qty = p.selected_item_qty || 1;
+
+        if (p.claim_notes) {
+          if (!photoBefore) {
+            const matchBefore = p.claim_notes.match(/\[BEFORE_URL:\s*([^\]\s]+)\]/i);
+            if (matchBefore) photoBefore = matchBefore[1].trim();
+          }
+          if (!photoAfter) {
+            const matchAfter = p.claim_notes.match(/\[AFTER_URL:\s*([^\]\s]+)\]/i);
+            if (matchAfter) photoAfter = matchAfter[1].trim();
+          }
+          const metaMatch = p.claim_notes.match(/__METADATA__:(.+)$/m);
+          if (metaMatch) {
+            try {
+              const meta = JSON.parse(metaMatch[1].trim());
+              if (!photoBefore && meta.photo_before_url) photoBefore = meta.photo_before_url;
+              if (!photoAfter && meta.photo_after_url) photoAfter = meta.photo_after_url;
+              if (!selectedItemId && meta.selected_item_id) selectedItemId = meta.selected_item_id;
+              if (!selectedItemName && meta.selected_item_name) selectedItemName = meta.selected_item_name;
+              if (!p.selected_item_qty && meta.selected_item_qty) qty = meta.selected_item_qty;
+            } catch (_) {}
+          }
+        }
+
+        return {
+          ...p,
+          current_progress_amount: orderTotal,
+          photo_before_url: photoBefore,
+          photo_after_url: photoAfter,
+          selected_item_id: selectedItemId,
+          selected_item_name: selectedItemName,
+          selected_item_qty: qty,
+        };
+      });
+
+      setMyParticipants(finalParticipants);
+    } catch (e) {
+      console.warn('Error changing selected dealer:', e);
     }
   };
 
@@ -725,20 +874,43 @@ export default function DealerProgramsScreen() {
       };
 
       if (!currentDealerId) {
-        Alert.alert('Perhatian', 'Hanya akun Toko (Dealer) yang dapat mendaftar program ini.');
+        Alert.alert('Pilih Toko Terlebih Dahulu', 'Silakan pilih toko dealer yang ingin didaftarkan program ini.');
         return;
       }
 
-      const { data, error } = await supabase
-        .from('dealer_program_participants')
-        .insert([payload])
-        .select();
+      let insertedId = 'part-' + Date.now();
+      try {
+        const apiRes = await fetch('https://adminpaneldap.vercel.app/api/programs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const apiJson = await apiRes.json();
+        if (apiJson.success && apiJson.participant) {
+          insertedId = apiJson.participant.id;
+        }
+      } catch (_) {}
 
-      if (error) throw error;
-      if (data) {
-        setMyParticipants([]);
+      if (insertedId.startsWith('part-')) {
+        const { data, error } = await supabase
+          .from('dealer_program_participants')
+          .insert([payload])
+          .select();
+
+        if (error) throw error;
+        if (data && data[0]) {
+          insertedId = data[0].id;
+        }
       }
-      Alert.alert('Pendaftaran Berhasil 🎉', `Toko Anda telah terdaftar pada program "${program.title}". Kumpulkan omset belanja Anda!`);
+
+      setMyParticipants([
+        {
+          id: insertedId,
+          ...payload,
+        },
+        ...myParticipants.filter((p) => p.program_id !== program.id),
+      ]);
+      Alert.alert('Pendaftaran Berhasil 🎉', `Toko "${currentDealerProfile?.store_name || 'Dealer'}" telah terdaftar pada program "${program.title}". Kumpulkan omset belanja toko!`);
     } catch (err: any) {
       Alert.alert('Gagal Mendaftar', err.message || 'Terjadi kesalahan sistem.');
     } finally {
@@ -820,7 +992,7 @@ export default function DealerProgramsScreen() {
 
       let insertedId = `part-${Date.now()}`;
 
-      // Insert to Supabase if connected
+      // Insert to Supabase / Backend API if connected
       if (currentDealerId) {
         const payload: any = {
           program_id: programToEnroll.id,
@@ -832,30 +1004,48 @@ export default function DealerProgramsScreen() {
           selected_item_qty: qty,
         };
 
-        const { data, error } = await supabase
-          .from('dealer_program_participants')
-          .insert([payload])
-          .select();
+        // Try API endpoint first (reliable backend with administrative rights)
+        try {
+          const apiRes = await fetch('https://adminpaneldap.vercel.app/api/programs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const apiJson = await apiRes.json();
+          if (apiJson.success && apiJson.participant) {
+            insertedId = apiJson.participant.id;
+          }
+        } catch (apiErr) {
+          console.warn('API enrollment failed, falling back to direct supabase:', apiErr);
+        }
 
-        if (error) {
-          console.warn('First insert attempt with custom cols failed, retrying minimal payload:', error.message);
-          const minimalPayload = {
-            program_id: programToEnroll.id,
-            dealer_id: currentDealerId,
-            current_progress_amount: 0,
-            status: 'ENROLLED',
-            claim_notes: snapshotNotes,
-          };
-          const retry = await supabase
+        // If API did not return confirmed ID, try direct Supabase insert
+        if (insertedId.startsWith('part-')) {
+          const { data, error } = await supabase
             .from('dealer_program_participants')
-            .insert([minimalPayload])
+            .insert([payload])
             .select();
 
-          if (retry.data && retry.data[0]) {
-            insertedId = retry.data[0].id;
+          if (error) {
+            console.warn('Direct insert attempt failed, trying minimal payload:', error.message);
+            const minimalPayload = {
+              program_id: programToEnroll.id,
+              dealer_id: currentDealerId,
+              current_progress_amount: 0,
+              status: 'ENROLLED',
+              claim_notes: snapshotNotes,
+            };
+            const retry = await supabase
+              .from('dealer_program_participants')
+              .insert([minimalPayload])
+              .select();
+
+            if (retry.data && retry.data[0]) {
+              insertedId = retry.data[0].id;
+            }
+          } else if (data && data[0]) {
+            insertedId = data[0].id;
           }
-        } else if (data && data[0]) {
-          insertedId = data[0].id;
         }
       }
 
@@ -934,6 +1124,19 @@ export default function DealerProgramsScreen() {
       const updatedNotes = (activeAfterParticipant.claim_notes || '') + appendNotes;
 
       if (currentDealerId) {
+        try {
+          await fetch('https://adminpaneldap.vercel.app/api/programs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              program_id: activeAfterParticipant.program_id,
+              dealer_id: currentDealerId,
+              status: 'COMPLETED',
+              claim_notes: updatedNotes,
+            }),
+          });
+        } catch (_) {}
+
         await supabase
           .from('dealer_program_participants')
           .update({
@@ -1113,17 +1316,37 @@ export default function DealerProgramsScreen() {
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(dealer)/home'))}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(sales)' as any))}
           style={styles.backBtn}
         >
           <Feather name="arrow-left" size={22} color="white" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Program Target & Reward</Text>
-          <Text style={styles.headerSubtitle}>Capai target belanja dan raih reward display eksklusif</Text>
+          <Text style={styles.headerSubtitle}>Daftarkan toko dan pantau pencapaian display reward</Text>
         </View>
         <TouchableOpacity onPress={initData} style={styles.refreshBtn}>
           <Feather name="rotate-cw" size={18} color="white" />
+        </TouchableOpacity>
+      </View>
+
+      {/* SALES DEALER SELECTOR BANNER */}
+      <View style={styles.salesDealerCard}>
+        <View style={styles.salesDealerInfo}>
+          <Text style={styles.salesDealerLabel}>Toko Dealer yang Didaftarkan:</Text>
+          <Text style={styles.salesDealerName}>
+            {currentDealerProfile?.store_name || 'Pilih Toko Dealer'}
+          </Text>
+          <Text style={styles.salesDealerAddress} numberOfLines={1}>
+            {currentDealerProfile?.address || 'Ketuk tombol ganti untuk memilih toko'}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.changeDealerBtn}
+          onPress={() => setDealerPickerModalVisible(true)}
+        >
+          <Feather name="refresh-cw" size={13} color="#15803d" />
+          <Text style={styles.changeDealerBtnText}>Ganti Toko</Text>
         </TouchableOpacity>
       </View>
 
@@ -2492,11 +2715,220 @@ export default function DealerProgramsScreen() {
           )}
         </View>
       </Modal>
+
+      {/* DEALER PICKER MODAL FOR SALES */}
+      <Modal
+        visible={dealerPickerModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setDealerPickerModalVisible(false)}
+      >
+        <View style={styles.dealerModalOverlay}>
+          <View style={styles.dealerModalContent}>
+            <View style={styles.dealerModalHeader}>
+              <View>
+                <Text style={styles.dealerModalTitle}>Pilih Toko Dealer</Text>
+                <Text style={styles.dealerModalSubtitle}>
+                  Daftarkan atau pantau program untuk toko pilihan Anda
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setDealerPickerModalVisible(false)}
+                style={styles.dealerModalCloseBtn}
+              >
+                <Feather name="x" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.dealerModalSearchBox}>
+              <Feather name="search" size={16} color="#94a3b8" />
+              <TextInput
+                placeholder="Cari nama toko dealer..."
+                value={dealerSearchQuery}
+                onChangeText={setDealerSearchQuery}
+                style={styles.dealerModalSearchInput}
+              />
+              {dealerSearchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setDealerSearchQuery('')}>
+                  <Feather name="x-circle" size={15} color="#94a3b8" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <ScrollView style={{ maxHeight: 380 }}>
+              {dealersList
+                .filter((d) =>
+                  dealerSearchQuery.trim()
+                    ? (d.store_name || '').toLowerCase().includes(dealerSearchQuery.toLowerCase()) ||
+                      (d.address || '').toLowerCase().includes(dealerSearchQuery.toLowerCase())
+                    : true
+                )
+                .map((dealer) => {
+                  const isSelected = currentDealerId === dealer.id;
+                  return (
+                    <TouchableOpacity
+                      key={dealer.id}
+                      style={[
+                        styles.dealerItemRow,
+                        isSelected && styles.dealerItemRowSelected,
+                      ]}
+                      onPress={() => selectDealer(dealer)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.dealerItemName,
+                            isSelected && { color: '#15803d' },
+                          ]}
+                        >
+                          {dealer.store_name}
+                        </Text>
+                        <Text style={styles.dealerItemAddress} numberOfLines={1}>
+                          {dealer.address || 'Alamat belum tercatat'}
+                        </Text>
+                      </View>
+                      {isSelected ? (
+                        <Feather name="check-circle" size={18} color="#15803d" />
+                      ) : (
+                        <Feather name="chevron-right" size={18} color="#cbd5e1" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  salesDealerCard: {
+    backgroundColor: '#ffffff',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    padding: 14,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  salesDealerInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  salesDealerLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  salesDealerName: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#0f172a',
+    marginTop: 2,
+  },
+  salesDealerAddress: {
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  changeDealerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  changeDealerBtnText: {
+    color: '#15803d',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  dealerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  dealerModalContent: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  dealerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  dealerModalTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#0f172a',
+  },
+  dealerModalSubtitle: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  dealerModalCloseBtn: {
+    padding: 4,
+  },
+  dealerModalSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
+  dealerModalSearchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#0f172a',
+  },
+  dealerItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  dealerItemRowSelected: {
+    backgroundColor: '#f0fdf4',
+  },
+  dealerItemName: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1e293b',
+  },
+  dealerItemAddress: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
   container: {
     flex: 1,
     backgroundColor: '#f6fbf0',

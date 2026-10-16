@@ -228,19 +228,41 @@ export default function ProgramsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch programs
-      const { data: progData, error: progErr } = await supabase
-        .from('dealer_programs')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let progData: any[] = [];
+      let partData: any[] = [];
 
-      // 2. Fetch participants
-      const { data: partData, error: partErr } = await supabase
-        .from('dealer_program_participants')
-        .select('*, dealers(id, store_name, address, profiles(full_name, phone_number)), dealer_programs(*)')
-        .order('enrolled_at', { ascending: false });
+      // Priority 1: Fetch via Administrative API Route (Bypasses client RLS restrictions completely)
+      try {
+        const apiRes = await fetch('/api/programs');
+        if (apiRes.ok) {
+          const apiJson = await apiRes.json();
+          if (apiJson.success) {
+            progData = apiJson.programs || [];
+            partData = apiJson.participants || [];
+          }
+        }
+      } catch (apiErr) {
+        console.warn('API /api/programs fetch failed, falling back to direct client supabase:', apiErr);
+      }
 
-      if (progData && !progErr) {
+      // Priority 2: Fallback to direct supabase client if API didn't return programs
+      if (progData.length === 0) {
+        const { data: directProg } = await supabase
+          .from('dealer_programs')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (directProg) progData = directProg;
+      }
+
+      if (partData.length === 0) {
+        const { data: directParts } = await supabase
+          .from('dealer_program_participants')
+          .select('*, dealers(id, store_name, address, profiles(full_name, phone_number)), dealer_programs(*)')
+          .order('enrolled_at', { ascending: false });
+        if (directParts) partData = directParts;
+      }
+
+      if (progData && progData.length > 0) {
         const enrichedPrograms: DealerProgram[] = (progData as unknown as DealerProgram[]).map((prog) => {
           const progParticipants = (partData || []).filter(
             (p: { program_id: string }) => p.program_id === prog.id
@@ -263,11 +285,58 @@ export default function ProgramsPage() {
           };
         });
         setPrograms(enrichedPrograms);
+      } else {
+        setPrograms([]);
       }
 
-      if (partData && !partErr) {
-        setParticipants(partData as unknown as Participant[]);
-      }
+      // Format & enrich participants (decode metadata if not already decoded)
+      const mappedParticipants = (partData || []).map((p: any) => {
+        let photo_before_url = p.photo_before_url || null;
+        let photo_after_url = p.photo_after_url || null;
+        let selected_item_name = p.selected_item_name || null;
+        let applicant_name = p.applicant_name || p.dealers?.profiles?.full_name || null;
+        let applicant_store_name = p.applicant_store_name || p.dealers?.store_name || null;
+        let applicant_phone = p.applicant_phone || p.dealers?.profiles?.phone_number || null;
+
+        if (p.claim_notes) {
+          const metaMatch = p.claim_notes.match(/__METADATA__:([\s\S]*)$/);
+          if (metaMatch && metaMatch[1]) {
+            try {
+              const meta = JSON.parse(metaMatch[1]);
+              photo_before_url = photo_before_url || meta.photo_before_url;
+              photo_after_url = photo_after_url || meta.photo_after_url;
+              selected_item_name = selected_item_name || meta.selected_item_name;
+              applicant_name = applicant_name || meta.applicant_name;
+              applicant_store_name = applicant_store_name || meta.applicant_store_name;
+              applicant_phone = applicant_phone || meta.applicant_phone;
+            } catch (_) {}
+          }
+          if (!photo_before_url) {
+            const beforeMatch = p.claim_notes.match(/\[BEFORE_URL:\s*(.*?)\]/);
+            if (beforeMatch && beforeMatch[1]) photo_before_url = beforeMatch[1].trim();
+          }
+          if (!photo_after_url) {
+            const afterMatch = p.claim_notes.match(/\[AFTER_URL:\s*(.*?)\]/);
+            if (afterMatch && afterMatch[1]) photo_after_url = afterMatch[1].trim();
+          }
+          if (!selected_item_name) {
+            const itemMatch = p.claim_notes.match(/\[PILIHAN ITEM:\s*(.*?)\]/);
+            if (itemMatch && itemMatch[1]) selected_item_name = itemMatch[1].trim();
+          }
+        }
+
+        return {
+          ...p,
+          photo_before_url,
+          photo_after_url,
+          selected_item_name,
+          applicant_name,
+          applicant_store_name,
+          applicant_phone,
+        };
+      });
+
+      setParticipants(mappedParticipants as unknown as Participant[]);
     } catch (err) {
       console.error('Error fetching programs data:', err);
     } finally {

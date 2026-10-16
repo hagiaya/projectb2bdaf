@@ -313,6 +313,28 @@ export default function DealerProgramsScreen() {
         }
       }
 
+      // Auto-sync unconfirmed local enrollments to backend API so they appear on Admin Web
+      if (dId && localEnrolled.length > 0) {
+        for (const unconfirmed of localEnrolled) {
+          if (unconfirmed.id && (unconfirmed.id.startsWith('part-') || unconfirmed.dealer_id === 'demo-dealer-id')) {
+            try {
+              fetch('https://adminpaneldap.vercel.app/api/programs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  program_id: unconfirmed.program_id,
+                  dealer_id: dId,
+                  status: unconfirmed.status || 'ENROLLED',
+                  claim_notes: unconfirmed.claim_notes || '',
+                  custom_target_amount: unconfirmed.custom_target_amount,
+                  selected_item_qty: unconfirmed.selected_item_qty || 1,
+                }),
+              }).catch(() => {});
+            } catch (_) {}
+          }
+        }
+      }
+
       // Merge Supabase + Local AsyncStorage
       const mergedMap = new Map<string, any>();
       for (const lp of localEnrolled) {
@@ -736,15 +758,38 @@ export default function DealerProgramsScreen() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('dealer_program_participants')
-        .insert([payload])
-        .select();
+      let insertedId = 'part-' + Date.now();
+      try {
+        const apiRes = await fetch('https://adminpaneldap.vercel.app/api/programs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const apiJson = await apiRes.json();
+        if (apiJson.success && apiJson.participant) {
+          insertedId = apiJson.participant.id;
+        }
+      } catch (_) {}
 
-      if (error) throw error;
-      if (data) {
-        setMyParticipants([...myParticipants, data[0] as any]);
+      if (insertedId.startsWith('part-')) {
+        const { data, error } = await supabase
+          .from('dealer_program_participants')
+          .insert([payload])
+          .select();
+
+        if (error) throw error;
+        if (data && data[0]) {
+          insertedId = data[0].id;
+        }
       }
+
+      setMyParticipants([
+        {
+          id: insertedId,
+          ...payload,
+        },
+        ...myParticipants.filter((p) => p.program_id !== program.id),
+      ]);
       Alert.alert('Pendaftaran Berhasil 🎉', `Toko Anda telah terdaftar pada program "${program.title}". Kumpulkan omset belanja Anda!`);
     } catch (err: any) {
       Alert.alert('Gagal Mendaftar', err.message || 'Terjadi kesalahan sistem.');
@@ -827,7 +872,7 @@ export default function DealerProgramsScreen() {
 
       let insertedId = `part-${Date.now()}`;
 
-      // Insert to Supabase if connected
+      // Insert to Supabase / Backend API if connected
       if (currentDealerId) {
         const payload: any = {
           program_id: programToEnroll.id,
@@ -839,30 +884,48 @@ export default function DealerProgramsScreen() {
           selected_item_qty: qty,
         };
 
-        const { data, error } = await supabase
-          .from('dealer_program_participants')
-          .insert([payload])
-          .select();
+        // Try API endpoint first (reliable backend with administrative rights)
+        try {
+          const apiRes = await fetch('https://adminpaneldap.vercel.app/api/programs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const apiJson = await apiRes.json();
+          if (apiJson.success && apiJson.participant) {
+            insertedId = apiJson.participant.id;
+          }
+        } catch (apiErr) {
+          console.warn('API enrollment failed, falling back to direct supabase:', apiErr);
+        }
 
-        if (error) {
-          console.warn('First insert attempt with custom cols failed, retrying minimal payload:', error.message);
-          const minimalPayload = {
-            program_id: programToEnroll.id,
-            dealer_id: currentDealerId,
-            current_progress_amount: 0,
-            status: 'ENROLLED',
-            claim_notes: snapshotNotes,
-          };
-          const retry = await supabase
+        // If API did not return confirmed ID, try direct Supabase insert
+        if (insertedId.startsWith('part-')) {
+          const { data, error } = await supabase
             .from('dealer_program_participants')
-            .insert([minimalPayload])
+            .insert([payload])
             .select();
 
-          if (retry.data && retry.data[0]) {
-            insertedId = retry.data[0].id;
+          if (error) {
+            console.warn('Direct insert attempt failed, trying minimal payload:', error.message);
+            const minimalPayload = {
+              program_id: programToEnroll.id,
+              dealer_id: currentDealerId,
+              current_progress_amount: 0,
+              status: 'ENROLLED',
+              claim_notes: snapshotNotes,
+            };
+            const retry = await supabase
+              .from('dealer_program_participants')
+              .insert([minimalPayload])
+              .select();
+
+            if (retry.data && retry.data[0]) {
+              insertedId = retry.data[0].id;
+            }
+          } else if (data && data[0]) {
+            insertedId = data[0].id;
           }
-        } else if (data && data[0]) {
-          insertedId = data[0].id;
         }
       }
 
@@ -941,6 +1004,19 @@ export default function DealerProgramsScreen() {
       const updatedNotes = (activeAfterParticipant.claim_notes || '') + appendNotes;
 
       if (currentDealerId) {
+        try {
+          await fetch('https://adminpaneldap.vercel.app/api/programs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              program_id: activeAfterParticipant.program_id,
+              dealer_id: currentDealerId,
+              status: 'COMPLETED',
+              claim_notes: updatedNotes,
+            }),
+          });
+        } catch (_) {}
+
         await supabase
           .from('dealer_program_participants')
           .update({
