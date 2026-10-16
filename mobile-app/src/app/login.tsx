@@ -22,6 +22,8 @@ export default function LoginScreen() {
     return digits;
   };
 
+  const isEmployeeRole = (role?: string | null) => ['SALES', 'SPV', 'WAREHOUSE', 'STAFF'].includes((role || '').toUpperCase());
+
   const handleNextStep = async () => {
     const raw = identifier.trim();
     if (!raw) {
@@ -63,13 +65,13 @@ export default function LoginScreen() {
         return;
       }
 
-      if (profileCheck.role === 'SALES' || profileCheck.role === 'SPV') {
+      if (isEmployeeRole(profileCheck.role)) {
         if (profileCheck.approval_status === 'PENDING') {
           Alert.alert('Akun Belum Aktif', 'Akun Anda masih menunggu persetujuan Admin.');
           setLoading(false);
           return;
         }
-        setDetectedRole(profileCheck.role);
+        setDetectedRole(profileCheck.role as any);
         setAuthMode('password');
         setStep(2);
       } else {
@@ -172,11 +174,11 @@ export default function LoginScreen() {
 
       if (profile?.approval_status !== 'APPROVED') {
         await supabase.auth.signOut();
-        const roleName = (profile?.role === 'SALES' || profile?.role === 'SPV') ? 'Sales' : 'Toko / Dealer';
+        const roleName = isEmployeeRole(profile?.role) ? 'Karyawan' : 'Toko / Dealer';
         throw new Error(`Akun ${roleName} Anda belum diverifikasi oleh admin. Harap tunggu verifikasi.`);
       }
 
-      if (profile?.role === 'SALES' || profile?.role === 'SPV') {
+      if (isEmployeeRole(profile?.role)) {
         router.replace('/(sales)');
       } else {
         router.replace('/(dealer)/home');

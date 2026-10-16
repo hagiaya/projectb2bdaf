@@ -22,6 +22,9 @@ import {
   Store,
   Tag,
   Info,
+  Ban,
+  XCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -289,11 +292,16 @@ export default function ProgramsPage() {
         setPrograms([]);
       }
 
-      // Format & enrich participants (decode metadata if not already decoded)
-      const mappedParticipants = (partData || []).map((p: any) => {
+      // Format & enrich participants (decode metadata and unpack multi-item records if present)
+      const mappedParticipants: any[] = [];
+      (partData || []).forEach((p: any) => {
+        let metaItems: any[] | null = null;
         let photo_before_url = p.photo_before_url || null;
         let photo_after_url = p.photo_after_url || null;
         let selected_item_name = p.selected_item_name || null;
+        let selected_item_id = p.selected_item_id || null;
+        let selected_item_qty = p.selected_item_qty || 1;
+        let custom_target_amount = p.custom_target_amount || null;
         let applicant_name = p.applicant_name || p.dealers?.profiles?.full_name || null;
         let applicant_store_name = p.applicant_store_name || p.dealers?.store_name || null;
         let applicant_phone = p.applicant_phone || p.dealers?.profiles?.phone_number || null;
@@ -303,9 +311,15 @@ export default function ProgramsPage() {
           if (metaMatch && metaMatch[1]) {
             try {
               const meta = JSON.parse(metaMatch[1]);
+              if (Array.isArray(meta.items) && meta.items.length > 0) {
+                metaItems = meta.items;
+              }
               photo_before_url = photo_before_url || meta.photo_before_url;
               photo_after_url = photo_after_url || meta.photo_after_url;
               selected_item_name = selected_item_name || meta.selected_item_name;
+              selected_item_id = selected_item_id || meta.selected_item_id;
+              selected_item_qty = selected_item_qty || meta.selected_item_qty || 1;
+              custom_target_amount = custom_target_amount || meta.custom_target_amount;
               applicant_name = applicant_name || meta.applicant_name;
               applicant_store_name = applicant_store_name || meta.applicant_store_name;
               applicant_phone = applicant_phone || meta.applicant_phone;
@@ -325,15 +339,38 @@ export default function ProgramsPage() {
           }
         }
 
-        return {
-          ...p,
-          photo_before_url,
-          photo_after_url,
-          selected_item_name,
-          applicant_name,
-          applicant_store_name,
-          applicant_phone,
-        };
+        if (metaItems && metaItems.length > 0) {
+          metaItems.forEach((sub: any, idx: number) => {
+            mappedParticipants.push({
+              ...p,
+              id: `${p.id}_${sub.selected_item_id || idx}`,
+              real_id: p.id,
+              selected_item_id: sub.selected_item_id || selected_item_id,
+              selected_item_name: sub.selected_item_name || selected_item_name,
+              selected_item_qty: sub.selected_item_qty || selected_item_qty,
+              custom_target_amount: sub.custom_target_amount || custom_target_amount,
+              photo_before_url: sub.photo_before_url || photo_before_url,
+              photo_after_url: sub.photo_after_url || photo_after_url,
+              applicant_name: sub.applicant_name || applicant_name,
+              applicant_store_name: sub.applicant_store_name || applicant_store_name,
+              applicant_phone: sub.applicant_phone || applicant_phone,
+              status: sub.status || p.status,
+            });
+          });
+        } else {
+          mappedParticipants.push({
+            ...p,
+            selected_item_id,
+            selected_item_name,
+            selected_item_qty,
+            custom_target_amount,
+            photo_before_url,
+            photo_after_url,
+            applicant_name,
+            applicant_store_name,
+            applicant_phone,
+          });
+        }
       });
 
       setParticipants(mappedParticipants as unknown as Participant[]);
@@ -586,16 +623,102 @@ export default function ProgramsPage() {
     }
   };
 
-  const handleDeleteParticipant = async (participantId: string) => {
-    if (confirm('Hapus data outlet (partisipan) ini secara permanen?')) {
-      try {
-        const { error } = await supabase.from('dealer_program_participants').delete().eq('id', participantId);
+  const handleDeleteParticipant = async (partOrId: Participant | string) => {
+    const part = typeof partOrId === 'string' ? participants.find((p) => p.id === partOrId) : partOrId;
+    const partId = typeof partOrId === 'string' ? partOrId : partOrId.id;
+    const realId = (part as any)?.real_id;
+    const selectedItemId = part?.selected_item_id;
+    const storeName = part?.dealers?.store_name || 'Dealer';
+    const itemName = part?.selected_item_name || part?.dealer_programs?.title || 'Program Reward';
+
+    if (
+      !confirm(
+        `Hapus pengajuan "${itemName}" untuk toko "${storeName}" secara permanen?\n\nPengajuan akan otomatis hilang seketika di aplikasi dealer dan sales.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      // 1. Call API endpoint (bypasses RLS and handles unpacked multi-item in metadata)
+      const queryParams = new URLSearchParams();
+      queryParams.set('id', partId);
+      if (realId) queryParams.set('real_id', realId);
+      if (selectedItemId) queryParams.set('selected_item_id', selectedItemId);
+
+      const apiRes = await fetch(`/api/programs?${queryParams.toString()}`, {
+        method: 'DELETE',
+      });
+
+      if (!apiRes.ok) {
+        const targetDbId = realId || partId;
+        const { error } = await supabase.from('dealer_program_participants').delete().eq('id', targetDbId);
         if (error) throw error;
-        setParticipants(participants.filter((p) => p.id !== participantId));
-        alert('Data outlet bergabung berhasil dihapus.');
-      } catch (err: any) {
-        alert('Gagal menghapus outlet: ' + (err.message || 'Error tidak diketahui'));
       }
+
+      setParticipants(participants.filter((p) => p.id !== partId));
+      if (selectedParticipant && selectedParticipant.id === partId) {
+        setSelectedParticipant(null);
+      }
+      alert('Pengajuan berhasil dihapus dan otomatis hilang dari aplikasi dealer & sales.');
+    } catch (err: any) {
+      alert('Gagal menghapus pengajuan: ' + (err.message || 'Error tidak diketahui'));
+    }
+  };
+
+  const handleRejectParticipant = async (part: Participant, customReason?: string) => {
+    let reason = customReason;
+    if (reason === undefined) {
+      const storeName = part.dealers?.store_name || 'Dealer';
+      const itemName = part.selected_item_name || part.dealer_programs?.title || 'Item Support';
+      const input = prompt(
+        `Tolak pengajuan "${itemName}" untuk toko "${storeName}"?\n\nMasukkan alasan penolakan (opsional, misal: Foto lokasi kurang jelas / display belum memenuhi kriteria):`,
+        part.admin_notes || 'Pengajuan ditolak oleh Admin karena lokasi penempatan belum memenuhi kriteria display toko.'
+      );
+      if (input === null) return; // User pressed Cancel
+      reason = input.trim();
+    }
+
+    try {
+      // 1. Call API endpoint (bypasses RLS and handles unpacked multi-item in metadata)
+      const apiRes = await fetch('/api/programs', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          participant_id: part.id,
+          real_id: (part as any).real_id,
+          selected_item_id: part.selected_item_id,
+          status: 'REJECTED',
+          admin_notes: reason,
+        }),
+      });
+
+      if (!apiRes.ok) {
+        const targetDbId = (part as any).real_id || part.id;
+        const { error } = await supabase
+          .from('dealer_program_participants')
+          .update({
+            status: 'REJECTED',
+            admin_notes: reason,
+          })
+          .eq('id', targetDbId);
+        if (error) throw error;
+      }
+
+      // Update local state
+      setParticipants(
+        participants.map((p) =>
+          p.id === part.id ? { ...p, status: 'REJECTED', admin_notes: reason } : p
+        )
+      );
+
+      if (selectedParticipant && selectedParticipant.id === part.id) {
+        setSelectedParticipant({ ...selectedParticipant, status: 'REJECTED', admin_notes: reason });
+      }
+
+      alert('Pengajuan berhasil ditolak / dibatalkan.\nStatus otomatis tercancel di aplikasi dealer.');
+    } catch (err: any) {
+      alert('Gagal menolak pengajuan: ' + (err.message || 'Error tidak diketahui'));
     }
   };
 
@@ -630,30 +753,56 @@ export default function ProgramsPage() {
 
     setApprovalSubmitting(true);
     try {
-      const newStatus = approvalDecision === 'APPROVE' ? 'CLAIMED' : 'REJECTED';
+      const newStatus =
+        approvalDecision === 'APPROVE'
+          ? selectedParticipant.status === 'CLAIMED'
+            ? 'CLAIMED'
+            : 'ENROLLED'
+          : 'REJECTED';
+
       const payload: Record<string, unknown> = {
+        participant_id: selectedParticipant.id,
+        real_id: (selectedParticipant as any).real_id,
+        selected_item_id: selectedParticipant.selected_item_id,
         status: newStatus,
         admin_notes: adminNotes.trim(),
-        approved_at: new Date().toISOString(),
       };
 
-      await supabase
-        .from('dealer_program_participants')
-        .update(payload)
-        .eq('id', selectedParticipant.id);
+      // 1. Call API endpoint (handles multi-item metadata & RLS bypass)
+      const res = await fetch('/api/programs', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const targetDbId = (selectedParticipant as any).real_id || selectedParticipant.id;
+        await supabase
+          .from('dealer_program_participants')
+          .update({
+            status: newStatus,
+            admin_notes: adminNotes.trim(),
+            approved_at: new Date().toISOString(),
+          })
+          .eq('id', targetDbId);
+      }
 
       setParticipants(
         participants.map((p) =>
-          p.id === selectedParticipant.id ? { ...p, ...payload } : p
+          p.id === selectedParticipant.id ? { ...p, status: newStatus as any, admin_notes: adminNotes.trim() } : p
         )
       );
 
       setSelectedParticipant(null);
       setAdminNotes('');
-      alert(`Klaim hadiah berhasil di-${approvalDecision === 'APPROVE' ? 'setujui' : 'tolak'}!`);
+      alert(
+        `Keputusan berhasil disimpan!\nStatus pengajuan kini: ${
+          newStatus === 'REJECTED' ? 'DITOLAK / DIBATALKAN' : 'DISETUJUI'
+        }.`
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      alert('Gagal memproses klaim: ' + msg);
+      alert('Gagal memproses keputusan: ' + msg);
     } finally {
       setApprovalSubmitting(false);
     }
@@ -729,7 +878,7 @@ export default function ProgramsPage() {
         };
       case 'REJECTED':
         return {
-          label: 'Klaim Ditolak',
+          label: 'Pengajuan Ditolak / Cancel',
           bg: 'bg-red-50',
           text: 'text-red-700',
           border: 'border-red-200',
@@ -1270,7 +1419,7 @@ export default function ProgramsPage() {
 
                       {/* Aksi */}
                       <td className="p-5 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           {part.dealers?.profiles?.phone_number && (
                             <a
                               href={`https://wa.me/${part.dealers.profiles.phone_number.replace(/^0/, '62').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
@@ -1285,6 +1434,7 @@ export default function ProgramsPage() {
                             </a>
                           )}
 
+                          {/* Tombol Detail / Proses Klaim */}
                           {part.status === 'CLAIMED' ? (
                             <button
                               onClick={() => {
@@ -1300,21 +1450,33 @@ export default function ProgramsPage() {
                             <button
                               onClick={() => {
                                 setSelectedParticipant(part);
-                                setApprovalDecision('APPROVE');
+                                setApprovalDecision(part.status === 'REJECTED' ? 'REJECT' : 'APPROVE');
                                 setAdminNotes(part.admin_notes || '');
                               }}
-                              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                              title="Detail Peserta"
+                              className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+                              title="Detail Pengajuan & Foto"
                             >
                               <Eye size={16} />
                             </button>
                           )}
-                          
+
+                          {/* Tombol Tolak / Batalkan Pengajuan (Status Reject di Dealer) */}
+                          {part.status !== 'REJECTED' && (
+                            <button
+                              onClick={() => handleRejectParticipant(part)}
+                              className="p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+                              title="Tolak / Batalkan Pengajuan (Otomatis tercancel di aplikasi dealer)"
+                            >
+                              <Ban size={16} />
+                            </button>
+                          )}
+
+                          {/* Tombol Hapus Permanen (Otomatis Hilang dari Aplikasi Dealer) */}
                           {adminRole === 'SUPER_ADMIN' && (
                             <button
-                              onClick={() => handleDeleteParticipant(part.id)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Hapus Outlet"
+                              onClick={() => handleDeleteParticipant(part)}
+                              className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Hapus Pengajuan Permanen (Otomatis hilang dari aplikasi dealer & sales)"
                             >
                               <Trash2 size={16} />
                             </button>
@@ -1891,7 +2053,7 @@ export default function ProgramsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">KEPUTUSAN APPROVAL</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">KEPUTUSAN APPROVAL / STATUS</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -1902,7 +2064,7 @@ export default function ProgramsPage() {
                         : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                     }`}
                   >
-                    ✓ Setujui & Kirim Hadiah
+                    {selectedParticipant.status === 'CLAIMED' ? '✓ Setujui & Kirim Hadiah' : '✓ Verifikasi / Setujui'}
                   </button>
                   <button
                     type="button"
@@ -1913,39 +2075,52 @@ export default function ProgramsPage() {
                         : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                     }`}
                   >
-                    ✕ Tolak Klaim
+                    ✕ Tolak / Batalkan Pengajuan
                   </button>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  CATATAN ADMIN / NO RESI PENGIRIMAN
+                  CATATAN ADMIN / ALASAN PENOLAKAN / NO RESI PENGIRIMAN
                 </label>
                 <textarea
                   rows={3}
-                  placeholder="misal: Hadiah dikirim via J&T Cargo No Resi: DAP98129038, estimasi tiba 3 hari kerja..."
+                  placeholder="misal: Foto lokasi tidak jelas / Alasan penolakan / Hadiah dikirim via J&T Cargo No Resi: DAP98129038..."
                   value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs"
                 />
               </div>
 
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setSelectedParticipant(null)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={approvalSubmitting}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  <Send size={14} /> {approvalSubmitting ? 'Memproses...' : 'Simpan Keputusan'}
-                </button>
+              <div className="pt-3 flex items-center justify-between gap-2 border-t border-slate-100">
+                {adminRole === 'SUPER_ADMIN' ? (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteParticipant(selectedParticipant)}
+                    className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors"
+                    title="Hapus pengajuan secara permanen dari database (otomatis hilang dari aplikasi dealer)"
+                  >
+                    <Trash2 size={14} /> Hapus Permanen
+                  </button>
+                ) : <div />}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedParticipant(null)}
+                    className="px-4 py-2 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={approvalSubmitting}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <Send size={14} /> {approvalSubmitting ? 'Memproses...' : 'Simpan Keputusan'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

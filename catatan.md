@@ -100,7 +100,7 @@
 1. **Validasi & Peringatan di Halaman Checkout (`checkout.tsx`):**
    - Saat dealer memilih metode pembayaran **Transfer Bank Manual** dan menekan *"Konfirmasi Transfer & Buat Pesanan"*, sistem menampilkan **Popup Peringatan Data Transfer**.
    - **Informasi Krusial yang Ditampilkan:**
-     - **Rekening Tujuan Resmi:** Bank BCA `829-019-8821` a.n. `PT DISTRIBUSI AKSESORIS PRIMA`.
+     - **Rekening Tujuan Resmi:** Bank BCA `5095454566` a.n. `PT. RAJA AKSESORIS INDONESIA`.
      - **Nominal Transfer Wajib Tepat:** Total pembayaran termasuk 3 digit kode unik (misal: `+Rp 482`). Ditegaskan **DILARANG MEMBULATKAN NOMINAL** agar verifikasi otomatis berhasil.
      - **Struk Bukti Pembayaran:** Pengguna diingatkan menyimpan struk ATM / screenshot m-banking yang jelas.
      - **Rincian Pembayaran:** Subtotal, kode unik, dan nominal transfer akhir.
@@ -243,7 +243,7 @@
    - **Tombol "⚡ Hitung Otomatis (Generate Payroll)":** Menarik otomatis data check-in visit dan omzet aktual, menghitung gaji visit, insentif tier omzet, dan komisi direct sales SPV.
    - **Modal Edit Komponen:** Admin dapat menyesuaikan bonus tambahan (THR, reward) dan potongan (kasbon, keterlambatan) dengan catatan.
    - **Slip Gaji Digital Resmi DAP:**
-     - Kop surat resmi PT DISTRIBUSI AKSESORIS PRIMA.
+     - Kop surat resmi PT. RAJA AKSESORIS INDONESIA.
      - Nomor Slip unik: `SLIP/DAP/YYYYMM/XXXX`.
      - Rincian Penerimaan (Gaji Visit, Insentif Omzet, Komisi Direct SPV, Bonus).
      - Rincian Potongan & Total Gaji Bersih (*Take Home Pay*).

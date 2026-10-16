@@ -236,6 +236,7 @@ export default function DealerProgramsScreen() {
 
       let dId: string | null = null;
       let totalCompletedOrders = 0;
+      let completedOrdersList: any[] = [];
 
       // 1. Get profile & dealer details
       const { data: pData } = await supabase
@@ -262,11 +263,12 @@ export default function DealerProgramsScreen() {
         // Calculate completed order accumulation
         const { data: orderData } = await supabase
           .from('orders')
-          .select('final_amount, total_amount')
+          .select('final_amount, total_amount, created_at')
           .eq('dealer_id', dealerData.id)
           .in('status', ['COMPLETED', 'SHIPPED']);
 
         if (orderData) {
+          completedOrdersList = orderData;
           totalCompletedOrders = orderData.reduce(
             (sum, o) => sum + (Number(o.final_amount || o.total_amount) || 0),
             0
@@ -309,7 +311,41 @@ export default function DealerProgramsScreen() {
           .eq('dealer_id', dId);
 
         if (partData && partData.length > 0) {
-          loadedParts = partData;
+          partData.forEach((p: any) => {
+            // Check if claim_notes has unpacked meta.items (multi-item support on single row fallback)
+            let metaItems: any[] | null = null;
+            if (p.claim_notes) {
+              const metaMatch = p.claim_notes.match(/__METADATA__:([\s\S]*)$/);
+              if (metaMatch && metaMatch[1]) {
+                try {
+                  const meta = JSON.parse(metaMatch[1]);
+                  if (Array.isArray(meta.items) && meta.items.length > 0) {
+                    metaItems = meta.items;
+                  }
+                } catch (_) {}
+              }
+            }
+
+            if (metaItems && metaItems.length > 0) {
+              metaItems.forEach((sub: any, idx: number) => {
+                loadedParts.push({
+                  ...p,
+                  id: `${p.id}_${sub.selected_item_id || idx}`,
+                  real_id: p.id,
+                  selected_item_id: sub.selected_item_id,
+                  selected_item_name: sub.selected_item_name,
+                  selected_item_qty: sub.selected_item_qty || 1,
+                  custom_target_amount: sub.custom_target_amount,
+                  photo_before_url: sub.photo_before_url || p.photo_before_url,
+                  photo_after_url: sub.photo_after_url || p.photo_after_url,
+                  status: sub.status || p.status,
+                  enrolled_at: sub.enrolled_at || p.enrolled_at,
+                });
+              });
+            } else {
+              loadedParts.push(p);
+            }
+          });
         }
       }
 
@@ -328,6 +364,10 @@ export default function DealerProgramsScreen() {
                   claim_notes: unconfirmed.claim_notes || '',
                   custom_target_amount: unconfirmed.custom_target_amount,
                   selected_item_qty: unconfirmed.selected_item_qty || 1,
+                  selected_item_id: unconfirmed.selected_item_id,
+                  selected_item_name: unconfirmed.selected_item_name,
+                  photo_before_url: unconfirmed.photo_before_url,
+                  photo_after_url: unconfirmed.photo_after_url,
                 }),
               }).catch(() => {});
             } catch (_) {}
@@ -335,14 +375,26 @@ export default function DealerProgramsScreen() {
         }
       }
 
-      // Merge Supabase + Local AsyncStorage
+      // Merge Supabase + Local AsyncStorage without resurrecting deleted applications
       const mergedMap = new Map<string, any>();
-      for (const lp of localEnrolled) {
-        if (lp.program_id) mergedMap.set(lp.program_id, lp);
-      }
+      // 1. All DB participants are primary source of truth
       for (const dbp of loadedParts) {
-        const existingLocal = mergedMap.get(dbp.program_id) || {};
-        mergedMap.set(dbp.program_id, { ...existingLocal, ...dbp });
+        const itemKey = `${dbp.program_id}_${dbp.selected_item_id || dbp.selected_item_name || 'main'}`;
+        const existingLocal = localEnrolled.find(
+          (lp) =>
+            lp.id === dbp.id ||
+            `${lp.program_id}_${lp.selected_item_id || lp.selected_item_name || 'main'}` === itemKey
+        );
+        mergedMap.set(dbp.id || itemKey, { ...existingLocal, ...dbp });
+      }
+      // 2. Only keep local items if demo / offline unconfirmed
+      if (!dId) {
+        for (const lp of localEnrolled) {
+          const key = lp.id || `${lp.program_id}_${lp.selected_item_id || lp.selected_item_name || 'main'}`;
+          if (!mergedMap.has(key)) {
+            mergedMap.set(key, lp);
+          }
+        }
       }
 
       const finalParticipants: ParticipantRecord[] = Array.from(mergedMap.values()).map((p: any) => {
@@ -374,9 +426,22 @@ export default function DealerProgramsScreen() {
           }
         }
 
+        // Calculate separate progress for each enrolled item based on orders made since enrollment
+        let ordersProgress = 0;
+        if (completedOrdersList && completedOrdersList.length > 0) {
+          const pEnrolledTime = p.enrolled_at ? new Date(p.enrolled_at).getTime() : 0;
+          ordersProgress = completedOrdersList
+            .filter((o: any) => {
+              if (!pEnrolledTime) return true;
+              const orderTime = o.created_at ? new Date(o.created_at).getTime() : 0;
+              return orderTime >= (pEnrolledTime - 60000);
+            })
+            .reduce((sum: number, o: any) => sum + (Number(o.final_amount || o.total_amount) || 0), 0);
+        }
+
         const calculatedProgress = Math.max(
           Number(p.current_progress_amount) || 0,
-          totalCompletedOrders
+          ordersProgress
         );
         const matchedProg = loadedPrograms.find((pr) => pr.id === p.program_id);
         const target =
@@ -396,9 +461,7 @@ export default function DealerProgramsScreen() {
       });
 
       setMyParticipants(finalParticipants);
-      if (finalParticipants.length > 0) {
-        AsyncStorage.setItem(storageKey, JSON.stringify(finalParticipants)).catch(() => {});
-      }
+      AsyncStorage.setItem(storageKey, JSON.stringify(finalParticipants)).catch(() => {});
     } catch (err) {
       console.error('Error init dealer programs:', err);
     } finally {
@@ -570,12 +633,41 @@ export default function DealerProgramsScreen() {
       return;
     }
 
-    // Case 2: Not yet enrolled in this program
-    // Check if enrolled in another program (Rule 1)
-    if (activeParticipant && activeParticipant.program_id !== program.id) {
-      const alertMsg = `Toko Anda sedang aktif pada program:\n"${activeEnrolledProgram?.title || 'Program Reward'}".\n\nSesuai ketentuan, setiap toko hanya dapat mengikuti 1 program aktif.`;
+    // Case 2: Enrolling in this item
+    // For BARANG_SUPPORT: Multiple items are fully supported!
+    // Check if user already enrolled in THIS EXACT item
+    const existingSameItem = myParticipants.find(
+      (p) =>
+        p.program_id === program.id &&
+        p.status !== 'REJECTED' &&
+        (p.selected_item_id === item.id ||
+          p.selected_item_name?.toUpperCase().includes(item.code.toUpperCase()))
+    );
+
+    if (existingSameItem) {
+      const alertMsg = `Toko Anda sudah terdaftar untuk item "${item.code} - ${item.name}".\n\nTarget Belanja: Rp ${Number(
+        existingSameItem.custom_target_amount || item.min_purchase
+      ).toLocaleString('id-ID')}\nProgres Belanja: Rp ${Number(
+        existingSameItem.current_progress_amount || 0
+      ).toLocaleString('id-ID')}\n\nIngin melihat rincian progres pencapaian item ini di tab "Program Saya"?`;
       if (Platform.OS === 'web') window.alert(alertMsg);
-      else Alert.alert('Ketentuan 1 Program Aktif 🔒', alertMsg);
+      else {
+        Alert.alert('Item Sudah Terdaftar 📋', alertMsg, [
+          { text: 'Tutup', style: 'cancel' },
+          {
+            text: 'Lihat di Program Saya',
+            onPress: () => setSelectedFilter('MY_PROGRAMS'),
+          },
+        ]);
+      }
+      return;
+    }
+
+    // Check if enrolled in a non-support exclusive program (Rule 1)
+    if (activeNonSupportParticipant && activeNonSupportParticipant.program_id !== program.id && program.program_type !== 'BARANG_SUPPORT') {
+      const alertMsg = `Toko Anda sedang aktif pada program:\n"${programs.find((pr) => pr.id === activeNonSupportParticipant.program_id)?.title || 'Program Reward'}".\n\nSesuai ketentuan, program ini berjalan secara eksklusif.`;
+      if (Platform.OS === 'web') window.alert(alertMsg);
+      else Alert.alert('Ketentuan Program Eksklusif 🔒', alertMsg);
       return;
     }
 
@@ -621,8 +713,20 @@ export default function DealerProgramsScreen() {
     );
   };
 
-  // RULE 1: Only 1 active program at any time
-  const activeParticipant = myParticipants.find(
+  // Dismiss rejected / cancelled participant from local list
+  const handleDismissParticipant = async (participantId: string) => {
+    const updated = myParticipants.filter((p) => p.id !== participantId);
+    setMyParticipants(updated);
+    if (currentDealerId) {
+      try {
+        const storageKey = `@dap_enrolled_participants_${currentDealerId}`;
+        await AsyncStorage.setItem(storageKey, JSON.stringify(updated));
+      } catch (_) {}
+    }
+  };
+
+  // Multi-participant tracking (supports multiple support items simultaneously)
+  const activeParticipants = myParticipants.filter(
     (p) =>
       p.status === 'ENROLLED' ||
       p.status === 'ACHIEVED' ||
@@ -630,9 +734,14 @@ export default function DealerProgramsScreen() {
       p.status === 'SHIPPED' ||
       p.status === 'INSTALLED'
   );
+  const activeParticipant = activeParticipants[0] || null;
   const activeEnrolledProgram = activeParticipant
     ? programs.find((pr) => pr.id === activeParticipant.program_id)
     : null;
+  const activeNonSupportParticipant = activeParticipants.find((p) => {
+    const pr = programs.find((prog) => prog.id === p.program_id);
+    return pr && pr.program_type !== 'BARANG_SUPPORT';
+  });
 
   // Handle take photo (Camera Only - No Gallery)
   const handleCapturePhoto = async (type: 'before' | 'after') => {
@@ -694,15 +803,7 @@ export default function DealerProgramsScreen() {
 
   // Start enrollment
   const handleStartEnrollment = (program: DealerProgram) => {
-    // Check if enrolled in other program
-    if (activeParticipant && activeParticipant.program_id !== program.id) {
-      const alertMsg = `Toko Anda sedang mengikuti program aktif:\n"${activeEnrolledProgram?.title || 'Program Reward'}".\n\nSesuai ketentuan, setiap toko hanya dapat mengikuti 1 program dalam satu periode. Anda tetap dapat melihat syarat program ini, namun tidak dapat mendaftar sebelum program aktif Anda selesai.`;
-      if (Platform.OS === 'web') window.alert(alertMsg);
-      else Alert.alert('Ketentuan 1 Program Aktif 🔒', alertMsg);
-      return;
-    }
-
-    // Khusus untuk barang support / display etalase, wajib foto before
+    // Khusus untuk barang support / display etalase, dealer bisa ikut lebih dari 1 item!
     if (program.program_type === 'BARANG_SUPPORT') {
       setProgramToEnroll(program);
       const firstItem = (program.support_items && program.support_items.length > 0)
@@ -716,6 +817,15 @@ export default function DealerProgramsScreen() {
       setAfterPhotoBase64(null);
       setPlacementNotes('');
       setApplicationModalVisible(true);
+      return;
+    }
+
+    // Check if enrolled in other non-support program
+    if (activeNonSupportParticipant && activeNonSupportParticipant.program_id !== program.id) {
+      const nonProg = programs.find((pr) => pr.id === activeNonSupportParticipant.program_id);
+      const alertMsg = `Toko Anda sedang mengikuti program aktif:\n"${nonProg?.title || 'Program Reward'}".\n\nSesuai ketentuan, setiap toko hanya dapat mengikuti 1 program non-support dalam satu periode.`;
+      if (Platform.OS === 'web') window.alert(alertMsg);
+      else Alert.alert('Ketentuan 1 Program Aktif 🔒', alertMsg);
       return;
     }
 
@@ -950,16 +1060,35 @@ export default function DealerProgramsScreen() {
         const storageKey = `@dap_enrolled_participants_${currentDealerId || 'demo'}`;
         const existingStr = await AsyncStorage.getItem(storageKey);
         let existing: ParticipantRecord[] = existingStr ? JSON.parse(existingStr) : [];
-        existing = [newRecord, ...existing.filter((p) => p.program_id !== programToEnroll.id)];
+        existing = [
+          newRecord,
+          ...existing.filter(
+            (p) =>
+              p.id !== newRecord.id &&
+              !(
+                p.program_id === programToEnroll.id &&
+                (p.selected_item_id === newRecord.selected_item_id ||
+                  p.selected_item_name === newRecord.selected_item_name)
+              )
+          ),
+        ];
         await AsyncStorage.setItem(storageKey, JSON.stringify(existing));
       } catch (storageErr) {
         console.warn('Error saving to AsyncStorage:', storageErr);
       }
 
-      // Update state immediately
+      // Update state immediately without removing other support items
       setMyParticipants((prev) => [
         newRecord,
-        ...prev.filter((p) => p.program_id !== programToEnroll.id),
+        ...prev.filter(
+          (p) =>
+            p.id !== newRecord.id &&
+            !(
+              p.program_id === programToEnroll.id &&
+              (p.selected_item_id === newRecord.selected_item_id ||
+                p.selected_item_name === newRecord.selected_item_name)
+            )
+        ),
       ]);
 
       setApplicationModalVisible(false);
@@ -1210,25 +1339,80 @@ export default function DealerProgramsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ACTIVE PARTICIPATION INFO BANNER (RULE 1 STATUS) */}
-      {activeParticipant && (
+      {/* ACTIVE PARTICIPATION INFO BANNER (MULTI-ITEM SUPPORT OVERVIEW) */}
+      {activeParticipants.length > 0 && (
         <View style={styles.topActiveBanner}>
           <View style={styles.topActiveIconWrapper}>
-            <Feather name="check-circle" size={18} color="#15803d" />
+            <Feather name="award" size={18} color="#15803d" />
           </View>
           <View style={{ flex: 1 }}>
             <View style={styles.topActiveHeaderRow}>
-              <Text style={styles.topActiveTitle}>Anda Mengikuti 1 Program Aktif</Text>
+              <Text style={styles.topActiveTitle}>
+                {activeParticipants.length === 1
+                  ? 'Toko Anda Mengikuti 1 Program / Item Aktif'
+                  : `Toko Anda Mengikuti ${activeParticipants.length} Program / Item Display Aktif`}
+              </Text>
               <View style={styles.topActiveBadge}>
-                <Text style={styles.topActiveBadgeText}>1 Program</Text>
+                <Text style={styles.topActiveBadgeText}>{activeParticipants.length} Program</Text>
               </View>
             </View>
             <Text style={styles.topActiveDesc} numberOfLines={1}>
-              {activeEnrolledProgram?.title || 'Program Reward Pilihan Anda'}
+              {activeParticipants.length === 1
+                ? (activeEnrolledProgram?.title || 'Program Reward Pilihan Anda')
+                : 'Pencapaian progres dihitung terpisah untuk masing-masing item.'}
             </Text>
             <Text style={styles.topActiveSub}>
-              Program lain terkunci selama program ini aktif (Hanya bisa melihat rincian).
+              {activeParticipants.length === 1
+                ? 'Target dihitung per item. Anda dapat mengajukan item barang support tambahan.'
+                : 'Masing-masing item memiliki target belanja & status pencapaian tersendiri.'}
             </Text>
+
+            {/* Quick mini-chips for each active participant */}
+            {activeParticipants.length > 1 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 6, marginTop: 6 }}
+              >
+                {activeParticipants.map((ap, idx) => {
+                  const itemDet = parseParticipantItem(ap);
+                  const progDet = programs.find((p) => p.id === ap.program_id);
+                  const target = itemDet?.target || ap.custom_target_amount || progDet?.target_amount || 1;
+                  const current = ap.current_progress_amount || 0;
+                  const pct = Math.min(100, Math.round((current / target) * 100));
+                  const isDone = pct >= 100 || ap.status === 'ACHIEVED' || ap.status === 'CLAIMED' || ap.status === 'COMPLETED';
+
+                  return (
+                    <TouchableOpacity
+                      key={ap.id || idx}
+                      onPress={() => setSelectedFilter('MY_PROGRAMS')}
+                      style={{
+                        backgroundColor: isDone ? '#dcfce7' : 'white',
+                        borderColor: isDone ? '#86efac' : '#cbd5e1',
+                        borderWidth: 1,
+                        borderRadius: 12,
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 'bold',
+                          color: isDone ? '#15803d' : '#334155',
+                        }}
+                      >
+                        {itemDet?.name || progDet?.title || `Item #${idx + 1}`}: {pct}%
+                      </Text>
+                      {isDone && <Feather name="check" size={10} color="#15803d" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
           </View>
         </View>
       )}
@@ -1265,191 +1449,195 @@ export default function DealerProgramsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-          {filteredPrograms.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Feather name="award" size={54} color="#a3e635" />
-              <Text style={styles.emptyTitle}>Belum Ada Program</Text>
-              <Text style={styles.emptySubtitle}>
-                {selectedFilter === 'MY_PROGRAMS'
-                  ? 'Anda belum mengikuti program reward. Pilih salah satu program pada kategori dan klik "Ikuti Program"!'
-                  : 'Tidak ada program aktif pada kategori ini.'}
-              </Text>
-            </View>
-          ) : (
-            filteredPrograms.map((prog) => {
-              const badge = getTypeBadge(prog.program_type);
-              const participant = myParticipants.find((p) => p.program_id === prog.id);
-              const isEnrolledInThisProg = !!participant;
+          {selectedFilter === 'MY_PROGRAMS' ? (
+            /* TAB PROGRAM SAYA: PISAH PISAH PENCAPAIAN PROGRES TIAP ITEM SECARA INDEPENDEN */
+            myParticipants.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Feather name="award" size={54} color="#a3e635" />
+                <Text style={styles.emptyTitle}>Belum Ada Program Diikuti</Text>
+                <Text style={styles.emptySubtitle}>
+                  Anda belum mengikuti program reward. Pilih salah satu program pada tab "🎁 Barang Support" dan daftarkan toko Anda!
+                </Text>
+              </View>
+            ) : (
+              myParticipants.map((participant, index) => {
+                const prog = programs.find((pr) => pr.id === participant.program_id);
+                const badge = getTypeBadge(prog?.program_type || 'BARANG_SUPPORT');
+                const chosenItem = parseParticipantItem(participant);
+                const effectiveTarget =
+                  chosenItem?.target || participant.custom_target_amount || prog?.target_amount || 6000000;
+                const currentAmount = participant.current_progress_amount || 0;
+                const percent = Math.min(100, Math.round((currentAmount / effectiveTarget) * 100));
+                const isAchieved =
+                  percent >= 100 ||
+                  participant.status === 'ACHIEVED' ||
+                  participant.status === 'CLAIMED' ||
+                  participant.status === 'SHIPPED' ||
+                  participant.status === 'COMPLETED';
 
-              // Rule 1: Is user enrolled in another program?
-              const isLockedByOtherProgram = !isEnrolledInThisProg && !!activeParticipant;
+                const daysLeft = prog?.end_date
+                  ? Math.max(0, Math.ceil((new Date(prog.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+                  : 0;
 
-              // Extract chosen item details if any
-              const chosenItem = parseParticipantItem(participant);
-              const effectiveTarget =
-                chosenItem?.target || participant?.custom_target_amount || prog.target_amount;
-              const currentAmount = participant ? participant.current_progress_amount : 0;
-              const percent = Math.min(100, Math.round((currentAmount / effectiveTarget) * 100));
-              const isAchieved =
-                percent >= 100 ||
-                participant?.status === 'ACHIEVED' ||
-                participant?.status === 'CLAIMED' ||
-                participant?.status === 'SHIPPED' ||
-                participant?.status === 'COMPLETED';
+                const isShippedOrApproved =
+                  participant.status === 'SHIPPED' ||
+                  (participant.status === 'CLAIMED' && !!participant.admin_notes);
+                const hasAfterPhoto = !!participant.photo_after_url;
 
-              const daysLeft = Math.max(
-                0,
-                Math.ceil((new Date(prog.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-              );
+                return (
+                  <View key={participant.id || index} style={[styles.programCard, styles.programCardActive]}>
+                    {/* Banner Image */}
+                    <View style={styles.bannerWrapper}>
+                      <TouchableOpacity
+                        activeOpacity={0.9}
+                        onPress={() =>
+                          setPreviewImage(
+                            prog?.banner_url ||
+                              (prog?.program_type === 'BARANG_SUPPORT'
+                                ? 'https://images.unsplash.com/photo-1555421689-491a97ff2040?w=600'
+                                : 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600')
+                          )
+                        }
+                      >
+                        <Image
+                          source={{
+                            uri:
+                              prog?.banner_url ||
+                              (prog?.program_type === 'BARANG_SUPPORT'
+                                ? 'https://images.unsplash.com/photo-1555421689-491a97ff2040?w=600'
+                                : 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600'),
+                          }}
+                          style={styles.bannerImage}
+                          contentFit="cover"
+                        />
+                      </TouchableOpacity>
+                      <View style={[styles.typeBadgeWrapper, { backgroundColor: badge.bg, borderColor: badge.border }]}>
+                        <Feather name={badge.icon as any} size={13} color={badge.color} />
+                        <Text style={[styles.typeBadgeText, { color: badge.color }]}>
+                          {badge.label} #{index + 1}
+                        </Text>
+                      </View>
 
-              // Status after delivery flow
-              const isShippedOrApproved =
-                participant?.status === 'SHIPPED' ||
-                (participant?.status === 'CLAIMED' && !!participant?.admin_notes);
-              const hasAfterPhoto = !!participant?.photo_after_url;
-
-              return (
-                <View
-                  key={prog.id}
-                  style={[
-                    styles.programCard,
-                    isEnrolledInThisProg && styles.programCardActive,
-                    isLockedByOtherProgram && styles.programCardLocked,
-                  ]}
-                >
-                  {/* Banner Image */}
-                  <View style={styles.bannerWrapper}>
-                    <TouchableOpacity 
-                      activeOpacity={0.9} 
-                      onPress={() => setPreviewImage(
-                        prog.banner_url ||
-                        (prog.program_type === 'BARANG_SUPPORT'
-                          ? 'https://images.unsplash.com/photo-1555421689-491a97ff2040?w=600'
-                          : prog.program_type === 'TRIP'
-                          ? 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600'
-                          : 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600')
+                      {daysLeft > 0 && (
+                        <View style={styles.countdownBadge}>
+                          <Feather name="clock" size={11} color="white" />
+                          <Text style={styles.countdownText}>Sisa {daysLeft} hari</Text>
+                        </View>
                       )}
-                    >
-                      <Image
-                        source={{
-                          uri:
-                            prog.banner_url ||
-                            (prog.program_type === 'BARANG_SUPPORT'
-                              ? 'https://images.unsplash.com/photo-1555421689-491a97ff2040?w=600'
-                              : prog.program_type === 'TRIP'
-                              ? 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600'
-                              : 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600'),
-                        }}
-                        style={styles.bannerImage}
-                        contentFit="cover"
-                      />
-                    </TouchableOpacity>
-                    <View style={[styles.typeBadgeWrapper, { backgroundColor: badge.bg, borderColor: badge.border }]}>
-                      <Feather name={badge.icon as any} size={13} color={badge.color} />
-                      <Text style={[styles.typeBadgeText, { color: badge.color }]}>{badge.label}</Text>
                     </View>
 
-                    <View style={styles.countdownBadge}>
-                      <Feather name="clock" size={11} color="white" />
-                      <Text style={styles.countdownText}>
-                        {daysLeft > 0 ? `Sisa ${daysLeft} hari` : 'Berakhir'}
-                      </Text>
-                    </View>
-
-                    {/* Locked watermark badge on banner */}
-                    {isLockedByOtherProgram && (
-                      <View style={styles.lockedWatermarkBadge}>
-                        <Feather name="lock" size={12} color="white" />
-                        <Text style={styles.lockedWatermarkText}>Terkunci (Sedang Ikut 1 Program)</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Card Body */}
-                  <View style={styles.cardBody}>
-                    <Text style={styles.programTitle}>{prog.title}</Text>
-
-                    {/* REWARD BOX */}
-                    <View style={styles.rewardBox}>
-                      <View style={styles.rewardHeader}>
-                        <Feather name="gift" size={15} color="#4a6b22" />
-                        <Text style={styles.rewardHeaderTitle}>Hadiah Reward Toko:</Text>
-                      </View>
-                      <Text style={styles.rewardDesc}>{prog.reward_description}</Text>
-                    </View>
-
-
-
-                    {/* DOKUMENTASI FOTO SECTION (BEFORE & AFTER) IF ENROLLED */}
-                    {isEnrolledInThisProg && (participant?.photo_before_url || participant?.photo_after_url) && (
-                      <View style={styles.photoDocumentationCard}>
-                        <Text style={styles.photoDocumentationTitle}>Dokumentasi Foto Toko:</Text>
-                        <View style={styles.photoDocumentationRow}>
-                          {/* Foto Before */}
-                          {participant?.photo_before_url && (
-                            <TouchableOpacity
-                              style={styles.photoThumbContainer}
-                              onPress={() => setLightboxImageUri(participant.photo_before_url!)}
-                            >
-                              <Image
-                                source={{ uri: participant.photo_before_url }}
-                                style={styles.photoThumb}
-                                contentFit="cover"
-                              />
-                              <View style={styles.photoThumbBadgeBefore}>
-                                <Text style={styles.photoThumbBadgeText}>📷 Foto BEFORE (Lokasi)</Text>
-                              </View>
-                            </TouchableOpacity>
-                          )}
-
-                          {/* Foto After */}
-                          {participant?.photo_after_url ? (
-                            <TouchableOpacity
-                              style={styles.photoThumbContainer}
-                              onPress={() => setLightboxImageUri(participant.photo_after_url!)}
-                            >
-                              <Image
-                                source={{ uri: participant.photo_after_url }}
-                                style={styles.photoThumb}
-                                contentFit="cover"
-                              />
-                              <View style={styles.photoThumbBadgeAfter}>
-                                <Text style={styles.photoThumbBadgeText}>✨ Foto AFTER (Terpasang)</Text>
-                              </View>
-                            </TouchableOpacity>
-                          ) : isShippedOrApproved ? (
-                            <View style={styles.photoThumbPlaceholder}>
-                              <Feather name="camera" size={24} color="#f59e0b" />
-                              <Text style={styles.photoThumbPlaceholderText}>Menunggu Foto After Toko</Text>
-                            </View>
-                          ) : null}
+                    {/* Card Body */}
+                    <View style={styles.cardBody}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Text style={styles.programTitle}>
+                          {chosenItem?.name || prog?.title || 'Program Reward'}
+                        </Text>
+                        <View
+                          style={{
+                            backgroundColor:
+                              participant.status === 'REJECTED'
+                                ? '#fee2e2'
+                                : isAchieved
+                                ? '#dcfce7'
+                                : '#eff6ff',
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: 6,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 'bold',
+                              color:
+                                participant.status === 'REJECTED'
+                                  ? '#b91c1c'
+                                  : isAchieved
+                                  ? '#15803d'
+                                  : '#2563eb',
+                            }}
+                          >
+                            {participant.status === 'REJECTED'
+                              ? 'Ditolak / Batal'
+                              : participant.status === 'COMPLETED'
+                              ? 'Selesai'
+                              : participant.status === 'SHIPPED'
+                              ? 'Dikirim'
+                              : participant.status === 'CLAIMED'
+                              ? 'Klaim Diproses'
+                              : isAchieved
+                              ? 'Target Tercapai'
+                              : 'Sedang Berjalan'}
+                          </Text>
                         </View>
                       </View>
-                    )}
 
-                    {/* TARGET BELANJA ROW */}
-                    <View style={styles.targetRow}>
-                      <Text style={styles.targetLabel}>
-                        {isEnrolledInThisProg && chosenItem?.name
-                          ? 'Target Belanja Item Pilihan:'
-                          : prog.program_type === 'BARANG_SUPPORT'
-                          ? 'Mulai Pembelian:'
-                          : 'Target Belanja Akumulasi:'}
-                      </Text>
-                      <Text style={styles.targetAmount}>
-                        Rp {Number(effectiveTarget).toLocaleString('id-ID')}
-                      </Text>
-                    </View>
+                      {prog && prog.title !== chosenItem?.name && (
+                        <Text style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+                          Program: {prog.title}
+                        </Text>
+                      )}
 
-                    {/* PROGRESS SECTION (IF ENROLLED) */}
-                    {isEnrolledInThisProg && (
+                      {/* DOKUMENTASI FOTO SECTION (BEFORE & AFTER) */}
+                      {(participant.photo_before_url || participant.photo_after_url) && (
+                        <View style={styles.photoDocumentationCard}>
+                          <Text style={styles.photoDocumentationTitle}>Dokumentasi Foto Toko:</Text>
+                          <View style={styles.photoDocumentationRow}>
+                            {participant.photo_before_url && (
+                              <TouchableOpacity
+                                style={styles.photoThumbContainer}
+                                onPress={() => setLightboxImageUri(participant.photo_before_url!)}
+                              >
+                                <Image
+                                  source={{ uri: participant.photo_before_url }}
+                                  style={styles.photoThumb}
+                                  contentFit="cover"
+                                />
+                                <View style={styles.photoThumbBadgeBefore}>
+                                  <Text style={styles.photoThumbBadgeText}>📷 Foto BEFORE</Text>
+                                </View>
+                              </TouchableOpacity>
+                            )}
+
+                            {participant.photo_after_url ? (
+                              <TouchableOpacity
+                                style={styles.photoThumbContainer}
+                                onPress={() => setLightboxImageUri(participant.photo_after_url!)}
+                              >
+                                <Image
+                                  source={{ uri: participant.photo_after_url }}
+                                  style={styles.photoThumb}
+                                  contentFit="cover"
+                                />
+                                <View style={styles.photoThumbBadgeAfter}>
+                                  <Text style={styles.photoThumbBadgeText}>✨ Foto AFTER</Text>
+                                </View>
+                              </TouchableOpacity>
+                            ) : isShippedOrApproved ? (
+                              <View style={styles.photoThumbPlaceholder}>
+                                <Feather name="camera" size={24} color="#f59e0b" />
+                                <Text style={styles.photoThumbPlaceholderText}>Menunggu Foto After</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        </View>
+                      )}
+
+                      {/* TARGET BELANJA ROW */}
+                      <View style={styles.targetRow}>
+                        <Text style={styles.targetLabel}>Target Belanja Item Ini:</Text>
+                        <Text style={styles.targetAmount}>
+                          Rp {Number(effectiveTarget).toLocaleString('id-ID')}
+                        </Text>
+                      </View>
+
+                      {/* PROGRESS BAR TRACK */}
                       <View style={styles.progressContainer}>
                         <View style={styles.progressTopRow}>
-                          <Text style={styles.progressLabel}>Progres Belanja Toko Anda:</Text>
+                          <Text style={styles.progressLabel}>Pencapaian Progres Toko:</Text>
                           <Text style={styles.progressPercent}>{percent}%</Text>
                         </View>
 
-                        {/* Progress Bar Track */}
                         <View style={styles.progressBarTrack}>
                           <View
                             style={[
@@ -1474,12 +1662,12 @@ export default function DealerProgramsScreen() {
                           )}
                         </View>
 
-                        {/* DEMO SIMULATION BAR (UNTUK UJI COBA OMSET & TARGET) */}
-                        {(!currentDealerId || participant?.id.startsWith('demo-')) && (
+                        {/* DEMO SIMULATION */}
+                        {(!currentDealerId || participant.id.startsWith('demo-') || participant.id.startsWith('part-')) && (
                           <View style={styles.demoSimulationBox}>
                             <View style={styles.demoSimulationHeader}>
                               <Feather name="sliders" size={13} color="#2563eb" />
-                              <Text style={styles.demoSimulationTitle}>Simulasi Uji Coba Demo (Ubah Omset):</Text>
+                              <Text style={styles.demoSimulationTitle}>Simulasi Uji Coba Demo (Item Ini):</Text>
                             </View>
                             <View style={styles.demoSimulationButtonsRow}>
                               <TouchableOpacity
@@ -1510,44 +1698,82 @@ export default function DealerProgramsScreen() {
                           </View>
                         )}
 
-                        {/* STATUS NOTIFICATION BADGES */}
-                        {isAchieved && participant?.status === 'ENROLLED' && (
-                          <View style={styles.achievedNotice}>
-                            <Feather name="check-circle" size={16} color="#15803d" />
-                            <Text style={styles.achievedNoticeText}>
-                              Selamat! Target belanja telah tercapai 100%. Silakan ajukan klaim hadiah Anda!
-                            </Text>
-                          </View>
-                        )}
-
-                        {participant?.status === 'CLAIMED' && (
-                          <View style={styles.claimedNotice}>
-                            <Feather name="clock" size={16} color="#7e22ce" />
+                        {/* NOTICES */}
+                        {participant.status === 'REJECTED' && (
+                          <View
+                            style={{
+                              backgroundColor: '#fef2f2',
+                              borderColor: '#fca5a5',
+                              borderWidth: 1,
+                              borderRadius: 10,
+                              padding: 12,
+                              marginBottom: 10,
+                              flexDirection: 'row',
+                              alignItems: 'flex-start',
+                              gap: 10,
+                            }}
+                          >
+                            <Feather name="alert-octagon" size={18} color="#b91c1c" />
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.claimedNoticeTitle}>Klaim Hadiah Telah Diajukan</Text>
-                              <Text style={styles.claimedNoticeSub}>
-                                Hadiah sedang dipersiapkan/dikirim oleh Admin.
+                              <Text style={{ fontSize: 13, fontWeight: '700', color: '#991b1b', marginBottom: 2 }}>
+                                Pengajuan Ditolak / Dibatalkan
+                              </Text>
+                              <Text style={{ fontSize: 12, color: '#7f1d1d', lineHeight: 17 }}>
+                                Pengajuan program untuk item ini telah ditolak atau dibatalkan oleh Superadmin.
                               </Text>
                               {participant.admin_notes ? (
-                                <Text style={styles.adminNotesText}>
-                                  Catatan Admin / Resi: {participant.admin_notes}
-                                </Text>
+                                <View
+                                  style={{
+                                    marginTop: 6,
+                                    backgroundColor: '#ffffff',
+                                    padding: 8,
+                                    borderRadius: 6,
+                                    borderWidth: 1,
+                                    borderColor: '#fecaca',
+                                  }}
+                                >
+                                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#991b1b' }}>
+                                    Alasan Penolakan:
+                                  </Text>
+                                  <Text style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>
+                                    {participant.admin_notes}
+                                  </Text>
+                                </View>
                               ) : null}
                             </View>
                           </View>
                         )}
 
-                        {/* WAJIB UPLOAD DOKUMENTASI AFTER BANNER (KETIKA BARANG DIKIRIM / TIBA) */}
-                        {isShippedOrApproved && prog.program_type === 'BARANG_SUPPORT' && !hasAfterPhoto && (
+                        {isAchieved && participant.status === 'ENROLLED' && (
+                          <View style={styles.achievedNotice}>
+                            <Feather name="check-circle" size={16} color="#15803d" />
+                            <Text style={styles.achievedNoticeText}>
+                              Selamat! Target belanja item ini telah tercapai 100%. Silakan ajukan klaim hadiah!
+                            </Text>
+                          </View>
+                        )}
+
+                        {participant.status === 'CLAIMED' && (
+                          <View style={styles.claimedNotice}>
+                            <Feather name="clock" size={16} color="#7e22ce" />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.claimedNoticeTitle}>Klaim Hadiah Telah Diajukan</Text>
+                              <Text style={styles.claimedNoticeSub}>Hadiah sedang dipersiapkan/dikirim oleh Admin.</Text>
+                              {participant.admin_notes ? (
+                                <Text style={styles.adminNotesText}>Catatan Admin / Resi: {participant.admin_notes}</Text>
+                              ) : null}
+                            </View>
+                          </View>
+                        )}
+
+                        {isShippedOrApproved && !hasAfterPhoto && (
                           <View style={styles.afterUploadRequiredBox}>
                             <View style={styles.afterUploadRequiredHeader}>
                               <Feather name="alert-triangle" size={18} color="#b45309" />
-                              <Text style={styles.afterUploadRequiredTitle}>
-                                Wajib Upload Dokumentasi AFTER
-                              </Text>
+                              <Text style={styles.afterUploadRequiredTitle}>Wajib Upload Dokumentasi AFTER</Text>
                             </View>
                             <Text style={styles.afterUploadRequiredDesc}>
-                              Barang support (rak/etalase) telah dikirim oleh Admin. Jika barang sudah tiba dan selesai dipasang/ditempatkan di toko, Anda wajib mengunggah foto dokumentasi AFTER untuk menyelesaikan program ini.
+                              Barang support telah dikirim. Jika sudah dipasang di toko, unggah foto bukti AFTER pemasangan.
                             </Text>
                             <TouchableOpacity
                               style={styles.afterUploadActionBtn}
@@ -1560,39 +1786,55 @@ export default function DealerProgramsScreen() {
                               }}
                             >
                               <Feather name="camera" size={16} color="white" />
-                              <Text style={styles.afterUploadActionBtnText}>
-                                📸 Upload Foto AFTER (Setelah Dipasang)
-                              </Text>
+                              <Text style={styles.afterUploadActionBtnText}>📸 Upload Foto AFTER (Terpasang)</Text>
                             </TouchableOpacity>
                           </View>
                         )}
 
-                        {/* PROGRAM SUDAH SELESAI & FOTO AFTER TERVERIFIKASI */}
                         {hasAfterPhoto && (
                           <View style={styles.completedNotice}>
                             <Feather name="award" size={16} color="#15803d" />
                             <Text style={styles.completedNoticeText}>
-                              Dokumentasi AFTER Terpasang! Program support display untuk toko Anda telah selesai & terverifikasi resmi oleh DAP.
+                              Dokumentasi AFTER Terpasang! Program support display ini telah selesai & terverifikasi resmi oleh DAP.
                             </Text>
                           </View>
                         )}
                       </View>
-                    )}
 
-                    <Text style={styles.programDesc}>{prog.description}</Text>
-
-                    {/* ACTION FOOTER */}
-                    <View style={styles.cardActions}>
-                      {isEnrolledInThisProg ? (
-                        isAchieved && participant?.status === 'ENROLLED' ? (
+                      {/* ACTION BUTTONS */}
+                      <View style={styles.cardActions}>
+                        {participant.status === 'REJECTED' ? (
+                          <View style={{ width: '100%', gap: 8 }}>
+                            <TouchableOpacity
+                              style={{
+                                backgroundColor: '#fee2e2',
+                                borderColor: '#fca5a5',
+                                borderWidth: 1,
+                                paddingVertical: 10,
+                                paddingHorizontal: 14,
+                                borderRadius: 8,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                              }}
+                              onPress={() => handleDismissParticipant(participant.id)}
+                            >
+                              <Feather name="trash-2" size={14} color="#b91c1c" />
+                              <Text style={{ fontSize: 12, fontWeight: '700', color: '#b91c1c' }}>
+                                Hapus Notifikasi Penolakan
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : isAchieved && participant.status === 'ENROLLED' ? (
                           <TouchableOpacity
                             style={styles.claimRewardBtn}
-                            onPress={() => openClaimModal(prog, participant!)}
+                            onPress={() => prog && openClaimModal(prog, participant)}
                           >
                             <Feather name="gift" size={16} color="white" />
                             <Text style={styles.claimRewardBtnText}>🎉 Klaim Hadiah Sekarang</Text>
                           </TouchableOpacity>
-                        ) : isShippedOrApproved && prog.program_type === 'BARANG_SUPPORT' && !hasAfterPhoto ? (
+                        ) : isShippedOrApproved && !hasAfterPhoto ? (
                           <TouchableOpacity
                             style={styles.uploadAfterBtnSecondary}
                             onPress={() => {
@@ -1608,64 +1850,399 @@ export default function DealerProgramsScreen() {
                               Upload Dokumentasi After Pemasangan
                             </Text>
                           </TouchableOpacity>
+                        ) : participant.status === 'ENROLLED' ? (
+                          <TouchableOpacity
+                            style={[styles.uploadAfterBtnSecondary, { backgroundColor: '#f0fdf4', borderColor: '#86efac' }]}
+                            onPress={() => {
+                              setActiveProgramForChangeItem(prog || null);
+                              setActiveParticipantForChangeItem(participant);
+                              if (chosenItem) {
+                                const found = DEFAULT_SUPPORT_ITEMS.find((it) => it.id === chosenItem.id);
+                                if (found) setSelectedItemInModal(found);
+                              }
+                              setModalItemQty(chosenItem?.qty || 1);
+                              setChangeItemModalVisible(true);
+                            }}
+                          >
+                            <Feather name="refresh-cw" size={14} color="#15803d" />
+                            <Text style={[styles.uploadAfterBtnSecondaryText, { color: '#15803d' }]}>
+                              Ganti Pilihan Item Display
+                            </Text>
+                          </TouchableOpacity>
                         ) : (
                           <View style={styles.enrolledStatusPill}>
                             <Feather name="check-circle" size={14} color="#15803d" />
                             <Text style={styles.enrolledStatusPillText}>
                               {hasAfterPhoto
                                 ? 'Program Selesai & Terpasang Sempurna'
-                                : participant?.status === 'CLAIMED'
+                                : participant.status === 'CLAIMED'
                                 ? 'Klaim Hadiah Sedang Diproses'
                                 : 'Anda Telah Terdaftar (Kumpulkan Omset)'}
                             </Text>
                           </View>
-                        )
-                      ) : isLockedByOtherProgram ? (
-                        <View style={styles.lockedSectionBox}>
-                          <View style={styles.lockedSectionRow}>
-                            <Feather name="lock" size={15} color="#b45309" />
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.lockedSectionTitle}>Program Terkunci</Text>
-                              <Text style={styles.lockedSectionDesc}>
-                                Anda sedang mengikuti program{' '}
-                                <Text style={{ fontWeight: 'bold', color: '#78350f' }}>
-                                  "{activeEnrolledProgram?.title || 'Program Lain'}"
-                                </Text>
-                                . Setiap toko hanya dapat mengikuti 1 program aktif dalam satu periode.
-                              </Text>
-                            </View>
-                          </View>
-                          <TouchableOpacity
-                            style={styles.lockedDisabledBtn}
-                            activeOpacity={0.7}
-                            onPress={() => {
-                              const alertMsg = `Toko Anda sedang aktif pada program:\n"${activeEnrolledProgram?.title || 'Program Reward'}".\n\nSesuai ketentuan, Anda hanya dapat mengikuti 1 program dalam satu periode. Anda dapat melihat rincian program ini, namun tidak dapat mendaftar sebelum program aktif Anda diselesaikan atau diklaim.`;
-                              if (Platform.OS === 'web') window.alert(alertMsg);
-                              else Alert.alert('Hanya 1 Program Aktif 🔒', alertMsg);
-                            }}
-                          >
-                            <Feather name="lock" size={14} color="#94a3b8" />
-                            <Text style={styles.lockedDisabledBtnText}>
-                              Tidak Bisa Memilih (Sedang Ikut 1 Program)
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={styles.enrollBtn}
-                          onPress={() => handleStartEnrollment(prog)}
-                        >
-                          <Feather name="plus-circle" size={16} color="white" />
-                          <Text style={styles.enrollBtnText}>
-                            Ajukan Program
-                          </Text>
-                        </TouchableOpacity>
-                      )}
+                        )}
+                      </View>
                     </View>
                   </View>
-                </View>
-              );
-            })
+                );
+              })
+            )
+          ) : (
+            /* TAB LAINNYA: KATALOG PROGRAM LENGKAP */
+            filteredPrograms.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Feather name="award" size={54} color="#a3e635" />
+                <Text style={styles.emptyTitle}>Belum Ada Program</Text>
+                <Text style={styles.emptySubtitle}>Tidak ada program aktif pada kategori ini.</Text>
+              </View>
+            ) : (
+              filteredPrograms.map((prog) => {
+                const badge = getTypeBadge(prog.program_type);
+                const progParticipants = myParticipants.filter(
+                  (p) => p.program_id === prog.id && p.status !== 'REJECTED'
+                );
+                const isEnrolledInThisProg = progParticipants.length > 0;
+
+                // Is locked by exclusive non-support program?
+                const isLockedByOtherProgram =
+                  !isEnrolledInThisProg &&
+                  prog.program_type !== 'BARANG_SUPPORT' &&
+                  !!activeNonSupportParticipant &&
+                  activeNonSupportParticipant.program_id !== prog.id;
+
+                const daysLeft = Math.max(
+                  0,
+                  Math.ceil((new Date(prog.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                );
+
+                return (
+                  <View
+                    key={prog.id}
+                    style={[
+                      styles.programCard,
+                      isEnrolledInThisProg && styles.programCardActive,
+                      isLockedByOtherProgram && styles.programCardLocked,
+                    ]}
+                  >
+                    {/* Banner Image */}
+                    <View style={styles.bannerWrapper}>
+                      <TouchableOpacity
+                        activeOpacity={0.9}
+                        onPress={() =>
+                          setPreviewImage(
+                            prog.banner_url ||
+                              (prog.program_type === 'BARANG_SUPPORT'
+                                ? 'https://images.unsplash.com/photo-1555421689-491a97ff2040?w=600'
+                                : prog.program_type === 'TRIP'
+                                ? 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600'
+                                : 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600')
+                          )
+                        }
+                      >
+                        <Image
+                          source={{
+                            uri:
+                              prog.banner_url ||
+                              (prog.program_type === 'BARANG_SUPPORT'
+                                ? 'https://images.unsplash.com/photo-1555421689-491a97ff2040?w=600'
+                                : prog.program_type === 'TRIP'
+                                ? 'https://images.unsplash.com/photo-1508009603885-50cf7c579365?w=600'
+                                : 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=600'),
+                          }}
+                          style={styles.bannerImage}
+                          contentFit="cover"
+                        />
+                      </TouchableOpacity>
+                      <View style={[styles.typeBadgeWrapper, { backgroundColor: badge.bg, borderColor: badge.border }]}>
+                        <Feather name={badge.icon as any} size={13} color={badge.color} />
+                        <Text style={[styles.typeBadgeText, { color: badge.color }]}>{badge.label}</Text>
+                      </View>
+
+                      <View style={styles.countdownBadge}>
+                        <Feather name="clock" size={11} color="white" />
+                        <Text style={styles.countdownText}>
+                          {daysLeft > 0 ? `Sisa ${daysLeft} hari` : 'Berakhir'}
+                        </Text>
+                      </View>
+
+                      {isLockedByOtherProgram && (
+                        <View style={styles.lockedWatermarkBadge}>
+                          <Feather name="lock" size={12} color="white" />
+                          <Text style={styles.lockedWatermarkText}>Terkunci (Eksklusif)</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Card Body */}
+                    <View style={styles.cardBody}>
+                      <Text style={styles.programTitle}>{prog.title}</Text>
+
+                      {/* REWARD BOX */}
+                      <View style={styles.rewardBox}>
+                        <View style={styles.rewardHeader}>
+                          <Feather name="gift" size={15} color="#4a6b22" />
+                          <Text style={styles.rewardHeaderTitle}>Hadiah Reward Toko:</Text>
+                        </View>
+                        <Text style={styles.rewardDesc}>{prog.reward_description}</Text>
+                      </View>
+
+                      {/* KHUSUS BARANG SUPPORT DENGAN ITEM YANG SEDANG DIIKUTI: PISAH PISAH PENCAPAIAN PROGRESNYA */}
+                      {prog.program_type === 'BARANG_SUPPORT' && progParticipants.length > 0 && (
+                        <View style={{ marginBottom: 14 }}>
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              marginBottom: 8,
+                            }}
+                          >
+                            <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#166534' }}>
+                              🏆 Item Sedang Anda Ikuti ({progParticipants.length} Item):
+                            </Text>
+                            <Text style={{ fontSize: 10, color: '#15803d', fontWeight: '600' }}>
+                              Progres Terpisah
+                            </Text>
+                          </View>
+
+                          <View style={{ gap: 10 }}>
+                            {progParticipants.map((part, pIdx) => {
+                              const chosenItem = parseParticipantItem(part);
+                              const effectiveTarget =
+                                chosenItem?.target || part.custom_target_amount || prog.target_amount;
+                              const currentAmount = part.current_progress_amount || 0;
+                              const percent = Math.min(100, Math.round((currentAmount / effectiveTarget) * 100));
+                              const isAchieved =
+                                percent >= 100 ||
+                                part.status === 'ACHIEVED' ||
+                                part.status === 'CLAIMED' ||
+                                part.status === 'SHIPPED' ||
+                                part.status === 'COMPLETED';
+
+                              const isShippedOrApproved =
+                                part.status === 'SHIPPED' ||
+                                (part.status === 'CLAIMED' && !!part.admin_notes);
+                              const hasAfterPhoto = !!part.photo_after_url;
+
+                              return (
+                                <View
+                                  key={part.id || pIdx}
+                                  style={{
+                                    backgroundColor: '#f8fafc',
+                                    borderWidth: 1.5,
+                                    borderColor: isAchieved ? '#86efac' : '#cbd5e1',
+                                    borderRadius: 12,
+                                    padding: 12,
+                                  }}
+                                >
+                                  <View
+                                    style={{
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      marginBottom: 6,
+                                    }}
+                                  >
+                                    <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#0f172a', flex: 1 }}>
+                                      {chosenItem?.name || `Item Display #${pIdx + 1}`}
+                                    </Text>
+                                    <View
+                                      style={{
+                                        backgroundColor: isAchieved ? '#dcfce7' : '#e0f2fe',
+                                        paddingHorizontal: 7,
+                                        paddingVertical: 2,
+                                        borderRadius: 6,
+                                      }}
+                                    >
+                                      <Text
+                                        style={{
+                                          fontSize: 10,
+                                          fontWeight: 'bold',
+                                          color: isAchieved ? '#15803d' : '#0369a1',
+                                        }}
+                                      >
+                                        {part.status === 'COMPLETED'
+                                          ? 'Selesai'
+                                          : part.status === 'SHIPPED'
+                                          ? 'Dikirim'
+                                          : part.status === 'CLAIMED'
+                                          ? 'Klaim'
+                                          : isAchieved
+                                          ? 'Tercapai 🎯'
+                                          : `${percent}%`}
+                                      </Text>
+                                    </View>
+                                  </View>
+
+                                  {/* Photos Preview */}
+                                  {(part.photo_before_url || part.photo_after_url) && (
+                                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                                      {part.photo_before_url && (
+                                        <TouchableOpacity
+                                          onPress={() => setLightboxImageUri(part.photo_before_url!)}
+                                          style={{ width: 44, height: 44, borderRadius: 6, overflow: 'hidden' }}
+                                        >
+                                          <Image
+                                            source={{ uri: part.photo_before_url }}
+                                            style={{ width: '100%', height: '100%' }}
+                                            contentFit="cover"
+                                          />
+                                        </TouchableOpacity>
+                                      )}
+                                      {part.photo_after_url && (
+                                        <TouchableOpacity
+                                          onPress={() => setLightboxImageUri(part.photo_after_url!)}
+                                          style={{ width: 44, height: 44, borderRadius: 6, overflow: 'hidden' }}
+                                        >
+                                          <Image
+                                            source={{ uri: part.photo_after_url }}
+                                            style={{ width: '100%', height: '100%' }}
+                                            contentFit="cover"
+                                          />
+                                        </TouchableOpacity>
+                                      )}
+                                    </View>
+                                  )}
+
+                                  {/* Progress bar */}
+                                  <View style={styles.progressBarTrack}>
+                                    <View
+                                      style={[
+                                        styles.progressBarFill,
+                                        {
+                                          width: `${percent}%`,
+                                          backgroundColor: isAchieved ? '#16a34a' : '#3b82f6',
+                                        },
+                                      ]}
+                                    />
+                                  </View>
+
+                                  <View
+                                    style={{
+                                      flexDirection: 'row',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      marginTop: 4,
+                                    }}
+                                  >
+                                    <Text style={{ fontSize: 11, color: '#475569', fontWeight: '600' }}>
+                                      Rp {Number(currentAmount).toLocaleString('id-ID')} / Rp{' '}
+                                      {Number(effectiveTarget).toLocaleString('id-ID')}
+                                    </Text>
+                                    {percent < 100 && (
+                                      <Text style={{ fontSize: 10, color: '#dc2626', fontWeight: '600' }}>
+                                        Kurang Rp {Number(Math.max(0, effectiveTarget - currentAmount)).toLocaleString('id-ID')}
+                                      </Text>
+                                    )}
+                                  </View>
+
+                                  {/* Item Actions */}
+                                  {isAchieved && part.status === 'ENROLLED' ? (
+                                    <TouchableOpacity
+                                      style={[styles.claimRewardBtn, { marginTop: 8 }]}
+                                      onPress={() => openClaimModal(prog, part)}
+                                    >
+                                      <Feather name="gift" size={14} color="white" />
+                                      <Text style={[styles.claimRewardBtnText, { fontSize: 12 }]}>
+                                        Klaim Hadiah Item Ini
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ) : isShippedOrApproved && !hasAfterPhoto ? (
+                                    <TouchableOpacity
+                                      style={[styles.uploadAfterBtnSecondary, { marginTop: 8, paddingVertical: 6 }]}
+                                      onPress={() => {
+                                        setActiveAfterParticipant(part);
+                                        setAfterPhotoUri(null);
+                                        setAfterPhotoBase64(null);
+                                        setAfterNotes('');
+                                        setAfterModalVisible(true);
+                                      }}
+                                    >
+                                      <Feather name="camera" size={13} color="white" />
+                                      <Text style={[styles.uploadAfterBtnSecondaryText, { fontSize: 11 }]}>
+                                        Upload Foto AFTER Terpasang
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ) : null}
+                                </View>
+                              );
+                            })}
+                          </View>
+                        </View>
+                      )}
+
+                      {/* IF NOT ENROLLED IN THIS PROGRAM, SHOW TARGET ROW */}
+                      {!isEnrolledInThisProg && (
+                        <View style={styles.targetRow}>
+                          <Text style={styles.targetLabel}>
+                            {prog.program_type === 'BARANG_SUPPORT'
+                              ? 'Mulai Pembelian:'
+                              : 'Target Belanja Akumulasi:'}
+                          </Text>
+                          <Text style={styles.targetAmount}>
+                            Rp {Number(prog.target_amount).toLocaleString('id-ID')}
+                          </Text>
+                        </View>
+                      )}
+
+                      <Text style={styles.programDesc}>{prog.description}</Text>
+
+                      {/* ACTION FOOTER */}
+                      <View style={styles.cardActions}>
+                        {prog.program_type === 'BARANG_SUPPORT' ? (
+                          isEnrolledInThisProg ? (
+                            <TouchableOpacity
+                              style={[styles.enrollBtn, { backgroundColor: '#15803d' }]}
+                              onPress={() => handleStartEnrollment(prog)}
+                            >
+                              <Feather name="plus-circle" size={16} color="white" />
+                              <Text style={styles.enrollBtnText}>
+                                + Ajukan Barang Support Lainnya
+                              </Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <TouchableOpacity
+                              style={styles.enrollBtn}
+                              onPress={() => handleStartEnrollment(prog)}
+                            >
+                              <Feather name="plus-circle" size={16} color="white" />
+                              <Text style={styles.enrollBtnText}>Ajukan Program</Text>
+                            </TouchableOpacity>
+                          )
+                        ) : isEnrolledInThisProg ? (
+                          <View style={styles.enrolledStatusPill}>
+                            <Feather name="check-circle" size={14} color="#15803d" />
+                            <Text style={styles.enrolledStatusPillText}>
+                              Anda Telah Terdaftar (Kumpulkan Omset)
+                            </Text>
+                          </View>
+                        ) : isLockedByOtherProgram ? (
+                          <View style={styles.lockedSectionBox}>
+                            <View style={styles.lockedSectionRow}>
+                              <Feather name="lock" size={15} color="#b45309" />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.lockedSectionTitle}>Program Terkunci</Text>
+                                <Text style={styles.lockedSectionDesc}>
+                                  Anda sedang mengikuti program eksklusif lain.
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.enrollBtn}
+                            onPress={() => handleStartEnrollment(prog)}
+                          >
+                            <Feather name="plus-circle" size={16} color="white" />
+                            <Text style={styles.enrollBtnText}>Ajukan Program</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                );
+              })
+            )
           )}
         </ScrollView>
       )}

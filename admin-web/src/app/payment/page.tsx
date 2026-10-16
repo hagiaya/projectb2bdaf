@@ -28,8 +28,8 @@ interface PaymentSettings {
 const DEFAULT_SETTINGS: PaymentSettings = {
   id: 'default',
   bank_name: 'BCA (Bank Central Asia)',
-  bank_account_number: '829-019-8821',
-  bank_account_name: 'PT DISTRIBUSI AKSESORIS PRIMA',
+  bank_account_number: '5095454566',
+  bank_account_name: 'PT. RAJA AKSESORIS INDONESIA',
   cbd_enabled: true,
   cbd_term_label: 'Transfer Bank Manual (CBD - Cash Before Delivery)',
   cbd_instructions: 'Transfer ke rekening resmi perusahaan + 3 digit kode unik acak sebelum pesanan diproses dan dikirimkan.',

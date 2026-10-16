@@ -14,9 +14,12 @@
   atau `npm start` di dalam direktori `mobile-app`.
 - Berlaku untuk semua project.
 
-## OTA Update (EAS)
-- **Selalu gunakan channel production** untuk publikasi OTA update secara default (kecuali diminta lain), agar perubahan langsung masuk ke APK yang sedang dipakai user.
-- Command yang digunakan:
+## Deployment & Version Control (PENTING)
+- **Jangan Deploy ke OTA & GitHub Otomatis**:
+  - **Dilarang keras melakukan publikasi OTA update (EAS Update)** secara otomatis, kecuali jika user secara eksplisit meminta untuk deploy/update OTA.
+  - **Dilarang melakukan `git push` ke GitHub** secara otomatis, kecuali jika user secara eksplisit memintanya.
+  - Selesaikan seluruh pengerjaan kode, lakukan pengujian/verifikasi lokal (`tsc --noEmit`, build, dsb.), dan laporkan hasilnya secara rapi tanpa melakukan push atau OTA release.
+- Jika user secara spesifik meminta deploy OTA, gunakan:
   ```bash
   export $(xargs < .env) && export EAS_SKIP_AUTO_FINGERPRINT=1 && npx --yes eas-cli update --channel production --environment production --message "Deskripsi update" --non-interactive
   ```

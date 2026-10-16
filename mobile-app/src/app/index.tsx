@@ -32,7 +32,9 @@ export default function WelcomeScreen() {
       if (session) {
         try {
           const { data: profile } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
-          if (profile?.role === 'SALES' || profile?.role === 'SPV') {
+          const roleUpper = profile?.role?.toUpperCase();
+          const isEmployee = ['SALES', 'SPV', 'WAREHOUSE', 'STAFF'].includes(roleUpper);
+          if (isEmployee) {
             router.replace('/(sales)' as any);
           } else {
             router.replace('/(dealer)/home' as any);

@@ -41,8 +41,8 @@ export default function OrdersScreen() {
     bank_account_name: string;
   }>({
     bank_name: 'BCA (Bank Central Asia)',
-    bank_account_number: '829-019-8821',
-    bank_account_name: 'PT DISTRIBUSI AKSESORIS PRIMA',
+    bank_account_number: '5095454566',
+    bank_account_name: 'PT. RAJA AKSESORIS INDONESIA',
   });
 
   // Receiving state
@@ -66,8 +66,8 @@ export default function OrdersScreen() {
         if (data) {
           setBankInfo({
             bank_name: data.bank_name || 'BCA (Bank Central Asia)',
-            bank_account_number: data.bank_account_number || '829-019-8821',
-            bank_account_name: data.bank_account_name || 'PT DISTRIBUSI AKSESORIS PRIMA',
+            bank_account_number: data.bank_account_number || '5095454566',
+            bank_account_name: data.bank_account_name || 'PT. RAJA AKSESORIS INDONESIA',
           });
         }
       });

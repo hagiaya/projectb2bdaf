@@ -19,7 +19,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -168,16 +168,79 @@ export async function POST(req: NextRequest) {
 
     const supabaseAdmin = await getAdminClient();
 
-    // Check if participant record already exists for this program and dealer
-    const { data: existing, error: findErr } = await supabaseAdmin
+    // Safely check existing participant record using base columns
+    let existingQuery = supabaseAdmin
       .from('dealer_program_participants')
-      .select('id, status')
-      .eq('program_id', program_id)
-      .eq('dealer_id', dealer_id)
-      .maybeSingle();
+      .select('id, status, claim_notes, current_progress_amount');
+
+    if (body.participant_id || body.id) {
+      existingQuery = existingQuery.eq('id', body.participant_id || body.id);
+    } else {
+      existingQuery = existingQuery
+        .eq('program_id', program_id)
+        .eq('dealer_id', dealer_id);
+    }
+
+    const { data: existingList, error: findErr } = await existingQuery;
 
     if (findErr) {
       console.warn('Error checking existing participant:', findErr);
+    }
+
+    // Check if an existing row matches this specific item
+    let existing = null;
+    if (existingList && existingList.length > 0) {
+      if (body.participant_id || body.id) {
+        existing = existingList[0];
+      } else if (body.selected_item_id) {
+        // match by selected_item_id in metadata or column
+        existing = existingList.find((p: any) => {
+          if (p.selected_item_id === body.selected_item_id) return true;
+          if (p.claim_notes) {
+            const metaMatch = p.claim_notes.match(/__METADATA__:([\s\S]*)$/);
+            if (metaMatch && metaMatch[1]) {
+              try {
+                const meta = JSON.parse(metaMatch[1]);
+                if (meta.selected_item_id === body.selected_item_id) return true;
+              } catch (_) {}
+            }
+          }
+          return false;
+        });
+      } else {
+        existing = existingList[0];
+      }
+    }
+
+    // Build enriched claim_notes with __METADATA__
+    let finalClaimNotes = claim_notes || (existing ? existing.claim_notes : '') || '';
+    const currentMeta: any = {
+      selected_item_id: body.selected_item_id || undefined,
+      selected_item_name: body.selected_item_name || undefined,
+      selected_item_qty: selected_item_qty || 1,
+      custom_target_amount: custom_target_amount || undefined,
+      photo_before_url: body.photo_before_url || undefined,
+      photo_after_url: body.photo_after_url || undefined,
+      applicant_name: body.applicant_name || undefined,
+      applicant_store_name: body.applicant_store_name || undefined,
+      applicant_location: body.applicant_location || undefined,
+      applicant_phone: body.applicant_phone || undefined,
+      enrolled_at: new Date().toISOString(),
+    };
+
+    if (!finalClaimNotes.includes('__METADATA__:')) {
+      finalClaimNotes = (finalClaimNotes ? finalClaimNotes + '\n' : '') + `__METADATA__:${JSON.stringify(currentMeta)}`;
+    } else {
+      // Merge metadata
+      const metaMatch = finalClaimNotes.match(/__METADATA__:([\s\S]*)$/);
+      let existingMeta: any = {};
+      if (metaMatch && metaMatch[1]) {
+        try {
+          existingMeta = JSON.parse(metaMatch[1]);
+        } catch (_) {}
+      }
+      const mergedMeta = { ...existingMeta, ...currentMeta };
+      finalClaimNotes = finalClaimNotes.replace(/__METADATA__:([\s\S]*)$/, `__METADATA__:${JSON.stringify(mergedMeta)}`);
     }
 
     let resultData = null;
@@ -186,17 +249,42 @@ export async function POST(req: NextRequest) {
       // Update existing record
       const updatePayload: any = {
         status: status || existing.status || 'ENROLLED',
-        claim_notes: claim_notes || undefined,
+        claim_notes: finalClaimNotes,
         custom_target_amount: custom_target_amount || undefined,
         selected_item_qty: selected_item_qty || 1,
+        selected_item_id: body.selected_item_id || undefined,
+        selected_item_name: body.selected_item_name || undefined,
+        photo_before_url: body.photo_before_url || undefined,
+        photo_after_url: body.photo_after_url || undefined,
+        applicant_name: body.applicant_name || undefined,
+        applicant_store_name: body.applicant_store_name || undefined,
+        applicant_location: body.applicant_location || undefined,
+        applicant_phone: body.applicant_phone || undefined,
       };
 
-      const { data, error } = await supabaseAdmin
+      let { data, error } = await supabaseAdmin
         .from('dealer_program_participants')
         .update(updatePayload)
         .eq('id', existing.id)
-        .select('*, dealers(id, store_name, address, profiles(full_name, phone_number)), dealer_programs(*)')
+        .select('*')
         .single();
+
+      // If optional column error, fallback to base columns
+      if (error && error.message.includes('column')) {
+        console.warn('Fallback updating base columns only:', error.message);
+        const fallbackUpdate: any = {
+          status: status || existing.status || 'ENROLLED',
+          claim_notes: finalClaimNotes,
+        };
+        const retry = await supabaseAdmin
+          .from('dealer_program_participants')
+          .update(fallbackUpdate)
+          .eq('id', existing.id)
+          .select('*')
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) {
         console.error('Error updating participant:', error);
@@ -210,17 +298,79 @@ export async function POST(req: NextRequest) {
         program_id,
         dealer_id,
         status: status || 'ENROLLED',
-        current_progress_amount: 0,
-        claim_notes: claim_notes || '',
+        current_progress_amount: body.current_progress_amount || 0,
+        claim_notes: finalClaimNotes,
         custom_target_amount: custom_target_amount || undefined,
         selected_item_qty: selected_item_qty || 1,
+        selected_item_id: body.selected_item_id || undefined,
+        selected_item_name: body.selected_item_name || undefined,
+        photo_before_url: body.photo_before_url || undefined,
+        photo_after_url: body.photo_after_url || undefined,
+        applicant_name: body.applicant_name || undefined,
+        applicant_store_name: body.applicant_store_name || undefined,
+        applicant_location: body.applicant_location || undefined,
+        applicant_phone: body.applicant_phone || undefined,
       };
 
-      const { data, error } = await supabaseAdmin
+      let { data, error } = await supabaseAdmin
         .from('dealer_program_participants')
         .insert([insertPayload])
-        .select('*, dealers(id, store_name, address, profiles(full_name, phone_number)), dealer_programs(*)')
+        .select('*')
         .single();
+
+      // Fallback 1: If column does not exist
+      if (error && error.message.includes('column')) {
+        console.warn('Fallback inserting with base columns only:', error.message);
+        const basePayload: any = {
+          program_id,
+          dealer_id,
+          status: status || 'ENROLLED',
+          current_progress_amount: body.current_progress_amount || 0,
+          claim_notes: finalClaimNotes,
+        };
+        const retry = await supabaseAdmin
+          .from('dealer_program_participants')
+          .insert([basePayload])
+          .select('*')
+          .single();
+        data = retry.data;
+        error = retry.error;
+      }
+
+      // Fallback 2: If unique constraint on (program_id, dealer_id) still exists in DB
+      if (error && error.message.includes('unique constraint')) {
+        console.warn('Unique constraint hit, appending item to existing participant row claim_notes');
+        const firstExisting = existingList?.[0];
+        if (firstExisting) {
+          // Parse existing meta items
+          let items: any[] = [];
+          const match = (firstExisting.claim_notes || '').match(/__METADATA__:([\s\S]*)$/);
+          let prevMeta: any = {};
+          if (match && match[1]) {
+            try {
+              prevMeta = JSON.parse(match[1]);
+              if (Array.isArray(prevMeta.items)) items = prevMeta.items;
+              else if (prevMeta.selected_item_id) items = [prevMeta];
+            } catch (_) {}
+          }
+          // append new item
+          items.push(currentMeta);
+          prevMeta.items = items;
+          const multiClaimNotes = (firstExisting.claim_notes || '').replace(/__METADATA__:([\s\S]*)$/, '') +
+            `\n[PILIHAN ITEM: ${body.selected_item_name || 'Display Support'} | Target: Rp ${(custom_target_amount || 0).toLocaleString('id-ID')}]` +
+            `\n__METADATA__:${JSON.stringify(prevMeta)}`;
+
+          const updateExisting = await supabaseAdmin
+            .from('dealer_program_participants')
+            .update({ claim_notes: multiClaimNotes })
+            .eq('id', firstExisting.id)
+            .select('*')
+            .single();
+
+          data = updateExisting.data;
+          error = updateExisting.error;
+        }
+      }
 
       if (error) {
         console.error('Error inserting participant:', error);
@@ -243,5 +393,183 @@ export async function POST(req: NextRequest) {
       { error: err.message || 'Internal server error' },
       { status: 500, headers: corsHeaders }
     );
+  }
+}
+
+// PATCH: Reject or Update Participant Application
+export async function PATCH(req: NextRequest) {
+  try {
+    const supabaseAdmin = await getAdminClient();
+    const body = await req.json();
+    const { participant_id, real_id, selected_item_id, status = 'REJECTED', admin_notes = '' } = body;
+
+    const targetId = real_id || participant_id;
+    if (!targetId) {
+      return NextResponse.json({ error: 'ID peserta wajib disertakan' }, { status: 400, headers: corsHeaders });
+    }
+
+    // Fetch participant row
+    const { data: row, error: fetchErr } = await supabaseAdmin
+      .from('dealer_program_participants')
+      .select('*')
+      .eq('id', targetId)
+      .maybeSingle();
+
+    if (fetchErr || !row) {
+      // Also check fallback search by participant_id if targetId was real_id
+      const { data: fallbackRow } = await supabaseAdmin
+        .from('dealer_program_participants')
+        .select('*')
+        .eq('id', participant_id)
+        .maybeSingle();
+
+      if (!fallbackRow) {
+        return NextResponse.json({ error: 'Data peserta tidak ditemukan' }, { status: 404, headers: corsHeaders });
+      }
+    }
+
+    const targetRow = row;
+
+    // Handle unpacked multi-item record in claim_notes metadata
+    if (targetRow && targetRow.claim_notes && targetRow.claim_notes.includes('__METADATA__:')) {
+      const metaMatch = targetRow.claim_notes.match(/__METADATA__:([\s\S]*)$/);
+      if (metaMatch && metaMatch[1]) {
+        try {
+          const meta = JSON.parse(metaMatch[1]);
+          if (Array.isArray(meta.items) && meta.items.length > 0 && selected_item_id) {
+            let matchedItem = false;
+            meta.items = meta.items.map((it: any) => {
+              if (it.selected_item_id === selected_item_id || it.id === participant_id) {
+                matchedItem = true;
+                return { ...it, status: status || 'REJECTED', admin_notes };
+              }
+              return it;
+            });
+
+            if (matchedItem) {
+              const allRejected = meta.items.every((it: any) => it.status === 'REJECTED');
+              const updatedNotes = targetRow.claim_notes.replace(/__METADATA__:([\s\S]*)$/, '') + `__METADATA__:${JSON.stringify(meta)}`;
+              
+              await supabaseAdmin
+                .from('dealer_program_participants')
+                .update({
+                  claim_notes: updatedNotes,
+                  admin_notes: admin_notes || targetRow.admin_notes,
+                  status: allRejected ? 'REJECTED' : targetRow.status,
+                })
+                .eq('id', targetRow.id);
+
+              return NextResponse.json({
+                success: true,
+                message: `Status item berhasil diubah menjadi ${status}.`,
+              }, { headers: corsHeaders });
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    // Standard database row update
+    const { error: updateErr } = await supabaseAdmin
+      .from('dealer_program_participants')
+      .update({
+        status: status || 'REJECTED',
+        admin_notes: admin_notes || null,
+      })
+      .eq('id', targetId);
+
+    if (updateErr) {
+      console.error('Error updating participant in PATCH /api/programs:', updateErr);
+      return NextResponse.json({ error: updateErr.message }, { status: 500, headers: corsHeaders });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Status pengajuan berhasil diubah menjadi ${status}.`,
+    }, { headers: corsHeaders });
+  } catch (err: any) {
+    console.error('Unexpected error in PATCH /api/programs:', err);
+    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500, headers: corsHeaders });
+  }
+}
+
+// DELETE: Delete Participant Application permanently
+export async function DELETE(req: NextRequest) {
+  try {
+    const supabaseAdmin = await getAdminClient();
+    const url = new URL(req.url);
+    const participantId = url.searchParams.get('id') || url.searchParams.get('participant_id');
+    const realId = url.searchParams.get('real_id');
+    const selectedItemId = url.searchParams.get('selected_item_id');
+
+    if (!participantId && !realId) {
+      return NextResponse.json({ error: 'ID peserta wajib disertakan' }, { status: 400, headers: corsHeaders });
+    }
+
+    const targetId = realId || participantId!;
+
+    // 1. Fetch current participant to inspect if multi-item metadata is used
+    let { data: row } = await supabaseAdmin
+      .from('dealer_program_participants')
+      .select('*')
+      .eq('id', targetId)
+      .maybeSingle();
+
+    if (!row && participantId) {
+      const fallback = await supabaseAdmin
+        .from('dealer_program_participants')
+        .select('*')
+        .eq('id', participantId)
+        .maybeSingle();
+      row = fallback.data;
+    }
+
+    // If multi-item metadata exists, check if we only delete one specific sub-item
+    if (row && row.claim_notes && row.claim_notes.includes('__METADATA__:')) {
+      const metaMatch = row.claim_notes.match(/__METADATA__:([\s\S]*)$/);
+      if (metaMatch && metaMatch[1]) {
+        try {
+          const meta = JSON.parse(metaMatch[1]);
+          if (Array.isArray(meta.items) && meta.items.length > 1 && selectedItemId) {
+            const remainingItems = meta.items.filter(
+              (it: any) => it.selected_item_id !== selectedItemId && it.id !== participantId
+            );
+            if (remainingItems.length > 0) {
+              meta.items = remainingItems;
+              const updatedNotes = row.claim_notes.replace(/__METADATA__:([\s\S]*)$/, '') + `__METADATA__:${JSON.stringify(meta)}`;
+              await supabaseAdmin
+                .from('dealer_program_participants')
+                .update({ claim_notes: updatedNotes })
+                .eq('id', row.id);
+
+              return NextResponse.json({
+                success: true,
+                message: 'Item pengajuan berhasil dihapus dari data outlet.',
+              }, { headers: corsHeaders });
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    // Delete the whole row from Supabase
+    const finalIdToDelete = row ? row.id : targetId;
+    const { error: delErr } = await supabaseAdmin
+      .from('dealer_program_participants')
+      .delete()
+      .eq('id', finalIdToDelete);
+
+    if (delErr) {
+      console.error('Error deleting participant in API:', delErr);
+      return NextResponse.json({ error: delErr.message }, { status: 500, headers: corsHeaders });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Pengajuan partisipan berhasil dihapus permanen.',
+    }, { headers: corsHeaders });
+  } catch (err: any) {
+    console.error('Unexpected error in DELETE /api/programs:', err);
+    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500, headers: corsHeaders });
   }
 }

@@ -372,8 +372,8 @@ export default function DealersPage() {
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>({
     id: 'default',
     bank_name: 'BCA (Bank Central Asia)',
-    bank_account_number: '829-019-8821',
-    bank_account_name: 'PT DISTRIBUSI AKSESORIS PRIMA',
+    bank_account_number: '5095454566',
+    bank_account_name: 'PT. RAJA AKSESORIS INDONESIA',
     cbd_enabled: true,
     cbd_term_label: 'Transfer Bank Manual (CBD - Cash Before Delivery)',
     cbd_instructions: 'Transfer ke rekening resmi perusahaan + 3 digit kode unik acak sebelum pesanan diproses dan dikirimkan.',
@@ -713,8 +713,8 @@ export default function DealersPage() {
       const payload: any = {
         id: 'default',
         bank_name: paymentSettings.bank_name || 'BCA (Bank Central Asia)',
-        bank_account_number: paymentSettings.bank_account_number || '829-019-8821',
-        bank_account_name: paymentSettings.bank_account_name || 'PT DISTRIBUSI AKSESORIS PRIMA',
+        bank_account_number: paymentSettings.bank_account_number || '5095454566',
+        bank_account_name: paymentSettings.bank_account_name || 'PT. RAJA AKSESORIS INDONESIA',
         cbd_enabled: paymentSettings.cbd_enabled ?? true,
         cbd_term_label: paymentSettings.cbd_term_label || 'Transfer Bank Manual (CBD - Cash Before Delivery)',
         cbd_instructions: paymentSettings.cbd_instructions || '',
@@ -1494,7 +1494,7 @@ export default function DealersPage() {
                     <input 
                       type="text" 
                       required
-                      placeholder="Contoh: 829-019-8821"
+                      placeholder="Contoh: 5095454566"
                       value={paymentSettings.bank_account_number || ''}
                       onChange={(e) => setPaymentSettings({ ...paymentSettings, bank_account_number: e.target.value })}
                       className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"

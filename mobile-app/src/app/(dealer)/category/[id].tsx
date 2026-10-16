@@ -212,7 +212,7 @@ export default function CategoryProductsScreen() {
               return (
               <TouchableOpacity 
                 key={product.id} 
-                style={[styles.productCard, (isHabis || isComingSoon) && { opacity: 0.6 }]}
+                style={[styles.productCard, isHabis && { opacity: 0.6 }]}
                 disabled={isHabis}
                 onPress={() => router.push(`/product/${product.id}`)}
               >
@@ -226,10 +226,9 @@ export default function CategoryProductsScreen() {
                     <Feather name="box" size={36} color="#8ec44a" />
                   )}
                   
-                  {(isHabis || isComingSoon) && (
+                  {isHabis && (
                     <View style={styles.habisOverlay}>
-                      {isComingSoon && <Feather name="star" size={24} color="#eab308" style={{ marginBottom: 4 }} />}
-                      <Text style={[styles.habisText, isComingSoon && { color: '#eab308', borderColor: '#eab308' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
+                      <Text style={styles.habisText}>SOLD OUT</Text>
                     </View>
                   )}
                   {product.pcs_per_box && (
@@ -252,13 +251,20 @@ export default function CategoryProductsScreen() {
 
                 {/* DETAILS */}
                 <View style={styles.cardDetails}>
-                  {(!isHabis && isComingSoon) && (
-                    <ComingSoonBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
-                  )}
-                  {(!isHabis && hasNewTag && !isComingSoon) && (
-                    <NewBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
-                  )}
-                  <Text style={styles.productName} numberOfLines={2}>{displaySku}</Text>
+                  {/* SKU & COMING SOON ROW */}
+                  <View style={styles.skuRow}>
+                    <View style={{ flex: 1, marginRight: 6 }}>
+                      {(!isHabis && hasNewTag && !isComingSoon) && (
+                        <NewBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
+                      )}
+                      <Text style={styles.productName} numberOfLines={2}>{displaySku}</Text>
+                    </View>
+                    {(!isHabis && isComingSoon) && (
+                      <View style={{ alignSelf: 'flex-start' }}>
+                        <ComingSoonBadge stacked={true} />
+                      </View>
+                    )}
+                  </View>
                   
                   {/* BINTANG & JUMLAH TERJUAL */}
                   <View style={styles.ratingRow}>
@@ -320,7 +326,7 @@ export default function CategoryProductsScreen() {
               return (
               <TouchableOpacity 
                 key={product.id} 
-                style={[styles.productListCard, (isHabis || isComingSoon) && { opacity: 0.6 }]}
+                style={[styles.productListCard, isHabis && { opacity: 0.6 }]}
                 disabled={isHabis}
                 onPress={() => router.push(`/product/${product.id}`)}
                 activeOpacity={0.7}
@@ -335,10 +341,9 @@ export default function CategoryProductsScreen() {
                     <Feather name="box" size={32} color="#8ec44a" />
                   )}
 
-                  {(isHabis || isComingSoon) && (
+                  {isHabis && (
                     <View style={styles.habisOverlayList}>
-                      {isComingSoon && <Feather name="star" size={24} color="#eab308" style={{ marginBottom: 4 }} />}
-                      <Text style={[styles.habisTextList, isComingSoon && { color: '#eab308', borderColor: '#eab308' }]}>{isComingSoon ? 'COMING SOON' : 'SOLD OUT'}</Text>
+                      <Text style={styles.habisTextList}>SOLD OUT</Text>
                     </View>
                   )}
                   {product.pcs_per_box && (
@@ -363,14 +368,18 @@ export default function CategoryProductsScreen() {
                       <View style={styles.categoryTagList}>
                         <Text style={styles.categoryTagListText}>{product.categories?.name || categoryName || 'Lainnya'}</Text>
                       </View>
-                      {(!isHabis && isComingSoon) && (
-                        <ComingSoonBadge style={styles.newBadgeList} textStyle={styles.newBadgeListText} />
-                      )}
                       {(!isHabis && hasNewTag && !isComingSoon) && (
                         <NewBadge style={styles.newBadgeList} textStyle={styles.newBadgeListText} />
                       )}
                     </View>
-                    <Text style={styles.productNameList} numberOfLines={2}>{displaySku}</Text>
+                    <View style={styles.listSkuRow}>
+                      <Text style={styles.productNameList} numberOfLines={2}>{displaySku}</Text>
+                      {(!isHabis && isComingSoon) && (
+                        <View style={{ marginLeft: 8, alignSelf: 'flex-start' }}>
+                          <ComingSoonBadge stacked={false} />
+                        </View>
+                      )}
+                    </View>
                     
                     {/* RATING & TERJUAL */}
                     <View style={styles.ratingRowList}>
@@ -695,8 +704,15 @@ const styles = StyleSheet.create({
   newBadge: { alignSelf: 'flex-start', backgroundColor: '#ef4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
   newBadgeText: { color: 'white', fontSize: 9, fontWeight: 'bold' },
 
+  skuRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    minHeight: 36,
+    marginBottom: 2,
+  },
   cardDetails: { padding: 10 },
-  productName: { fontSize: 13, fontWeight: '600', color: '#1e293b', height: 36, lineHeight: 18 },
+  productName: { fontSize: 13, fontWeight: '700', color: '#1e293b', lineHeight: 18 },
   
   ratingRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 4, gap: 4 },
   starBadge: { flexDirection: 'row', alignItems: 'center', gap: 2 },
@@ -798,9 +814,16 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: 'bold',
   },
+  listSkuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
   productNameList: {
+    flex: 1,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1e293b',
     lineHeight: 18,
   },

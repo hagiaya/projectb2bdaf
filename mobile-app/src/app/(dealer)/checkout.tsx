@@ -36,8 +36,8 @@ export default function CheckoutScreen() {
     cod_policy_terms: string;
   }>({
     bank_name: 'BCA (Bank Central Asia)',
-    bank_account_number: '829-019-8821',
-    bank_account_name: 'PT DISTRIBUSI AKSESORIS PRIMA',
+    bank_account_number: '5095454566',
+    bank_account_name: 'PT. RAJA AKSESORIS INDONESIA',
     cbd_enabled: true,
     cbd_term_label: 'Transfer Bank Manual (CBD - Cash Before Delivery)',
     cbd_instructions: 'Transfer ke rekening resmi perusahaan + 3 digit kode unik sebelum pesanan diproses dan dikirim.',
@@ -575,8 +575,8 @@ export default function CheckoutScreen() {
                 <Feather name="briefcase" size={20} color="#8ec44a" />
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={styles.bankName}>{paymentSettings.bank_name || 'BCA (Bank Central Asia)'}</Text>
-                  <Text style={styles.bankNumber}>{paymentSettings.bank_account_number || '829-019-8821'}</Text>
-                  <Text style={styles.bankHolder}>a.n. {paymentSettings.bank_account_name || 'PT DISTRIBUSI AKSESORIS PRIMA'}</Text>
+                  <Text style={styles.bankNumber}>{paymentSettings.bank_account_number || '5095454566'}</Text>
+                  <Text style={styles.bankHolder}>a.n. {paymentSettings.bank_account_name || 'PT. RAJA AKSESORIS INDONESIA'}</Text>
                 </View>
               </View>
 
@@ -794,7 +794,7 @@ export default function CheckoutScreen() {
                 <View style={styles.transferAlertItem}>
                   <Text style={styles.transferAlertBullet}>1.</Text>
                   <Text style={styles.transferAlertText}>
-                    <Text style={{ fontWeight: 'bold' }}>Rekening Resmi Perusahaan:</Text> Transfer hanya ke <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>{paymentSettings.bank_name || 'BCA'} {paymentSettings.bank_account_number || '829-019-8821'}</Text> a.n. <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>{paymentSettings.bank_account_name || 'PT DISTRIBUSI AKSESORIS PRIMA'}</Text>.
+                    <Text style={{ fontWeight: 'bold' }}>Rekening Resmi Perusahaan:</Text> Transfer hanya ke <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>{paymentSettings.bank_name || 'BCA'} {paymentSettings.bank_account_number || '5095454566'}</Text> a.n. <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>{paymentSettings.bank_account_name || 'PT. RAJA AKSESORIS INDONESIA'}</Text>.
                   </Text>
                 </View>
                 <View style={styles.transferAlertItem}>
@@ -830,8 +830,8 @@ export default function CheckoutScreen() {
                     <Feather name="briefcase" size={18} color="#0284c7" />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.bankName}>{paymentSettings.bank_name || 'BCA (Bank Central Asia)'}</Text>
-                      <Text style={styles.bankNumber}>{paymentSettings.bank_account_number || '829-019-8821'}</Text>
-                      <Text style={styles.bankHolder}>a.n. {paymentSettings.bank_account_name || 'PT DISTRIBUSI AKSESORIS PRIMA'}</Text>
+                      <Text style={styles.bankNumber}>{paymentSettings.bank_account_number || '5095454566'}</Text>
+                      <Text style={styles.bankHolder}>a.n. {paymentSettings.bank_account_name || 'PT. RAJA AKSESORIS INDONESIA'}</Text>
                     </View>
                   </View>
 

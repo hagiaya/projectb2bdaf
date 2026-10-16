@@ -7,7 +7,7 @@ import {
   AlertCircle, CheckCircle2, User, MapPin, Phone, RefreshCw, ZoomIn,
   PackageCheck, FileText, UploadCloud, Calendar, CheckSquare, Download, FileSpreadsheet, MessageCircle,
   ShieldCheck, Store, Layers, Edit2, Trash2, Plus, Minus, ChevronLeft, ChevronsLeft, ChevronsRight, Loader2,
-  Lock, ShieldAlert
+  Lock, ShieldAlert, Percent, Tag
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
@@ -149,6 +149,8 @@ export default function OrdersPage() {
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [newOrderAlert, setNewOrderAlert] = useState<{ number: string; total: number } | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
+  const [discountPercentInput, setDiscountPercentInput] = useState<string>('');
+  const [isSavingDiscount, setIsSavingDiscount] = useState<boolean>(false);
 
   // Receiving Modal State
   const [receivingOrder, setReceivingOrder] = useState<Order | null>(null);
@@ -382,8 +384,17 @@ export default function OrdersPage() {
 
     if (!error && data) {
       setOrderItems(data as any);
+      // Initialize discount percent input based on current discount_amount & items subtotal
+      const subtotal = (data as any[]).reduce((acc: number, it: any) => acc + Number(it.total_price || 0), 0);
+      if (order.discount_amount && Number(order.discount_amount) > 0 && subtotal > 0) {
+        const pct = (Number(order.discount_amount) / subtotal) * 100;
+        setDiscountPercentInput((Math.round(pct * 100) / 100).toString());
+      } else {
+        setDiscountPercentInput('');
+      }
     } else {
       setOrderItems([]);
+      setDiscountPercentInput('');
     }
     setIsLoadingItems(false);
   };
@@ -553,13 +564,28 @@ export default function OrdersPage() {
         it.id === item.id ? { ...it, quantity: newQty, unit_price: newUnitPrice, total_price: newTotalPrice } : it
       );
       const newItemsSubtotal = updatedItems.reduce((acc, it) => acc + Number(it.total_price || 0), 0);
-      const newTotalAmount = newItemsSubtotal + Number(selectedOrder.unique_code || 0) + Number(selectedOrder.shipping_cost || 0) - Number(selectedOrder.discount_amount || 0);
+      const discPct = Math.min(100, Math.max(0, parseFloat(discountPercentInput) || 0));
+      const newDiscountAmount = discPct > 0 
+        ? Math.round((newItemsSubtotal * discPct) / 100) 
+        : Number(selectedOrder.discount_amount || 0);
+      const newTotalAmount = Math.max(0, newItemsSubtotal + Number(selectedOrder.unique_code || 0) + Number(selectedOrder.shipping_cost || 0) - newDiscountAmount);
 
       // 3. Update orders table in database
-      const { error: orderError } = await supabase
+      const updateOrderPayload: any = {
+        total_amount: newTotalAmount,
+        discount_amount: newDiscountAmount,
+        final_amount: newTotalAmount,
+      };
+      let { error: orderError } = await supabase
         .from('orders')
-        .update({ total_amount: newTotalAmount })
+        .update(updateOrderPayload)
         .eq('id', selectedOrder.id);
+
+      if (orderError && orderError.message?.includes('final_amount')) {
+        delete updateOrderPayload.final_amount;
+        const retry = await supabase.from('orders').update(updateOrderPayload).eq('id', selectedOrder.id);
+        orderError = retry.error;
+      }
 
       if (orderError) throw orderError;
 
@@ -577,8 +603,8 @@ export default function OrdersPage() {
 
       // 5. Update local states
       setOrderItems(updatedItems);
-      setSelectedOrder(prev => prev ? { ...prev, total_amount: newTotalAmount } : null);
-      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, total_amount: newTotalAmount } : o));
+      setSelectedOrder(prev => prev ? { ...prev, total_amount: newTotalAmount, discount_amount: newDiscountAmount } : null);
+      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, total_amount: newTotalAmount, discount_amount: newDiscountAmount } : o));
       setEditingItemId(null);
 
       // 6. Sinkronisasi perubahan stok produk ke tabel products & stock_logs
@@ -643,13 +669,28 @@ export default function OrdersPage() {
       // 2. Recalculate order subtotal and total_amount
       const updatedItems = orderItems.filter((it) => it.id !== item.id);
       const newItemsSubtotal = updatedItems.reduce((acc, it) => acc + Number(it.total_price || 0), 0);
-      const newTotalAmount = newItemsSubtotal + Number(selectedOrder.unique_code || 0) + Number(selectedOrder.shipping_cost || 0) - Number(selectedOrder.discount_amount || 0);
+      const discPct = Math.min(100, Math.max(0, parseFloat(discountPercentInput) || 0));
+      const newDiscountAmount = discPct > 0 
+        ? Math.round((newItemsSubtotal * discPct) / 100) 
+        : Number(selectedOrder.discount_amount || 0);
+      const newTotalAmount = Math.max(0, newItemsSubtotal + Number(selectedOrder.unique_code || 0) + Number(selectedOrder.shipping_cost || 0) - newDiscountAmount);
 
       // 3. Update orders table in database
-      const { error: orderError } = await supabase
+      const updateOrderPayload: any = {
+        total_amount: newTotalAmount,
+        discount_amount: newDiscountAmount,
+        final_amount: newTotalAmount,
+      };
+      let { error: orderError } = await supabase
         .from('orders')
-        .update({ total_amount: newTotalAmount })
+        .update(updateOrderPayload)
         .eq('id', selectedOrder.id);
+
+      if (orderError && orderError.message?.includes('final_amount')) {
+        delete updateOrderPayload.final_amount;
+        const retry = await supabase.from('orders').update(updateOrderPayload).eq('id', selectedOrder.id);
+        orderError = retry.error;
+      }
 
       if (orderError) throw orderError;
 
@@ -667,8 +708,8 @@ export default function OrdersPage() {
 
       // 5. Update local states
       setOrderItems(updatedItems);
-      setSelectedOrder(prev => prev ? { ...prev, total_amount: newTotalAmount } : null);
-      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, total_amount: newTotalAmount } : o));
+      setSelectedOrder(prev => prev ? { ...prev, total_amount: newTotalAmount, discount_amount: newDiscountAmount } : null);
+      setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, total_amount: newTotalAmount, discount_amount: newDiscountAmount } : o));
       if (editingItemId === item.id) setEditingItemId(null);
 
       // 6. Kembalikan stok item yang dihapus ke gudang (products & stock_logs)
@@ -784,17 +825,34 @@ export default function OrdersPage() {
         (acc, it) => acc + Number(it.total_price || 0),
         0
       );
-      const newTotalAmount =
+      const discPct = Math.min(100, Math.max(0, parseFloat(discountPercentInput) || 0));
+      const newDiscountAmount = discPct > 0 
+        ? Math.round((newItemsSubtotal * discPct) / 100) 
+        : Number(selectedOrder.discount_amount || 0);
+      const newTotalAmount = Math.max(
+        0,
         newItemsSubtotal +
-        Number(selectedOrder.unique_code || 0) +
-        Number(selectedOrder.shipping_cost || 0) -
-        Number(selectedOrder.discount_amount || 0);
+          Number(selectedOrder.unique_code || 0) +
+          Number(selectedOrder.shipping_cost || 0) -
+          newDiscountAmount
+      );
 
       // Update orders table
-      const { error: orderError } = await supabase
+      const updateOrderPayload: any = {
+        total_amount: newTotalAmount,
+        discount_amount: newDiscountAmount,
+        final_amount: newTotalAmount,
+      };
+      let { error: orderError } = await supabase
         .from('orders')
-        .update({ total_amount: newTotalAmount })
+        .update(updateOrderPayload)
         .eq('id', selectedOrder.id);
+
+      if (orderError && orderError.message?.includes('final_amount')) {
+        delete updateOrderPayload.final_amount;
+        const retry = await supabase.from('orders').update(updateOrderPayload).eq('id', selectedOrder.id);
+        orderError = retry.error;
+      }
 
       if (orderError) throw orderError;
 
@@ -819,9 +877,9 @@ export default function OrdersPage() {
 
       // Update local states
       setOrderItems(updatedItems);
-      setSelectedOrder((prev) => (prev ? { ...prev, total_amount: newTotalAmount } : null));
+      setSelectedOrder((prev) => (prev ? { ...prev, total_amount: newTotalAmount, discount_amount: newDiscountAmount } : null));
       setOrders((prev) =>
-        prev.map((o) => (o.id === selectedOrder.id ? { ...o, total_amount: newTotalAmount } : o))
+        prev.map((o) => (o.id === selectedOrder.id ? { ...o, total_amount: newTotalAmount, discount_amount: newDiscountAmount } : o))
       );
 
       // Potong stok produk yang baru ditambahkan ke pesanan
@@ -857,6 +915,96 @@ export default function OrdersPage() {
       alert('Gagal menambahkan produk ke pesanan: ' + (err.message || 'Terjadi kesalahan'));
     } finally {
       setIsProcessingItem(false);
+    }
+  };
+
+  const handleApplyDiscount = async () => {
+    if (!isSuperAdmin) {
+      alert('Akses Ditolak: Hanya Super Admin yang diizinkan untuk memberikan diskon pesanan.');
+      return;
+    }
+    if (!selectedOrder) return;
+
+    const percent = Math.min(100, Math.max(0, parseFloat(discountPercentInput) || 0));
+    const currentSubtotal = orderItems.reduce((acc, it) => {
+      const qty = editingItemId === it.id ? tempQty : it.quantity;
+      const price = editingItemId === it.id ? (tempUnitPrice || 0) : Number(it.unit_price || 0);
+      return acc + (qty * price);
+    }, 0);
+
+    const newDiscountAmount = Math.round((currentSubtotal * percent) / 100);
+    const newTotalAmount = Math.max(
+      0,
+      currentSubtotal +
+        Number(selectedOrder.unique_code || 0) +
+        Number(selectedOrder.shipping_cost || 0) -
+        newDiscountAmount
+    );
+
+    setIsSavingDiscount(true);
+    try {
+      const updatePayload: any = {
+        discount_amount: newDiscountAmount,
+        total_amount: newTotalAmount,
+        final_amount: newTotalAmount,
+      };
+
+      let { error: updateErr } = await supabase
+        .from('orders')
+        .update(updatePayload)
+        .eq('id', selectedOrder.id);
+
+      if (updateErr && updateErr.message?.includes('final_amount')) {
+        delete updatePayload.final_amount;
+        const retry = await supabase
+          .from('orders')
+          .update(updatePayload)
+          .eq('id', selectedOrder.id);
+        updateErr = retry.error;
+      }
+
+      if (updateErr) throw updateErr;
+
+      // Update dealer credit balance if payment method is KREDIT
+      if (selectedOrder.payment_method === 'KREDIT' && selectedOrder.dealer_id) {
+        const delta = newTotalAmount - Number(selectedOrder.total_amount || 0);
+        if (delta !== 0) {
+          const { data: dData } = await supabase
+            .from('dealers')
+            .select('outstanding_balance')
+            .eq('id', selectedOrder.dealer_id)
+            .single();
+          if (dData) {
+            const newBalance = Math.max(0, Number(dData.outstanding_balance || 0) + delta);
+            await supabase
+              .from('dealers')
+              .update({ outstanding_balance: newBalance })
+              .eq('id', selectedOrder.dealer_id);
+          }
+        }
+      }
+
+      // Update local states
+      const updatedOrder = {
+        ...selectedOrder,
+        discount_amount: newDiscountAmount,
+        total_amount: newTotalAmount,
+      };
+      setSelectedOrder(updatedOrder);
+      setOrders((prev) =>
+        prev.map((o) => (o.id === selectedOrder.id ? { ...o, ...updatedOrder } : o))
+      );
+
+      alert(
+        percent > 0
+          ? `Diskon ${percent}% (-Rp ${newDiscountAmount.toLocaleString('id-ID')}) berhasil diterapkan!\nTotal tagihan baru: Rp ${newTotalAmount.toLocaleString('id-ID')}`
+          : `Diskon berhasil direset ke 0%.\nTotal tagihan baru: Rp ${newTotalAmount.toLocaleString('id-ID')}`
+      );
+    } catch (err: any) {
+      console.error('Failed to update discount:', err);
+      alert('Gagal menerapkan diskon: ' + (err.message || 'Terjadi kesalahan'));
+    } finally {
+      setIsSavingDiscount(false);
     }
   };
 
@@ -1357,25 +1505,45 @@ export default function OrdersPage() {
       }
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 8;
+    const lastTableY = (doc as any).lastAutoTable.finalY + 6;
+    let curY = lastTableY;
     
+    if (order.discount_amount && Number(order.discount_amount) > 0) {
+      const itemsSubtotal = (orderItems || []).reduce((acc: number, it: any) => acc + Number(it.total_price || 0), 0);
+      const discPct = itemsSubtotal > 0 ? Math.round((Number(order.discount_amount) / itemsSubtotal) * 100 * 10) / 10 : 0;
+      
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(71, 85, 105);
+      doc.text('Subtotal Produk:', 125, curY);
+      doc.text(`Rp ${itemsSubtotal.toLocaleString('id-ID')}`, 196, curY, { align: 'right' });
+      curY += 5;
+
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(225, 29, 72); // rose-600
+      doc.text(`Diskon (${discPct}%):`, 125, curY);
+      doc.text(`- Rp ${Number(order.discount_amount).toLocaleString('id-ID')}`, 196, curY, { align: 'right' });
+      curY += 6;
+    }
+
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(30, 41, 59);
-    doc.text('Total Keseluruhan:', 130, finalY);
-    doc.text(`Rp ${Number(order.total_amount || 0).toLocaleString('id-ID')}`, 196, finalY, { align: 'right' });
+    doc.text('Total Tagihan:', 125, curY);
+    doc.text(`Rp ${Number(order.total_amount || 0).toLocaleString('id-ID')}`, 196, curY, { align: 'right' });
 
-    let noteY = finalY + 8;
+    let noteY = curY + 8;
     if (order.unique_code) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.setTextColor(100, 116, 139);
-      doc.text(`Termasuk Kode Unik: Rp ${order.unique_code}`, 196, finalY + 5, { align: 'right' });
+      doc.text(`Termasuk Kode Unik: Rp ${order.unique_code}`, 196, curY + 5, { align: 'right' });
       noteY += 4;
     }
 
     // Check if we need a new page for notes and signatures
-    if (noteY + 70 > 280) {
+    if (noteY + 80 > 280) {
       doc.addPage();
       noteY = 20;
     }
@@ -1395,32 +1563,34 @@ export default function OrdersPage() {
     doc.setFontSize(8);
     doc.setTextColor(71, 85, 105);
     doc.text('Bank: Bank Central Asia (BCA)', 14, noteY + 4.5);
-    doc.text('No. Rekening: 829-019-8821', 14, noteY + 9);
-    doc.text('Atas Nama: PT RAJA AKSESORIS INDONESIA', 14, noteY + 13.5);
+    doc.text('No. Rekening: 5095454566', 14, noteY + 9);
+    doc.text('Atas Nama: PT. RAJA AKSESORIS INDONESIA', 14, noteY + 13.5);
     doc.setFont('helvetica', 'italic');
     doc.text(`*Harap cantumkan No. Order (${order.order_number}) pada berita transfer.`, 14, noteY + 18);
 
     // Syarat & Ketentuan
     const termsY = noteY + 23;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(30, 41, 59);
     doc.text('SYARAT & KETENTUAN TRANSAKSI:', 14, termsY);
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
+    doc.setFontSize(6.5);
     doc.setTextColor(100, 116, 139);
     const terms = [
-      '1. Pembayaran sah hanya apabila ditransfer ke rekening resmi PT Raja Aksesoris Indonesia di atas.',
-      '2. Pembayaran tempo/kredit wajib dilunasi paling lambat pada tanggal jatuh tempo yang telah disepakati.',
-      '3. Klaim kekurangan / kerusakan barang wajib menyertakan video unboxing utuh tanpa jeda maksimal 2x24 jam sejak barang diterima.',
-      '4. Barang yang telah dibeli sesuai pesanan tidak dapat ditukar atau dikembalikan tanpa persetujuan tertulis manajemen DAP.'
+      '1. Pembayaran yang sah adalah ditransfer langsung ke rekening resmi perusahaan atas nama PT. RAJA AKSESORIS INDONESIA yang tertera diatas.',
+      '2. Pembayaran COD wajib dilunasi apabila barang sudah diterima oleh pihak dealer.',
+      '3. Pembayaran tempo/kredit wajib dilunasi sesuai dengan tanggal jatuh tempo yang telah disepakati bersama.',
+      '4. Pihak dealer dilarang melakukan pembayaran secara tunai ataupun transfer ke rekening pribadi tim sales. Apabila pembayaran tidak sesuai dengan prosedur, yakni bukan transfer ke rekening resmi perusahaan, maka pihak dealer dianggap belum melakukan pembayaran yang sah, sehingga perusahaan tetap berhak menagih pembayaran sesuai dengan nominal order ataupun meminta pihak dealer untuk mengembalikan barang yang belum dibayarkan.',
+      '5. Klaim kekurangan / kerusakan barang wajib menyertakan video unboxing utuh tanpa jeda maksimal 1x24 jam sejak barang diterima.',
+      '6. Barang yang telah dibeli sesuai pesanan dealer dilarang dikembalikan secara sepihak.'
     ];
-    let currTermY = termsY + 3.5;
+    let currTermY = termsY + 3.2;
     terms.forEach((term) => {
-      const splitTerm = doc.splitTextToSize(term, 105);
+      const splitTerm = doc.splitTextToSize(term, 108);
       doc.text(splitTerm, 14, currTermY);
-      currTermY += splitTerm.length * 3.2;
+      currTermY += splitTerm.length * 2.7 + 0.8;
     });
 
     // Right Side: Signatures (Tanda Tangan Penerima & Pengirim)
@@ -1461,6 +1631,9 @@ export default function OrdersPage() {
     });
 
     const uniqueCodeText = order.unique_code ? `\n*Kode Unik*: Rp ${order.unique_code.toLocaleString('id-ID')}` : '';
+    const discountText = order.discount_amount && Number(order.discount_amount) > 0
+      ? `*Diskon Khusus*: -Rp ${Number(order.discount_amount).toLocaleString('id-ID')}\n`
+      : '';
 
     const text = `*FAKTUR / INVOICE PESANAN DAP B2B*\n` +
       `-------------------------------------------\n` +
@@ -1472,16 +1645,19 @@ export default function OrdersPage() {
       `-------------------------------------------\n\n` +
       `*RINCIAN PRODUK*:\n${itemsText}\n` +
       `-------------------------------------------\n` +
-      `*TOTAL TAGIHAN*: *Rp ${Number(order.total_amount || 0).toLocaleString('id-ID')}*${uniqueCodeText}\n\n` +
-      `*REKENING PEMBAYARAN RESMI*:\n` +
-      `• Bank: *BCA (Bank Central Asia)*\n` +
-      `• No. Rekening: *829-019-8821*\n` +
-      `• Atas Nama: *PT RAJA AKSESORIS INDONESIA*\n` +
+      `${discountText}*TOTAL TAGIHAN*: *Rp ${Number(order.total_amount || 0).toLocaleString('id-ID')}*${uniqueCodeText}\n\n` +
+      `*INFORMASI REKENING PEMBAYARAN RESMI*:\n` +
+      `• Bank: *Bank Central Asia (BCA)*\n` +
+      `• No. Rekening: *5095454566*\n` +
+      `• Atas Nama: *PT. RAJA AKSESORIS INDONESIA*\n` +
       `*(Harap cantumkan No. Order ${order.order_number} pada berita transfer)*\n\n` +
-      `*CATATAN & KETENTUAN*:\n` +
-      `1. Pembayaran sah hanya apabila ditransfer ke rekening PT Raja Aksesoris Indonesia di atas.\n` +
-      `2. Untuk pesanan tempo/kredit, pelunasan wajib diselesaikan sebelum tanggal jatuh tempo.\n` +
-      `3. Klaim kekurangan / kerusakan barang wajib menyertakan video unboxing utuh tanpa jeda maksimal 2x24 jam sejak barang diterima.\n\n` +
+      `*SYARAT & KETENTUAN TRANSAKSI*:\n` +
+      `1. Pembayaran yang sah adalah ditransfer langsung ke rekening resmi perusahaan atas nama PT. RAJA AKSESORIS INDONESIA yang tertera diatas.\n` +
+      `2. Pembayaran COD wajib dilunasi apabila barang sudah diterima oleh pihak dealer.\n` +
+      `3. Pembayaran tempo/kredit wajib dilunasi sesuai dengan tanggal jatuh tempo yang telah disepakati bersama.\n` +
+      `4. Pihak dealer dilarang melakukan pembayaran secara tunai ataupun transfer ke rekening pribadi tim sales. Apabila pembayaran tidak sesuai dengan prosedur, yakni bukan transfer ke rekening resmi perusahaan, maka pihak dealer dianggap belum melakukan pembayaran yang sah, sehingga perusahaan tetap berhak menagih pembayaran sesuai dengan nominal order ataupun meminta pihak dealer untuk mengembalikan barang yang belum dibayarkan.\n` +
+      `5. Klaim kekurangan / kerusakan barang wajib menyertakan video unboxing utuh tanpa jeda maksimal 1x24 jam sejak barang diterima.\n` +
+      `6. Barang yang telah dibeli sesuai pesanan dealer dilarang dikembalikan secara sepihak.\n\n` +
       `Terima kasih atas kerja sama dan kepercayaan Anda berbelanja di DAP Accessories! 🙏`;
     
     const encodedText = encodeURIComponent(text);
@@ -2682,14 +2858,119 @@ export default function OrdersPage() {
                   const price = editingItemId === it.id ? (tempUnitPrice || 0) : Number(it.unit_price || 0);
                   return acc + (qty * price);
                 }, 0);
-                const currentTotal = currentSubtotal + Number(selectedOrder.unique_code || 0) + Number(selectedOrder.shipping_cost || 0) - Number(selectedOrder.discount_amount || 0);
+
+                const percentVal = Math.min(100, Math.max(0, parseFloat(discountPercentInput) || 0));
+                
+                // If isSuperAdmin, preview discount according to input or existing discount_amount
+                const activeDiscountAmount = isSuperAdmin
+                  ? (discountPercentInput !== '' ? Math.round((currentSubtotal * percentVal) / 100) : Number(selectedOrder.discount_amount || 0))
+                  : Number(selectedOrder.discount_amount || 0);
+
+                const isDiscountDirty = isSuperAdmin && (
+                  discountPercentInput !== '' 
+                    ? activeDiscountAmount !== Number(selectedOrder.discount_amount || 0)
+                    : false
+                );
+
+                const currentTotal = Math.max(0, currentSubtotal + Number(selectedOrder.unique_code || 0) + Number(selectedOrder.shipping_cost || 0) - activeDiscountAmount);
 
                 return (
-                  <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 flex flex-col gap-1.5 text-sm">
-                    <div className="flex justify-between text-slate-600 text-xs">
-                      <span>Subtotal Produk:</span>
-                      <span className="font-semibold">Rp {currentSubtotal.toLocaleString('id-ID')}</span>
+                  <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 flex flex-col gap-2.5 text-sm">
+                    {/* Subtotal Produk */}
+                    <div className="flex justify-between text-slate-600 text-xs items-center">
+                      <span className="font-medium">Subtotal Produk:</span>
+                      <span className="font-bold text-slate-800 text-sm">Rp {currentSubtotal.toLocaleString('id-ID')}</span>
                     </div>
+
+                    {/* Diskon Section: Khusus Super Admin bisa input % */}
+                    {isSuperAdmin ? (
+                      <div className="py-2.5 px-3 bg-white rounded-xl border border-emerald-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                            <Percent size={13} className="text-emerald-600" /> Diskon (%):
+                          </span>
+                          <div className="inline-flex items-center bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="any"
+                              value={discountPercentInput}
+                              onChange={(e) => setDiscountPercentInput(e.target.value)}
+                              placeholder="0"
+                              className="w-16 text-right font-bold text-xs bg-transparent border-0 focus:outline-none p-0 text-slate-900"
+                            />
+                            <span className="text-xs font-bold text-slate-500 ml-1">%</span>
+                          </div>
+
+                          {/* Quick Preset Buttons */}
+                          <div className="flex items-center gap-1">
+                            {[5, 10, 15, 20].map((pct) => (
+                              <button
+                                key={pct}
+                                type="button"
+                                onClick={() => setDiscountPercentInput(pct.toString())}
+                                className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors cursor-pointer ${
+                                  parseFloat(discountPercentInput) === pct
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                }`}
+                              >
+                                {pct}%
+                              </button>
+                            ))}
+                            {discountPercentInput && parseFloat(discountPercentInput) > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => setDiscountPercentInput('0')}
+                                className="px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
+                                title="Reset Diskon (0%)"
+                              >
+                                Reset 0%
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+                          <div className="text-right">
+                            <span className="text-xs font-extrabold text-rose-600">
+                              - Rp {activeDiscountAmount.toLocaleString('id-ID')}
+                            </span>
+                            {isDiscountDirty && (
+                              <p className="text-[10px] text-amber-600 font-semibold">Belum disimpan ke DB</p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleApplyDiscount}
+                            disabled={isSavingDiscount}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                              isDiscountDirty
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            {isSavingDiscount ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <Check size={13} strokeWidth={3} />
+                            )}
+                            <span>{isDiscountDirty ? 'Simpan Diskon' : 'Terapkan Diskon'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      selectedOrder.discount_amount ? (
+                        <div className="flex justify-between text-slate-600 text-xs">
+                          <span>Diskon:</span>
+                          <span className="font-semibold text-rose-600">
+                            - Rp {Number(selectedOrder.discount_amount).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      ) : null
+                    )}
+
                     {selectedOrder.unique_code ? (
                       <div className="flex justify-between text-slate-600 text-xs">
                         <span>Kode Unik Transaksi:</span>
@@ -2702,15 +2983,9 @@ export default function OrdersPage() {
                         <span className="font-semibold">+ Rp {Number(selectedOrder.shipping_cost).toLocaleString('id-ID')}</span>
                       </div>
                     ) : null}
-                    {selectedOrder.discount_amount ? (
-                      <div className="flex justify-between text-slate-600 text-xs">
-                        <span>Diskon:</span>
-                        <span className="font-semibold text-rose-600">- Rp {Number(selectedOrder.discount_amount).toLocaleString('id-ID')}</span>
-                      </div>
-                    ) : null}
-                    <div className="flex justify-between text-base font-extrabold text-slate-900 pt-2 border-t border-emerald-100">
+                    <div className="flex justify-between text-base font-extrabold text-slate-900 pt-2 border-t border-emerald-100 items-baseline">
                       <span>Total Tagihan:</span>
-                      <span className="text-emerald-700">Rp {currentTotal.toLocaleString('id-ID')}</span>
+                      <span className="text-emerald-700 text-lg font-black">Rp {currentTotal.toLocaleString('id-ID')}</span>
                     </div>
                   </div>
                 );

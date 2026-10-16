@@ -20,7 +20,13 @@ export default function SalesHome() {
     totalDealers: 0,
   });
 
-  // Check-out Modal State
+  // Check-in Modal State (Absen Masuk Foto)
+  const [checkInModalVisible, setCheckInModalVisible] = useState(false);
+  const [submittingCheckIn, setSubmittingCheckIn] = useState(false);
+  const [checkInSelfie, setCheckInSelfie] = useState<{ uri: string; base64?: string } | null>(null);
+  const [checkInNotes, setCheckInNotes] = useState('');
+
+  // Check-out Modal State (Absen Pulang Foto)
   const [checkoutModalVisible, setCheckoutModalVisible] = useState(false);
   const [submittingCheckout, setSubmittingCheckout] = useState(false);
   const [checkoutSelfie, setCheckoutSelfie] = useState<{ uri: string; base64?: string } | null>(null);
@@ -266,10 +272,42 @@ export default function SalesHome() {
     fetchReturnAlerts();
   };
 
-  const handleCheckIn = async () => {
+  const getRoleLabel = (role?: string) => {
+    switch (role?.toUpperCase()) {
+      case 'SPV': return 'Supervisor (SPV)';
+      case 'WAREHOUSE': return 'Staf Gudang';
+      case 'STAFF': return 'Staf Kantor';
+      default: return 'Sales Lapangan';
+    }
+  };
+
+  const getCheckInPhoto = (att: any) => {
+    if (!att) return null;
+    if (att.check_in_selfie_url) return att.check_in_selfie_url;
+    if (att.notes) {
+      try {
+        if (typeof att.notes === 'string' && att.notes.startsWith('{') && att.notes.endsWith('}')) {
+          const parsed = JSON.parse(att.notes);
+          if (parsed.check_in_photo) return parsed.check_in_photo;
+        }
+        const match = String(att.notes).match(/\[CHECK_IN_PHOTO\]:\s*([^\s\n]+)/);
+        if (match) return match[1];
+      } catch (e) {}
+    }
+    if (!att.check_out_time && att.selfie_url) return att.selfie_url;
+    return null;
+  };
+
+  const getCheckOutPhoto = (att: any) => {
+    if (!att) return null;
+    if (att.check_out_selfie_url) return att.check_out_selfie_url;
+    if (att.check_out_time && att.selfie_url) return att.selfie_url;
+    return null;
+  };
+
+  const openCheckInModal = () => {
     const now = new Date();
     const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
 
     // Presensi dibuka mulai pukul 09:00 WIB hingga 19:00 WIB
     if (currentHour < 9) {
@@ -288,12 +326,34 @@ export default function SalesHome() {
       return;
     }
 
-    setLoading(true);
+    setCheckInModalVisible(true);
+  };
+
+  const handleSubmitCheckIn = async () => {
+    if (!checkInSelfie) {
+      Alert.alert('Foto Wajib Diambil', 'Harap ambil foto selfie presensi masuk Anda terlebih dahulu.');
+      return;
+    }
+
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+
+    setSubmittingCheckIn(true);
     try {
       const today = now.toISOString().split('T')[0];
       const checkInTime = now.toISOString();
-      // Terlambat jika lewat jam 10:00 (jam > 10 atau jam == 10 dan menit > 0)
       const isLate = currentHour > 10 || (currentHour === 10 && currentMinute > 0);
+
+      // Upload check-in selfie photo
+      const selfieUrl = await uploadFileToSupabase(checkInSelfie, 'selfie_masuk');
+      const finalUrl = selfieUrl || checkInSelfie.uri;
+
+      const notesPayload = JSON.stringify({
+        check_in_photo: finalUrl,
+        check_in_note: checkInNotes.trim() || undefined,
+        check_in_time: checkInTime,
+      });
 
       if (!salesData?.id || salesData.id === 'dummy-sales-id') {
         setTodayAttendance({
@@ -302,18 +362,24 @@ export default function SalesHome() {
           check_out_time: null,
           is_late: isLate,
           status: 'PRESENT',
+          selfie_url: finalUrl,
+          check_in_selfie_url: finalUrl,
+          notes: notesPayload,
         });
         Alert.alert(
-          'Sukses Check-in',
+          'Sukses Check-in dengan Foto! 📸',
           isLate
-            ? 'Presensi berhasil dicatat (Status: Terlambat, lewat pukul 10:00 WIB).'
-            : 'Presensi berhasil dicatat! Status: Tepat Waktu (antara 09:00 - 10:00 WIB).'
+            ? 'Presensi & foto masuk berhasil disimpan (Status: Terlambat, lewat pukul 10:00 WIB).'
+            : 'Presensi & foto masuk berhasil disimpan! Status: Tepat Waktu (antara 09:00 - 10:00 WIB).'
         );
-        setLoading(false);
+        setCheckInModalVisible(false);
+        setSubmittingCheckIn(false);
         return;
       }
 
-      const { error } = await supabase
+      // Try inserting with check_in_selfie_url
+      let insertError: any = null;
+      const { error: fullError } = await supabase
         .from('sales_attendance')
         .insert({
           sales_id: salesData.id,
@@ -321,32 +387,62 @@ export default function SalesHome() {
           check_in_time: checkInTime,
           is_late: isLate,
           status: 'PRESENT',
+          selfie_url: finalUrl,
+          check_in_selfie_url: finalUrl,
+          notes: notesPayload,
         });
 
-      if (error) throw error;
+      if (fullError) {
+        if (fullError.message && fullError.message.includes('check_in_selfie_url')) {
+          // Fallback if column does not exist yet
+          const { error: fallbackError } = await supabase
+            .from('sales_attendance')
+            .insert({
+              sales_id: salesData.id,
+              attendance_date: today,
+              check_in_time: checkInTime,
+              is_late: isLate,
+              status: 'PRESENT',
+              selfie_url: finalUrl,
+              notes: notesPayload,
+            });
+          insertError = fallbackError;
+        } else {
+          insertError = fullError;
+        }
+      }
+
+      if (insertError) throw insertError;
 
       Alert.alert(
-        'Sukses Check-in',
+        'Sukses Check-in dengan Foto! 📸',
         isLate
-          ? 'Presensi berhasil dicatat (Status: Terlambat, lewat pukul 10:00 WIB).'
-          : 'Presensi berhasil dicatat! Status: Tepat Waktu (antara 09:00 - 10:00 WIB).'
+          ? 'Presensi & foto masuk berhasil disimpan (Status: Terlambat, lewat pukul 10:00 WIB).'
+          : 'Presensi & foto masuk berhasil disimpan! Status: Tepat Waktu (antara 09:00 - 10:00 WIB).'
       );
+      setCheckInModalVisible(false);
+      setCheckInSelfie(null);
+      setCheckInNotes('');
       fetchDashboardData();
     } catch (err: any) {
+      console.error('Check-in error:', err);
       Alert.alert('Error Check-in', err.message || 'Gagal menyimpan presensi.');
     } finally {
-      setLoading(false);
+      setSubmittingCheckIn(false);
     }
   };
 
-  const pickImage = async (type: 'selfie' | 'display1' | 'display2') => {
+  const pickImage = async (type: 'checkin_selfie' | 'selfie' | 'display1' | 'display2') => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       let result;
 
+      const isSelfie = type === 'checkin_selfie' || type === 'selfie';
+
       if (status === 'granted') {
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          cameraType: isSelfie ? ImagePicker.CameraType.front : ImagePicker.CameraType.back,
           quality: 0.5,
           base64: true,
         });
@@ -364,7 +460,8 @@ export default function SalesHome() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
         const payload = { uri: asset.uri, base64: asset.base64 || undefined };
-        if (type === 'selfie') setCheckoutSelfie(payload);
+        if (type === 'checkin_selfie') setCheckInSelfie(payload);
+        else if (type === 'selfie') setCheckoutSelfie(payload);
         else if (type === 'display1') setCheckoutDisplay1(payload);
         else if (type === 'display2') setCheckoutDisplay2(payload);
       }
@@ -423,13 +520,18 @@ export default function SalesHome() {
       Alert.alert('Wajib Diisi', 'Harap lampirkan Foto Selfie sebelum pulang.');
       return;
     }
-    if (!checkoutDisplay1 || !checkoutDisplay2) {
-      Alert.alert('Wajib Diisi', 'Harap lampirkan 2 Foto Display produk di outlet.');
-      return;
-    }
-    if (!unitPercentage) {
-      Alert.alert('Wajib Diisi', 'Harap cantumkan perkiraan Persentase Ketersediaan Produk (%).');
-      return;
+
+    const isFieldSales = profile?.role === 'SALES';
+
+    if (isFieldSales) {
+      if (!checkoutDisplay1 || !checkoutDisplay2) {
+        Alert.alert('Wajib Diisi', 'Harap lampirkan 2 Foto Display produk di outlet.');
+        return;
+      }
+      if (!unitPercentage) {
+        Alert.alert('Wajib Diisi', 'Harap cantumkan perkiraan Persentase Ketersediaan Produk (%).');
+        return;
+      }
     }
 
     setSubmittingCheckout(true);
@@ -437,39 +539,67 @@ export default function SalesHome() {
       const now = new Date();
       const checkOutTime = now.toISOString();
 
-      // 1. Upload all 3 photos
+      // 1. Upload photos
       const [selfieUrl, display1Url, display2Url] = await Promise.all([
         uploadFileToSupabase(checkoutSelfie, 'selfie_pulang'),
-        uploadFileToSupabase(checkoutDisplay1, 'display_1'),
-        uploadFileToSupabase(checkoutDisplay2, 'display_2'),
+        isFieldSales && checkoutDisplay1 ? uploadFileToSupabase(checkoutDisplay1, 'display_1') : Promise.resolve(null),
+        isFieldSales && checkoutDisplay2 ? uploadFileToSupabase(checkoutDisplay2, 'display_2') : Promise.resolve(null),
       ]);
 
-      const payload = {
+      const finalSelfieUrl = selfieUrl || checkoutSelfie.uri;
+      const finalDisplay1 = display1Url || checkoutDisplay1?.uri || null;
+      const finalDisplay2 = display2Url || checkoutDisplay2?.uri || null;
+
+      const appendNotes = checkoutNotes.trim()
+        ? `${todayAttendance?.notes || ''}\n[PULANG]: ${checkoutNotes.trim()}`.trim()
+        : todayAttendance?.notes;
+
+      const payload: any = {
         check_out_time: checkOutTime,
-        selfie_url: selfieUrl || checkoutSelfie.uri,
-        display_image_1_url: display1Url || checkoutDisplay1.uri,
-        display_image_2_url: display2Url || checkoutDisplay2.uri,
-        unit_percentage: parseInt(unitPercentage) || 0,
-        notes: checkoutNotes.trim() || null,
+        selfie_url: finalSelfieUrl,
+        check_out_selfie_url: finalSelfieUrl,
+        display_image_1_url: finalDisplay1,
+        display_image_2_url: finalDisplay2,
+        unit_percentage: isFieldSales ? (parseInt(unitPercentage) || 0) : null,
+        notes: appendNotes,
       };
 
       if (!salesData?.id || salesData.id === 'dummy-sales-id') {
         setTodayAttendance((prev: any) => ({ ...prev, ...payload }));
-        Alert.alert('Presensi Pulang Berhasil!', 'Laporan presensi dan foto display tersimpan.');
+        Alert.alert('Presensi Pulang Berhasil!', 'Laporan presensi dan foto pulang tersimpan.');
         setCheckoutModalVisible(false);
         setSubmittingCheckout(false);
         return;
       }
 
-      const { error } = await supabase
+      // Try update with check_out_selfie_url
+      let updateError: any = null;
+      const { error: fullError } = await supabase
         .from('sales_attendance')
         .update(payload)
         .eq('id', todayAttendance.id);
 
-      if (error) throw error;
+      if (fullError) {
+        if (fullError.message && fullError.message.includes('check_out_selfie_url')) {
+          delete payload.check_out_selfie_url;
+          const { error: fallbackError } = await supabase
+            .from('sales_attendance')
+            .update(payload)
+            .eq('id', todayAttendance.id);
+          updateError = fallbackError;
+        } else {
+          updateError = fullError;
+        }
+      }
+
+      if (updateError) throw updateError;
 
       Alert.alert('Presensi Pulang Berhasil!', 'Terima kasih atas dedikasi dan kerja keras hari ini.');
       setCheckoutModalVisible(false);
+      setCheckoutSelfie(null);
+      setCheckoutDisplay1(null);
+      setCheckoutDisplay2(null);
+      setCheckoutNotes('');
       fetchDashboardData();
     } catch (err: any) {
       console.error('Checkout error:', err);
@@ -670,20 +800,27 @@ export default function SalesHome() {
 
       {/* Attendance Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Presensi Harian</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Text style={styles.sectionTitle}>Presensi Harian</Text>
+          <View style={{ backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#475569' }}>
+              {getRoleLabel(profile?.role)}
+            </Text>
+          </View>
+        </View>
         
         {!todayAttendance ? (
           <View style={styles.attendanceCard}>
             <View style={styles.attIconCircle}>
-              <Feather name="clock" size={28} color="#8ec44a" />
+              <Feather name="camera" size={28} color="#8ec44a" />
             </View>
             <Text style={styles.attTitle}>Belum Presensi Masuk</Text>
             <Text style={styles.attendanceDesc}>
-              Presensi masuk dibuka mulai pukul 09:00 WIB. Jam masuk standar pukul 10:00 WIB (presensi lewat pukul 10:00 terhitung Terlambat). Batas upload foto kepulangan maksimal jam 21:00 WIB.
+              Presensi masuk dibuka mulai pukul 09:00 WIB. Jam masuk standar pukul 10:00 WIB (lewat pukul 10:00 terhitung Terlambat). Wajib ambil foto selfie kehadiran untuk seluruh karyawan.
             </Text>
-            <TouchableOpacity style={styles.checkInBtn} onPress={handleCheckIn}>
-              <Feather name="log-in" size={18} color="white" />
-              <Text style={styles.checkInText}>Check-in Sekarang</Text>
+            <TouchableOpacity style={styles.checkInBtn} onPress={openCheckInModal}>
+              <Feather name="camera" size={18} color="white" />
+              <Text style={styles.checkInText}>Ambil Foto & Check-in Sekarang</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -722,49 +859,67 @@ export default function SalesHome() {
               </View>
             </View>
 
-            {/* If Already Checked Out, Show 2 Display Photos + Selfie + Percentage under display */}
-            {todayAttendance.check_out_time && (
-              <View style={styles.recordedReportBox}>
-                <Text style={styles.recordedReportTitle}>Laporan Display & Presensi Pulang:</Text>
-                <View style={styles.photoThumbRow}>
-                  {todayAttendance.selfie_url && (
-                    <TouchableOpacity
-                      style={styles.thumbWrap}
-                      onPress={() => setPreviewImage(todayAttendance.selfie_url)}
-                    >
-                      <Image source={{ uri: todayAttendance.selfie_url }} style={styles.thumbImg} contentFit="cover" />
-                      <Text style={styles.thumbLabel}>Selfie</Text>
-                    </TouchableOpacity>
-                  )}
-                  {todayAttendance.display_image_1_url && (
-                    <TouchableOpacity
-                      style={styles.thumbWrap}
-                      onPress={() => setPreviewImage(todayAttendance.display_image_1_url)}
-                    >
-                      <Image source={{ uri: todayAttendance.display_image_1_url }} style={styles.thumbImg} contentFit="cover" />
-                      <Text style={styles.thumbLabel}>Display 1</Text>
-                    </TouchableOpacity>
-                  )}
-                  {todayAttendance.display_image_2_url && (
-                    <TouchableOpacity
-                      style={styles.thumbWrap}
-                      onPress={() => setPreviewImage(todayAttendance.display_image_2_url)}
-                    >
-                      <Image source={{ uri: todayAttendance.display_image_2_url }} style={styles.thumbImg} contentFit="cover" />
-                      <Text style={styles.thumbLabel}>Display 2</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                
-                {/* Tertulis di bawah berapa persen jumlah produk */}
+            {/* Foto Presensi Section (Masuk & Pulang) */}
+            <View style={styles.recordedReportBox}>
+              <Text style={styles.recordedReportTitle}>Foto Presensi & Laporan:</Text>
+              <View style={styles.photoThumbRow}>
+                {getCheckInPhoto(todayAttendance) && (
+                  <TouchableOpacity
+                    style={styles.thumbWrap}
+                    onPress={() => setPreviewImage(getCheckInPhoto(todayAttendance))}
+                  >
+                    <Image source={{ uri: getCheckInPhoto(todayAttendance) }} style={styles.thumbImg} contentFit="cover" />
+                    <View style={styles.thumbBadgeGreen}>
+                      <Text style={styles.thumbBadgeText}>Foto Masuk ✓</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                {getCheckOutPhoto(todayAttendance) && (
+                  <TouchableOpacity
+                    style={styles.thumbWrap}
+                    onPress={() => setPreviewImage(getCheckOutPhoto(todayAttendance))}
+                  >
+                    <Image source={{ uri: getCheckOutPhoto(todayAttendance) }} style={styles.thumbImg} contentFit="cover" />
+                    <View style={styles.thumbBadgeOrange}>
+                      <Text style={styles.thumbBadgeText}>Foto Pulang ✓</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                {todayAttendance.display_image_1_url && (
+                  <TouchableOpacity
+                    style={styles.thumbWrap}
+                    onPress={() => setPreviewImage(todayAttendance.display_image_1_url)}
+                  >
+                    <Image source={{ uri: todayAttendance.display_image_1_url }} style={styles.thumbImg} contentFit="cover" />
+                    <Text style={styles.thumbLabel}>Display 1</Text>
+                  </TouchableOpacity>
+                )}
+                {todayAttendance.display_image_2_url && (
+                  <TouchableOpacity
+                    style={styles.thumbWrap}
+                    onPress={() => setPreviewImage(todayAttendance.display_image_2_url)}
+                  >
+                    <Image source={{ uri: todayAttendance.display_image_2_url }} style={styles.thumbImg} contentFit="cover" />
+                    <Text style={styles.thumbLabel}>Display 2</Text>
+                  </TouchableOpacity>
+                )}
+                {!getCheckInPhoto(todayAttendance) && !getCheckOutPhoto(todayAttendance) && (
+                  <Text style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', paddingVertical: 6 }}>
+                    Foto presensi tidak tersedia
+                  </Text>
+                )}
+              </View>
+
+              {/* Tertulis di bawah berapa persen jumlah produk jika Sales Lapangan */}
+              {todayAttendance.unit_percentage !== null && todayAttendance.unit_percentage !== undefined && (
                 <View style={styles.displayPercentBadge}>
                   <Feather name="pie-chart" size={15} color="#16a34a" />
                   <Text style={styles.displayPercentText}>
                     Ketersediaan Display Produk: <Text style={{ fontWeight: '900', color: '#15803d' }}>{todayAttendance.unit_percentage ?? 0}%</Text>
                   </Text>
                 </View>
-              </View>
-            )}
+              )}
+            </View>
 
             {/* Check-out Button if not checked out */}
             {!todayAttendance.check_out_time && (
@@ -777,7 +932,9 @@ export default function SalesHome() {
                 </View>
                 <TouchableOpacity style={styles.checkOutBtn} onPress={openCheckoutModal}>
                   <Feather name="camera" size={16} color="#ef4444" />
-                  <Text style={styles.checkOutText}>Upload Display & Check-out Pulang</Text>
+                  <Text style={styles.checkOutText}>
+                    {profile?.role === 'SALES' ? 'Upload Display & Check-out Pulang' : 'Ambil Foto Selfie & Check-out Pulang'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -1133,13 +1290,104 @@ export default function SalesHome() {
         </View>
       </Modal>
 
+      {/* MODAL CHECK-IN MASUK DENGAN FOTO SELFIE */}
+      <Modal visible={checkInModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Presensi Masuk (Check-in)</Text>
+                <Text style={styles.modalSubTitle}>Wajib foto selfie kehadiran seluruh karyawan</Text>
+              </View>
+              <TouchableOpacity onPress={() => setCheckInModalVisible(false)} style={styles.closeBtn}>
+                <Feather name="x" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 480 }} showsVerticalScrollIndicator={false}>
+              {/* Status Jam Masuk */}
+              <View style={[styles.timeWarningBox, { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }]}>
+                <Feather name="clock" size={16} color="#16a34a" />
+                <Text style={[styles.timeWarningText, { color: '#15803d' }]}>
+                  Waktu: {new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB | {new Date().getHours() > 10 || (new Date().getHours() === 10 && new Date().getMinutes() > 0) ? 'Status: Terlambat' : 'Status: Tepat Waktu (09:00 - 10:00)'}
+                </Text>
+              </View>
+
+              {/* Role Info */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginVertical: 8, backgroundColor: '#f8fafc', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                <Feather name="user-check" size={15} color="#475569" />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155' }}>
+                  {profile?.full_name || 'Personil'} • {getRoleLabel(profile?.role)}
+                </Text>
+              </View>
+
+              {/* Foto Selfie Masuk */}
+              <Text style={styles.inputGroupTitle}>Foto Selfie Presensi Masuk *</Text>
+              <TouchableOpacity style={styles.uploadCard} onPress={() => pickImage('checkin_selfie')}>
+                {checkInSelfie ? (
+                  <View style={styles.imagePreviewWrap}>
+                    <Image source={{ uri: checkInSelfie.uri }} style={styles.imagePreview} contentFit="cover" />
+                    <View style={styles.changeBadge}><Text style={styles.changeBadgeText}>Ganti Foto</Text></View>
+                  </View>
+                ) : (
+                  <View style={styles.uploadPlaceholder}>
+                    <Feather name="camera" size={32} color="#8ec44a" />
+                    <Text style={styles.uploadPrompt}>Buka Kamera & Ambil Foto Selfie</Text>
+                    <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                      Pastikan wajah terlihat jelas dan berada di lokasi kerja
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              {/* Catatan Masuk */}
+              <Text style={[styles.inputGroupTitle, { marginTop: 14 }]}>Catatan Masuk (Opsional)</Text>
+              <TextInput
+                style={styles.notesInput}
+                value={checkInNotes}
+                onChangeText={setCheckInNotes}
+                placeholder="Rencana kegiatan / lokasi tugas hari ini..."
+                multiline
+                numberOfLines={2}
+              />
+            </ScrollView>
+
+            <View style={styles.modalActionRow}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setCheckInModalVisible(false)}
+                disabled={submittingCheckIn}
+              >
+                <Text style={styles.cancelBtnText}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitCheckInModalBtn, (!checkInSelfie || submittingCheckIn) && { opacity: 0.6 }]}
+                onPress={handleSubmitCheckIn}
+                disabled={!checkInSelfie || submittingCheckIn}
+              >
+                {submittingCheckIn ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <>
+                    <Feather name="check-circle" size={16} color="white" />
+                    <Text style={styles.submitBtnText}>Kirim Presensi Masuk</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* MODAL CHECK-OUT PULANG DENGAN 2 FOTO DISPLAY + 1 FOTO SELFIE */}
       <Modal visible={checkoutModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalTitle}>Presensi Pulang & Foto Display</Text>
+                <Text style={styles.modalTitle}>
+                  {profile?.role === 'SALES' ? 'Presensi Pulang & Foto Display' : 'Presensi Pulang Karyawan'}
+                </Text>
                 <Text style={styles.modalSubTitle}>Batas upload paling lambat pukul 21:00 WIB</Text>
               </View>
               <TouchableOpacity onPress={() => setCheckoutModalVisible(false)} style={styles.closeBtn}>
@@ -1173,67 +1421,82 @@ export default function SalesHome() {
                 )}
               </TouchableOpacity>
 
-              {/* 2. Dua Foto Display Produk */}
-              <Text style={styles.inputGroupTitle}>2. Dua (2) Foto Display Produk *</Text>
-              <View style={styles.twoDisplayGrid}>
-                {/* Display 1 */}
-                <TouchableOpacity style={styles.displayCard} onPress={() => pickImage('display1')}>
-                  {checkoutDisplay1 ? (
-                    <View style={styles.imagePreviewWrap}>
-                      <Image source={{ uri: checkoutDisplay1.uri }} style={styles.displayPreview} contentFit="cover" />
-                      <Text style={styles.displayCardLabel}>Display 1 ✓</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.uploadPlaceholderSmall}>
-                      <Feather name="image" size={24} color="#64748b" />
-                      <Text style={styles.smallPrompt}>Foto Display 1</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+              {/* For Sales: Dua Foto Display Produk & Persentase Display */}
+              {profile?.role === 'SALES' ? (
+                <>
+                  <Text style={styles.inputGroupTitle}>2. Dua (2) Foto Display Produk *</Text>
+                  <View style={styles.twoDisplayGrid}>
+                    {/* Display 1 */}
+                    <TouchableOpacity style={styles.displayCard} onPress={() => pickImage('display1')}>
+                      {checkoutDisplay1 ? (
+                        <View style={styles.imagePreviewWrap}>
+                          <Image source={{ uri: checkoutDisplay1.uri }} style={styles.displayPreview} contentFit="cover" />
+                          <Text style={styles.displayCardLabel}>Display 1 ✓</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.uploadPlaceholderSmall}>
+                          <Feather name="image" size={24} color="#64748b" />
+                          <Text style={styles.smallPrompt}>Foto Display 1</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
 
-                {/* Display 2 */}
-                <TouchableOpacity style={styles.displayCard} onPress={() => pickImage('display2')}>
-                  {checkoutDisplay2 ? (
-                    <View style={styles.imagePreviewWrap}>
-                      <Image source={{ uri: checkoutDisplay2.uri }} style={styles.displayPreview} contentFit="cover" />
-                      <Text style={styles.displayCardLabel}>Display 2 ✓</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.uploadPlaceholderSmall}>
-                      <Feather name="image" size={24} color="#64748b" />
-                      <Text style={styles.smallPrompt}>Foto Display 2</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
+                    {/* Display 2 */}
+                    <TouchableOpacity style={styles.displayCard} onPress={() => pickImage('display2')}>
+                      {checkoutDisplay2 ? (
+                        <View style={styles.imagePreviewWrap}>
+                          <Image source={{ uri: checkoutDisplay2.uri }} style={styles.displayPreview} contentFit="cover" />
+                          <Text style={styles.displayCardLabel}>Display 2 ✓</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.uploadPlaceholderSmall}>
+                          <Feather name="image" size={24} color="#64748b" />
+                          <Text style={styles.smallPrompt}>Foto Display 2</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
 
-              {/* Persentase Jumlah Produk tertulis di bawah foto display */}
-              <View style={styles.percentageBox}>
-                <Text style={styles.percentageLabel}>Berapa Persen Ketersediaan Display Produk? (%) *</Text>
-                <View style={styles.percentageInputRow}>
-                  <TextInput
-                    style={styles.percentageInput}
-                    value={unitPercentage}
-                    onChangeText={setUnitPercentage}
-                    placeholder="Contoh: 85"
-                    keyboardType="number-pad"
-                    maxLength={3}
-                  />
-                  <Text style={styles.percentSymbol}>%</Text>
-                </View>
+                  {/* Persentase Jumlah Produk tertulis di bawah foto display */}
+                  <View style={styles.percentageBox}>
+                    <Text style={styles.percentageLabel}>Berapa Persen Ketersediaan Display Produk? (%) *</Text>
+                    <View style={styles.percentageInputRow}>
+                      <TextInput
+                        style={styles.percentageInput}
+                        value={unitPercentage}
+                        onChangeText={setUnitPercentage}
+                        placeholder="Contoh: 85"
+                        keyboardType="number-pad"
+                        maxLength={3}
+                      />
+                      <Text style={styles.percentSymbol}>%</Text>
+                    </View>
 
-                {/* Teks di bawah foto display */}
-                <View style={styles.displayCaptionBox}>
-                  <Feather name="info" size={13} color="#15803d" />
-                  <Text style={styles.displayCaptionText}>
-                    Tertulis: Ketersediaan Display Produk Toko adalah{' '}
-                    <Text style={{ fontWeight: 'bold' }}>{unitPercentage || 0}%</Text>
+                    {/* Teks di bawah foto display */}
+                    <View style={styles.displayCaptionBox}>
+                      <Feather name="info" size={13} color="#15803d" />
+                      <Text style={styles.displayCaptionText}>
+                        Tertulis: Ketersediaan Display Produk Toko adalah{' '}
+                        <Text style={{ fontWeight: 'bold' }}>{unitPercentage || 0}%</Text>
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <View style={{ backgroundColor: '#f8fafc', padding: 12, borderRadius: 12, marginVertical: 8, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155' }}>
+                    Presensi Kepulangan: {getRoleLabel(profile?.role)}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                    Pastikan foto selfie diambil di tempat tugas sebagai konfirmasi selesai jam kerja.
                   </Text>
                 </View>
-              </View>
+              )}
 
               {/* Catatan Harian */}
-              <Text style={[styles.inputGroupTitle, { marginTop: 14 }]}>3. Catatan Kerja Hari Ini (Opsional)</Text>
+              <Text style={[styles.inputGroupTitle, { marginTop: 14 }]}>
+                {profile?.role === 'SALES' ? '3. Catatan Kerja Hari Ini (Opsional)' : '2. Catatan Kerja Hari Ini (Opsional)'}
+              </Text>
               <TextInput
                 style={styles.notesInput}
                 value={checkoutNotes}
@@ -1534,6 +1797,37 @@ const styles = StyleSheet.create({
   thumbWrap: { flex: 1, alignItems: 'center' },
   thumbImg: { width: '100%', height: 75, borderRadius: 10, backgroundColor: '#e2e8f0' },
   thumbLabel: { fontSize: 10, fontWeight: '700', color: '#64748b', marginTop: 4 },
+  thumbBadgeGreen: {
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
+    alignItems: 'center',
+  },
+  thumbBadgeOrange: {
+    backgroundColor: '#ffedd5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
+    alignItems: 'center',
+  },
+  thumbBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#15803d',
+  },
+  submitCheckInModalBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#8ec44a',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
   displayPercentBadge: {
     flexDirection: 'row',
     alignItems: 'center',

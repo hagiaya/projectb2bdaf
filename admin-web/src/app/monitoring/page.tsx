@@ -57,8 +57,8 @@ export default function MonitoringPage() {
     setLoading(true);
     try {
       if (activeTab === 'attendance') {
-        // Fetch Attendance for selectedDate
-        const { data, error } = await supabase
+        // Fetch Attendance for selectedDate with check-in & check-out selfie columns
+        let { data, error } = await supabase
           .from('sales_attendance')
           .select(`
             id,
@@ -68,6 +68,8 @@ export default function MonitoringPage() {
             is_late,
             status,
             selfie_url,
+            check_in_selfie_url,
+            check_out_selfie_url,
             display_image_1_url,
             display_image_2_url,
             unit_percentage,
@@ -80,6 +82,34 @@ export default function MonitoringPage() {
           `)
           .eq('attendance_date', selectedDate)
           .order('check_in_time', { ascending: false });
+
+        if (error && error.message && error.message.includes('check_in_selfie_url')) {
+          // Fallback to standard columns if migration not yet applied
+          const res = await supabase
+            .from('sales_attendance')
+            .select(`
+              id,
+              attendance_date,
+              check_in_time,
+              check_out_time,
+              is_late,
+              status,
+              selfie_url,
+              display_image_1_url,
+              display_image_2_url,
+              unit_percentage,
+              notes,
+              sales (
+                id,
+                is_spv,
+                profiles (full_name, phone_number, role)
+              )
+            `)
+            .eq('attendance_date', selectedDate)
+            .order('check_in_time', { ascending: false });
+          data = res.data as any;
+          error = res.error;
+        }
 
         if (error) console.error('Error fetching attendance:', error);
         setAttendances(data || []);
@@ -182,6 +212,48 @@ export default function MonitoringPage() {
     const end = checkOut ? new Date(checkOut).getTime() : new Date().getTime();
     const mins = Math.floor((end - start) / (1000 * 60));
     return `${Math.max(0, mins)} menit`;
+  };
+
+  const getAttendancePhotos = (att: any) => {
+    let checkInPhoto = att?.check_in_selfie_url || null;
+    let checkOutPhoto = att?.check_out_selfie_url || null;
+    let checkInNote: string | null = null;
+    let checkOutNote: string | null = null;
+
+    if (att?.notes) {
+      try {
+        if (typeof att.notes === 'string' && att.notes.startsWith('{') && att.notes.endsWith('}')) {
+          const parsed = JSON.parse(att.notes);
+          if (parsed.check_in_photo && !checkInPhoto) checkInPhoto = parsed.check_in_photo;
+          if (parsed.check_in_note) checkInNote = parsed.check_in_note;
+        } else if (typeof att.notes === 'string') {
+          const match = att.notes.match(/\[CHECK_IN_PHOTO\]:\s*([^\s\n]+)/);
+          if (match && !checkInPhoto) checkInPhoto = match[1];
+          if (att.notes.includes('[PULANG]:')) {
+            const pMatch = att.notes.split('[PULANG]:');
+            if (pMatch[1]) checkOutNote = pMatch[1].trim();
+          }
+        }
+      } catch (e) {}
+    }
+
+    // If check_out hasn't occurred yet, selfie_url is the check-in photo
+    if (!att?.check_out_time && att?.selfie_url && !checkInPhoto) {
+      checkInPhoto = att.selfie_url;
+    }
+    // If check_out occurred and we only have selfie_url
+    if (att?.check_out_time && att?.selfie_url) {
+      if (!checkOutPhoto) checkOutPhoto = att.selfie_url;
+    }
+
+    return {
+      checkInPhoto,
+      checkOutPhoto,
+      display1: att?.display_image_1_url,
+      display2: att?.display_image_2_url,
+      checkInNote,
+      checkOutNote,
+    };
   };
 
   const getEmployeeRole = (salesItem: any): 'SALES' | 'SPV' | 'WAREHOUSE' | 'STAFF' => {
@@ -375,7 +447,7 @@ export default function MonitoringPage() {
                   <th className="p-5 font-semibold">Nomor Kontak</th>
                   <th className="p-5 font-semibold">Jam Masuk</th>
                   <th className="p-5 font-semibold">Jam Pulang</th>
-                  <th className="p-5 font-semibold">Foto Selfie & Display</th>
+                  <th className="p-5 font-semibold">Foto Selfie Masuk, Pulang & Display</th>
                   <th className="p-5 font-semibold">Status Presensi</th>
                 </tr>
               </thead>
@@ -423,48 +495,76 @@ export default function MonitoringPage() {
                             : <span className="text-amber-600 font-semibold text-xs">Belum Check-out</span>}
                         </td>
                         <td className="p-5">
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-1.5">
-                              {att.selfie_url && (
-                                <button
-                                  onClick={() => setPreviewImageUrl(att.selfie_url)}
-                                  className="group relative w-9 h-9 rounded-lg overflow-hidden border border-emerald-200 hover:ring-2 hover:ring-emerald-500 transition-all"
-                                  title="Foto Selfie Presensi"
-                                >
-                                  <img src={att.selfie_url} alt="Selfie" className="w-full h-full object-cover" />
-                                  <span className="absolute inset-0 bg-black/40 text-[8px] font-bold text-white flex items-center justify-center opacity-0 group-hover:opacity-100">Selfie</span>
-                                </button>
-                              )}
-                              {att.display_image_1_url && (
-                                <button
-                                  onClick={() => setPreviewImageUrl(att.display_image_1_url)}
-                                  className="group relative w-9 h-9 rounded-lg overflow-hidden border border-blue-200 hover:ring-2 hover:ring-blue-500 transition-all"
-                                  title="Foto Display 1"
-                                >
-                                  <img src={att.display_image_1_url} alt="Display 1" className="w-full h-full object-cover" />
-                                  <span className="absolute inset-0 bg-black/40 text-[8px] font-bold text-white flex items-center justify-center opacity-0 group-hover:opacity-100">Disp 1</span>
-                                </button>
-                              )}
-                              {att.display_image_2_url && (
-                                <button
-                                  onClick={() => setPreviewImageUrl(att.display_image_2_url)}
-                                  className="group relative w-9 h-9 rounded-lg overflow-hidden border border-blue-200 hover:ring-2 hover:ring-blue-500 transition-all"
-                                  title="Foto Display 2"
-                                >
-                                  <img src={att.display_image_2_url} alt="Display 2" className="w-full h-full object-cover" />
-                                  <span className="absolute inset-0 bg-black/40 text-[8px] font-bold text-white flex items-center justify-center opacity-0 group-hover:opacity-100">Disp 2</span>
-                                </button>
-                              )}
-                              {!att.selfie_url && !att.display_image_1_url && !att.display_image_2_url && (
-                                <span className="text-xs text-gray-400 italic">-</span>
-                              )}
-                            </div>
-                            {att.check_out_time && (role === 'SALES' || role === 'SPV') && (
-                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded inline-block w-fit">
-                                Display: {att.unit_percentage ?? 0}%
-                              </span>
-                            )}
-                          </div>
+                          {(() => {
+                            const photos = getAttendancePhotos(att);
+                            const hasAnyPhoto = photos.checkInPhoto || photos.checkOutPhoto || photos.display1 || photos.display2;
+                            if (!hasAnyPhoto) return <span className="text-xs text-gray-400 italic">Belum ada foto</span>;
+
+                            return (
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {photos.checkInPhoto && (
+                                    <button
+                                      onClick={() => setPreviewImageUrl(photos.checkInPhoto)}
+                                      className="group relative w-10 h-10 rounded-lg overflow-hidden border border-emerald-300 hover:ring-2 hover:ring-emerald-500 shadow-sm transition-all"
+                                      title="Foto Selfie Presensi Masuk"
+                                    >
+                                      <img src={photos.checkInPhoto} alt="Foto Masuk" className="w-full h-full object-cover" />
+                                      <span className="absolute bottom-0 inset-x-0 bg-emerald-600/90 text-[7px] font-black text-white text-center py-0.5 uppercase tracking-tighter">
+                                        Masuk
+                                      </span>
+                                    </button>
+                                  )}
+                                  {photos.checkOutPhoto && (
+                                    <button
+                                      onClick={() => setPreviewImageUrl(photos.checkOutPhoto)}
+                                      className="group relative w-10 h-10 rounded-lg overflow-hidden border border-amber-300 hover:ring-2 hover:ring-amber-500 shadow-sm transition-all"
+                                      title="Foto Selfie Presensi Pulang"
+                                    >
+                                      <img src={photos.checkOutPhoto} alt="Foto Pulang" className="w-full h-full object-cover" />
+                                      <span className="absolute bottom-0 inset-x-0 bg-amber-600/90 text-[7px] font-black text-white text-center py-0.5 uppercase tracking-tighter">
+                                        Pulang
+                                      </span>
+                                    </button>
+                                  )}
+                                  {photos.display1 && (
+                                    <button
+                                      onClick={() => setPreviewImageUrl(photos.display1)}
+                                      className="group relative w-10 h-10 rounded-lg overflow-hidden border border-blue-200 hover:ring-2 hover:ring-blue-500 shadow-sm transition-all"
+                                      title="Foto Display Outlet 1"
+                                    >
+                                      <img src={photos.display1} alt="Display 1" className="w-full h-full object-cover" />
+                                      <span className="absolute bottom-0 inset-x-0 bg-blue-600/90 text-[7px] font-black text-white text-center py-0.5 uppercase tracking-tighter">
+                                        Disp 1
+                                      </span>
+                                    </button>
+                                  )}
+                                  {photos.display2 && (
+                                    <button
+                                      onClick={() => setPreviewImageUrl(photos.display2)}
+                                      className="group relative w-10 h-10 rounded-lg overflow-hidden border border-blue-200 hover:ring-2 hover:ring-blue-500 shadow-sm transition-all"
+                                      title="Foto Display Outlet 2"
+                                    >
+                                      <img src={photos.display2} alt="Display 2" className="w-full h-full object-cover" />
+                                      <span className="absolute bottom-0 inset-x-0 bg-blue-600/90 text-[7px] font-black text-white text-center py-0.5 uppercase tracking-tighter">
+                                        Disp 2
+                                      </span>
+                                    </button>
+                                  )}
+                                </div>
+                                {att.check_out_time && (role === 'SALES' || role === 'SPV') && att.unit_percentage !== null && att.unit_percentage !== undefined && (
+                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded inline-block w-fit">
+                                    Display: {att.unit_percentage}%
+                                  </span>
+                                )}
+                                {(photos.checkInNote || photos.checkOutNote) && (
+                                  <span className="text-[10px] text-slate-500 italic max-w-[200px] truncate" title={photos.checkInNote || photos.checkOutNote || ''}>
+                                    Catatan: {photos.checkInNote || photos.checkOutNote}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="p-5">
                           <span

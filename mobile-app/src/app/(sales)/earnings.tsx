@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { supabase } from '../../lib/supabase';
 import { router } from 'expo-router';
 
@@ -19,6 +20,33 @@ export default function SalesEarningsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'daily' | 'sales' | 'attendance' | 'payroll'>('daily');
   const [attendanceSubTab, setAttendanceSubTab] = useState<'attendance' | 'visits'>('attendance');
+
+  // Photo zoom preview modal state
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  const getCheckInPhoto = (att: any) => {
+    if (!att) return null;
+    if (att.check_in_selfie_url) return att.check_in_selfie_url;
+    if (att.notes) {
+      try {
+        if (typeof att.notes === 'string' && att.notes.startsWith('{') && att.notes.endsWith('}')) {
+          const parsed = JSON.parse(att.notes);
+          if (parsed.check_in_photo) return parsed.check_in_photo;
+        }
+        const match = String(att.notes).match(/\[CHECK_IN_PHOTO\]:\s*([^\s\n]+)/);
+        if (match) return match[1];
+      } catch (e) {}
+    }
+    if (!att.check_out_time && att.selfie_url) return att.selfie_url;
+    return null;
+  };
+
+  const getCheckOutPhoto = (att: any) => {
+    if (!att) return null;
+    if (att.check_out_selfie_url) return att.check_out_selfie_url;
+    if (att.check_out_time && att.selfie_url) return att.selfie_url;
+    return null;
+  };
 
   // Sales profile & settings
   const [salesRecord, setSalesRecord] = useState<any>(null);
@@ -755,6 +783,52 @@ export default function SalesEarningsScreen() {
                                 </Text>
                               </View>
                             </View>
+
+                            {/* Foto Presensi Masuk & Pulang */}
+                            {(getCheckInPhoto(att) || getCheckOutPhoto(att) || att.display_image_1_url) && (
+                              <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' }}>
+                                {getCheckInPhoto(att) && (
+                                  <TouchableOpacity
+                                    style={{ flex: 1, alignItems: 'center' }}
+                                    onPress={() => setPreviewImage(getCheckInPhoto(att))}
+                                  >
+                                    <Image source={{ uri: getCheckInPhoto(att) }} style={{ width: '100%', height: 60, borderRadius: 8, backgroundColor: '#f1f5f9' }} contentFit="cover" />
+                                    <View style={{ backgroundColor: '#dcfce7', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4, marginTop: 3 }}>
+                                      <Text style={{ fontSize: 9, fontWeight: '700', color: '#166534' }}>Masuk ✓</Text>
+                                    </View>
+                                  </TouchableOpacity>
+                                )}
+                                {getCheckOutPhoto(att) && (
+                                  <TouchableOpacity
+                                    style={{ flex: 1, alignItems: 'center' }}
+                                    onPress={() => setPreviewImage(getCheckOutPhoto(att))}
+                                  >
+                                    <Image source={{ uri: getCheckOutPhoto(att) }} style={{ width: '100%', height: 60, borderRadius: 8, backgroundColor: '#f1f5f9' }} contentFit="cover" />
+                                    <View style={{ backgroundColor: '#ffedd5', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4, marginTop: 3 }}>
+                                      <Text style={{ fontSize: 9, fontWeight: '700', color: '#9a3412' }}>Pulang ✓</Text>
+                                    </View>
+                                  </TouchableOpacity>
+                                )}
+                                {att.display_image_1_url && (
+                                  <TouchableOpacity
+                                    style={{ flex: 1, alignItems: 'center' }}
+                                    onPress={() => setPreviewImage(att.display_image_1_url)}
+                                  >
+                                    <Image source={{ uri: att.display_image_1_url }} style={{ width: '100%', height: 60, borderRadius: 8, backgroundColor: '#f1f5f9' }} contentFit="cover" />
+                                    <Text style={{ fontSize: 9, fontWeight: '600', color: '#64748b', marginTop: 3 }}>Display 1</Text>
+                                  </TouchableOpacity>
+                                )}
+                                {att.display_image_2_url && (
+                                  <TouchableOpacity
+                                    style={{ flex: 1, alignItems: 'center' }}
+                                    onPress={() => setPreviewImage(att.display_image_2_url)}
+                                  >
+                                    <Image source={{ uri: att.display_image_2_url }} style={{ width: '100%', height: 60, borderRadius: 8, backgroundColor: '#f1f5f9' }} contentFit="cover" />
+                                    <Text style={{ fontSize: 9, fontWeight: '600', color: '#64748b', marginTop: 3 }}>Display 2</Text>
+                                  </TouchableOpacity>
+                                )}
+                              </View>
+                            )}
                           </View>
                         );
                       })
@@ -1063,6 +1137,25 @@ export default function SalesEarningsScreen() {
               <Text style={styles.modalCloseButtonText}>Tutup</Text>
             </TouchableOpacity>
           </View>
+        </View>
+      </Modal>
+
+      {/* Image Zoom Preview Modal */}
+      <Modal visible={!!previewImage} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }}>
+          <TouchableOpacity
+            style={{ position: 'absolute', top: 50, right: 20, zIndex: 99, padding: 12, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 24 }}
+            onPress={() => setPreviewImage(null)}
+          >
+            <Feather name="x" size={24} color="white" />
+          </TouchableOpacity>
+          {previewImage && (
+            <Image
+              source={{ uri: previewImage }}
+              style={{ width: '92%', height: '80%' }}
+              contentFit="contain"
+            />
+          )}
         </View>
       </Modal>
     </View>

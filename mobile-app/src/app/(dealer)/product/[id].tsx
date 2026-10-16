@@ -151,7 +151,7 @@ export default function ProductDetailScreen() {
         {/* BASIC DETAILS */}
         <View style={styles.detailsSection}>
           {(!isHabis && isComingSoon) && (
-            <ComingSoonBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
+            <ComingSoonBadge stacked={false} style={{ marginBottom: 8, alignSelf: 'flex-start' }} />
           )}
           {(!isHabis && hasNewTag && !isComingSoon) && (
             <NewBadge style={styles.newBadge} textStyle={styles.newBadgeText} />
